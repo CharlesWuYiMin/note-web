@@ -545,8 +545,25 @@ function EditorWorkspace() {
         </div>
       </div>
 
-      <Spin spinning={isLoading && !currentNote}>
-        <div style={{ flex: 1, minHeight: 0 }}>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
           {currentNote ? (
             <EditorFactory
               key={noteId || 'text-editor'}
@@ -564,7 +581,8 @@ function EditorWorkspace() {
           ) : showEmptyState ? (
             <div
               style={{
-                height: '100%',
+                flex: 1,
+                minHeight: 0,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -590,7 +608,24 @@ function EditorWorkspace() {
             </div>
           ) : null}
         </div>
-      </Spin>
+
+        {isLoading && !currentNote ? (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 3,
+              background: 'rgba(255,255,255,0.56)',
+              backdropFilter: 'blur(6px)',
+            }}
+          >
+            <Spin />
+          </div>
+        ) : null}
+      </div>
 
       <SharePanelDialog
         open={shareDialogOpen}

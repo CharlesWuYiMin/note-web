@@ -195,7 +195,7 @@ function PageEditorV2({
         env: runtimeConfig,
         languages: 'zh-CN',
         theme: 'light',
-        autofocus: false,
+        autofocus: true,
         showTemplateOnEmpty: false,
         settings: {
           resumeLastViewedPosition: false,
@@ -296,8 +296,10 @@ function PageEditorV2({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: '100%',
+        flex: '1 1 auto',
         width: '100%',
+        minWidth: 0,
+        minHeight: 0,
         overflow: 'hidden',
         background: '#fff',
       }}
@@ -333,9 +335,10 @@ function PageEditorV2({
           style={{
             flex: '1 1 auto',
             display: 'block',
-            width: '100%',
-            height:'100%',
-            alignSelf: 'stretch',
+            width: 'auto',
+            height: 'auto',
+            minWidth: 0,
+            minHeight: 0,
             background: '#fff',
             overflow: 'hidden',
           }}

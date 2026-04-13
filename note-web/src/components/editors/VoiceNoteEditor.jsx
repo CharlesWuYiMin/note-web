@@ -970,8 +970,10 @@ function VoiceNoteEditor({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: '100%',
+        flex: '1 1 auto',
+        width: '100%',
         minHeight: 0,
+        minWidth: 0,
         overflow: 'hidden',
         background: 'linear-gradient(180deg, rgba(247,249,251,0.92), rgba(255,255,255,0.98))',
       }}
@@ -1051,13 +1053,13 @@ function VoiceNoteEditor({
         }
       `}</style>
 
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', alignItems: 'stretch', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, alignItems: 'stretch', overflow: 'hidden' }}>
         {voicePanelVisible ? (
           <section
             style={{
               flex: '0 0 50%',
               minWidth: 0,
-              height: '100%',
+              minHeight: 0,
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
@@ -1112,16 +1114,16 @@ function VoiceNoteEditor({
               </div>
             </div>
 
-          <div
-            style={{
-              display: 'flex',
-              gap: 12,
-              overflowX: 'auto',
-              padding: '12px 16px 14px',
-              borderBottom: '1px solid rgba(226,232,240,0.65)',
-              flexShrink: 0,
-            }}
-          >
+            <div
+              style={{
+                display: 'flex',
+                gap: 12,
+                overflowX: 'auto',
+                padding: '12px 16px 14px',
+                borderBottom: '1px solid rgba(226,232,240,0.65)',
+                flexShrink: 0,
+              }}
+            >
               {recordings.length > 0 ? (
                 recordings.map(({ key, ...recording }) => (
                   <RecordingCard
@@ -1151,25 +1153,26 @@ function VoiceNoteEditor({
               )}
             </div>
 
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '14px 16px 16px',
+                gap: 14,
+                overflow: 'hidden',
+              }}
+            >
               <div
                 style={{
                   flex: 1,
                   minHeight: 0,
                   display: 'flex',
                   flexDirection: 'column',
-                  position: 'relative',
+                  overflow: 'hidden',
                 }}
               >
-                <div
-                  style={{
-                    flex: '1 1 auto',
-                    minHeight: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    padding: '14px 16px 176px',
-                    overflow: 'hidden',
-                  }}
-                >
                 {visibleTranscripts.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto', minHeight: 0, flex: 1 }}>
                     {visibleTranscripts.map((item) => (
@@ -1189,7 +1192,7 @@ function VoiceNoteEditor({
                     <div
                       style={{
                         width: '100%',
-                        height: '100%',
+                        flex: 1,
                         borderRadius: 24,
                         background: 'linear-gradient(180deg, rgba(248,250,252,0.78), rgba(255,255,255,0.42))',
                         border: '1px solid rgba(226,232,240,0.55)',
@@ -1210,10 +1213,7 @@ function VoiceNoteEditor({
 
               <div
                 style={{
-                  position: 'absolute',
-                  left: 14,
-                  right: 14,
-                  bottom: 14,
+                  flexShrink: 0,
                   padding: '14px 18px 16px',
                   borderRadius: 22,
                   border: '1px solid rgba(226,232,240,0.78)',
@@ -1221,7 +1221,6 @@ function VoiceNoteEditor({
                   boxShadow: '0 18px 42px rgba(15,23,42,0.10)',
                   backdropFilter: 'blur(14px)',
                   zIndex: 2,
-                  flexShrink: 0,
                 }}
               >
                 {recordingState === 'idle' ? (
@@ -1387,21 +1386,21 @@ function VoiceNoteEditor({
                             : height
 
                         return (
-                        <span
-                          key={index}
-                          style={{
-                            width: 2,
-                            height: animatedHeight,
-                            borderRadius: 999,
-                            background: isRecording && !isUploading
-                              ? 'linear-gradient(180deg, #0057d7, #7aa8ff)'
-                              : isPlaying
-                                ? 'linear-gradient(180deg, #3b82f6, #93c5fd)'
-                                : 'rgba(148,163,184,0.28)',
-                            transform: isRecording && !isUploading ? 'translateY(0) scaleY(1)' : 'none',
-                            transition: 'height 140ms ease, background 140ms ease, transform 140ms ease',
-                          }}
-                        />
+                          <span
+                            key={index}
+                            style={{
+                              width: 2,
+                              height: animatedHeight,
+                              borderRadius: 999,
+                              background: isRecording && !isUploading
+                                ? 'linear-gradient(180deg, #0057d7, #7aa8ff)'
+                                : isPlaying
+                                  ? 'linear-gradient(180deg, #3b82f6, #93c5fd)'
+                                  : 'rgba(148,163,184,0.28)',
+                              transform: isRecording && !isUploading ? 'translateY(0) scaleY(1)' : 'none',
+                              transition: 'height 140ms ease, background 140ms ease, transform 140ms ease',
+                            }}
+                          />
                         )
                       })}
                     </div>
@@ -1420,11 +1419,11 @@ function VoiceNoteEditor({
           style={{
             flex: voicePanelVisible ? '0 0 50%' : '0 0 100%',
             minWidth: 0,
-            height: '100%',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
             background: '#ffffff',
+            minHeight: 0,
           }}
         >
           <PageEditor
