@@ -125,7 +125,51 @@ describe('useNoteStore', () => {
 
       expect(mockGetNoteById).toHaveBeenCalledWith('1')
       expect(result).toEqual(detail)
-      expect(useNoteStore.getState().currentNote).toEqual(detail)
+      expect(useNoteStore.getState().currentNote).toEqual({
+        id: '1',
+        title: 'detail note',
+      })
+    })
+
+    it('merges refreshed note metadata into list collections', async () => {
+      const refreshed = {
+        id: '1',
+        title: 'detail note',
+        voiceNumber: 1,
+        voiceNote: [{ id: 'voice-1' }],
+        content: 'body',
+      }
+      mockGetNoteById.mockResolvedValue(refreshed)
+
+      useNoteStore.setState({
+        notes: [{ id: '1', title: 'note 1', isStarred: false, type: 'text' }],
+        starredNotes: [{ id: '1', title: 'note 1', isStarred: true }],
+        myShares: [{ id: 'share-1', noteId: '1', title: 'shared note' }],
+        deletedNotes: [{ id: '1', title: 'deleted note', status: 'deleted' }],
+      })
+
+      await useNoteStore.getState().loadNoteById('1')
+
+      expect(useNoteStore.getState().notes[0]).toEqual(expect.objectContaining({
+        id: '1',
+        title: 'detail note',
+        voiceNumber: 1,
+      }))
+      expect(useNoteStore.getState().starredNotes[0]).toEqual(expect.objectContaining({
+        id: '1',
+        title: 'detail note',
+        voiceNote: [{ id: 'voice-1' }],
+      }))
+      expect(useNoteStore.getState().myShares[0]).toEqual(expect.objectContaining({
+        id: 'share-1',
+        noteId: '1',
+        title: 'detail note',
+        voiceNumber: 1,
+      }))
+      expect(useNoteStore.getState().deletedNotes[0]).toEqual(expect.objectContaining({
+        id: '1',
+        title: 'detail note',
+      }))
     })
   })
 

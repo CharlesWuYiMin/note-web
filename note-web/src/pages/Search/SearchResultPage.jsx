@@ -33,6 +33,21 @@ const SearchResultPage = () => {
   const [totalCount, setTotalCount] = useState(0)
   const pageSize = 12
 
+  const normalizeSearchResponse = (response) => {
+    if (Array.isArray(response)) {
+      return {
+        items: response,
+        total: Number(response.total || response.length || 0),
+      }
+    }
+
+    const items = Array.isArray(response?.items) ? response.items : []
+    return {
+      items,
+      total: Number(response?.total || items.length || 0),
+    }
+  }
+
   useEffect(() => {
     setPage(1)
   }, [query, status])
@@ -52,8 +67,9 @@ const SearchResultPage = () => {
     try {
       setLoading(true)
       const data = await searchService.searchNotes(searchQuery, { status, page: currentPage, pageSize })
-      setResults(Array.isArray(data) ? data : [])
-      setTotalCount(Number(data.total || 0))
+      const nextResults = normalizeSearchResponse(data)
+      setResults(nextResults.items)
+      setTotalCount(nextResults.total)
     } catch (error) {
       console.error('Search failed:', error)
       setResults([])
@@ -131,7 +147,7 @@ const SearchResultPage = () => {
             onResultClick={(item) => {
               const path = getSearchResultPath(item, context)
               if (path) {
-                navigate(path)
+                navigate(path, { state: { note: item } })
               }
             }}
           />

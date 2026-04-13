@@ -176,7 +176,10 @@ describe('NotesSidebar', () => {
     renderSidebar('/cloudnote/recent')
 
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recent/2', { replace: true })
+      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recent/2', {
+        replace: true,
+        state: { note: expect.objectContaining({ id: '2' }) },
+      })
     })
   })
 
@@ -186,7 +189,10 @@ describe('NotesSidebar', () => {
     renderSidebar('/cloudnote/starred')
 
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/starred/2', { replace: true })
+      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/starred/2', {
+        replace: true,
+        state: { note: expect.objectContaining({ id: '2' }) },
+      })
     })
   })
 
@@ -195,7 +201,10 @@ describe('NotesSidebar', () => {
 
     await waitFor(() => {
       expect(fetchNotesMock).toHaveBeenCalledWith({ field: 'updatedAt', order: 'desc', notebookId: 'nb-1' })
-      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/notebooks/2', { replace: true })
+      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/notebooks/2', {
+        replace: true,
+        state: { note: expect.objectContaining({ id: '2' }) },
+      })
     })
   })
 
@@ -220,7 +229,10 @@ describe('NotesSidebar', () => {
     renderSidebar('/cloudnote/shares')
 
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/shares/2', { replace: true })
+      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/shares/2', {
+        replace: true,
+        state: { note: expect.objectContaining({ id: '2' }) },
+      })
     })
   })
 
@@ -230,7 +242,10 @@ describe('NotesSidebar', () => {
     renderSidebar('/cloudnote/recyclebin')
 
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recyclebin/2', { replace: true })
+      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recyclebin/2', {
+        replace: true,
+        state: { note: expect.objectContaining({ id: '2' }) },
+      })
     })
   })
 
@@ -440,7 +455,9 @@ describe('NotesSidebar', () => {
 
     await user.click(screen.getByText('Beta'))
 
-    expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recent/1')
+    expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recent/1', {
+      state: { note: expect.objectContaining({ id: '1' }) },
+    })
   })
 
   it('shows load more for starred notes and loads the next page', async () => {

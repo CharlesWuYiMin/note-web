@@ -43,7 +43,11 @@ describe('SearchResultPage', () => {
 
     expect(await screen.findByText('测试')).toBeInTheDocument()
     expect(screen.getByText('2 篇笔记')).toBeInTheDocument()
-    expect(mockSearchNotes).toHaveBeenCalledWith('测试', {})
+    expect(mockSearchNotes).toHaveBeenCalledWith('测试', {
+      status: 'active',
+      page: 1,
+      pageSize: 12,
+    })
   })
 
   it('displays search results sorted by updated time descending by default', async () => {

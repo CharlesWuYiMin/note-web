@@ -30,6 +30,26 @@ function omitContent(note) {
   return rest
 }
 
+function mergeNoteIntoCollection(collection, note) {
+  if (!Array.isArray(collection) || !note?.id) {
+    return collection
+  }
+
+  return collection.map((item) => {
+    const itemId = item?.noteId || item?.id
+    if (itemId !== note.id) {
+      return item
+    }
+
+    return {
+      ...item,
+      ...note,
+      id: item?.id || note.id,
+      noteId: item?.noteId || note.id,
+    }
+  })
+}
+
 const useNoteStore = create((set, get) => ({
   notes: [],
   currentNote: null,
@@ -68,7 +88,15 @@ const useNoteStore = create((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const note = await noteService.getNoteById(id)
-      set({ currentNote: note ? omitContent(note) : null, isLoading: false })
+      const noteMeta = note ? omitContent(note) : null
+      set((state) => ({
+        currentNote: noteMeta,
+        notes: noteMeta ? mergeNoteIntoCollection(state.notes, noteMeta) : state.notes,
+        starredNotes: noteMeta ? mergeNoteIntoCollection(state.starredNotes, noteMeta) : state.starredNotes,
+        myShares: noteMeta ? mergeNoteIntoCollection(state.myShares, noteMeta) : state.myShares,
+        deletedNotes: noteMeta ? mergeNoteIntoCollection(state.deletedNotes, noteMeta) : state.deletedNotes,
+        isLoading: false,
+      }))
       return note || null
     } catch (error) {
       set({ currentNote: null, error: error.message, isLoading: false })

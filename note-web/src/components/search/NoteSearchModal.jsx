@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Button,
@@ -19,6 +19,7 @@ import {
   HistoryOutlined,
   SearchOutlined,
   ShareAltOutlined,
+  SoundOutlined,
   StarOutlined,
   FileTextOutlined,
 } from '@ant-design/icons'
@@ -27,10 +28,30 @@ import { getSearchContext, getSearchResultPath } from '@/utils/searchContext'
 
 const { Text, Paragraph } = Typography
 
+function hasVoiceRecords(note) {
+  if (!note) {
+    return false
+  }
+
+  if (Array.isArray(note.voiceNote) && note.voiceNote.length > 0) {
+    return true
+  }
+
+  if (Number(note.voiceNumber) > 0) {
+    return true
+  }
+
+  if (Number(note.voiceCount) > 0) {
+    return true
+  }
+
+  return false
+}
+
 const DEFAULT_PAGE_SIZE = 8
 
 function highlightTitle(title, keyword) {
-  const text = title || '未命名笔记'
+  const text = title || '鏈懡鍚嶇瑪璁?
   const needle = keyword.trim()
 
   if (!needle) {
@@ -211,7 +232,7 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
     }
 
     onClose?.()
-    navigate(path)
+    navigate(path, { state: { note: item } })
   }
 
   const handleRecentClick = (value) => {
@@ -247,10 +268,9 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
       <div style={{ padding: 20, borderBottom: '1px solid rgba(16,34,58,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#10223a' }}>搜索笔记</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#10223a' }}>鎼滅储绗旇</div>
             <div style={{ marginTop: 4, fontSize: 13, color: 'rgba(16,34,58,0.56)' }}>
-              当前仅搜索 <Text strong style={{ color: '#0256d2' }}>{context.label}</Text>，支持实时检索与分页浏览。
-            </div>
+              褰撳墠浠呮悳绱?<Text strong style={{ color: '#0256d2' }}>{context.label}</Text>锛屾敮鎸佸疄鏃舵绱笌鍒嗛〉娴忚銆?            </div>
           </div>
           <Tag style={{ borderRadius: 999, marginInlineEnd: 0, padding: '4px 12px' }} color="blue">
             {context.label}
@@ -263,7 +283,7 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
           onChange={handleKeywordChange}
           onPressEnter={handleKeywordSubmit}
           prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
-          placeholder="输入标题关键词，回车可立即搜索"
+          placeholder="杈撳叆鏍囬鍏抽敭璇嶏紝鍥炶溅鍙珛鍗虫悳绱?
           allowClear
           size="large"
           style={{
@@ -281,7 +301,7 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
               {context.hint}
             </Tag>
             <Tag icon={<FileTextOutlined />} style={{ borderRadius: 999, marginInlineEnd: 0 }}>
-              结果按标题关键字匹配
+              缁撴灉鎸夋爣棰樺叧閿瓧鍖归厤
             </Tag>
           </Space>
           <Button
@@ -289,8 +309,7 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
             style={{ padding: 0 }}
             onClick={() => onOpenFullPage?.(keyword.trim())}
           >
-            打开完整结果页
-          </Button>
+            鎵撳紑瀹屾暣缁撴灉椤?          </Button>
         </div>
       </div>
 
@@ -301,19 +320,19 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#10223a' }}>
                   <HistoryOutlined />
-                  <span>最近搜索</span>
+                  <span>鏈€杩戞悳绱?/span>
                 </div>
                 {recentSearches.length > 0 ? (
                   <Button type="link" danger size="small" style={{ padding: 0 }} onClick={async () => {
                     try {
                       await searchService.clearRecentSearches()
                       setRecentSearches([])
-                      message.success('已清空搜索历史')
+                      message.success('宸叉竻绌烘悳绱㈠巻鍙?)
                     } catch (error) {
-                      message.error(error?.message || '清空失败')
+                      message.error(error?.message || '娓呯┖澶辫触')
                     }
                   }}>
-                    清空历史
+                    娓呯┖鍘嗗彶
                   </Button>
                 ) : null}
               </div>
@@ -336,7 +355,7 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
                     {item}
                   </Tag>
                 )) : (
-                  <Text type="secondary">暂无搜索历史，开始输入关键词即可搜索。</Text>
+                  <Text type="secondary">鏆傛棤鎼滅储鍘嗗彶锛屽紑濮嬭緭鍏ュ叧閿瘝鍗冲彲鎼滅储銆?/Text>
                 )}
               </div>
             </section>
@@ -344,23 +363,22 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
             <section style={{ padding: 18, borderRadius: 22, background: '#fff', border: '1px solid rgba(16,34,58,0.06)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#10223a' }}>
                 <SearchOutlined />
-                <span>快捷提示</span>
+                <span>蹇嵎鎻愮ず</span>
               </div>
               <div style={{ marginTop: 12, color: 'rgba(16,34,58,0.64)', lineHeight: 1.8 }}>
-                输入标题后会自动搜索，支持按 `Enter` 立即提交。搜索结果会按当前页面语义过滤，
-                并保留分页，方便快速跳转到目标笔记。
-              </div>
+                杈撳叆鏍囬鍚庝細鑷姩鎼滅储锛屾敮鎸佹寜 `Enter` 绔嬪嵆鎻愪氦銆傛悳绱㈢粨鏋滀細鎸夊綋鍓嶉〉闈㈣涔夎繃婊わ紝
+                骞朵繚鐣欏垎椤碉紝鏂逛究蹇€熻烦杞埌鐩爣绗旇銆?              </div>
             </section>
           </div>
         ) : (
           <Spin spinning={loading}>
             {showEmptyState ? (
               <Empty
-                description={`未找到与 “${debouncedKeyword}” 相关的笔记`}
+                description={`鏈壘鍒颁笌 鈥?{debouncedKeyword}鈥?鐩稿叧鐨勭瑪璁癭}
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 style={{ padding: '72px 0' }}
               >
-                <div style={{ color: 'rgba(16,34,58,0.45)', fontSize: 13 }}>试试更短的标题词或更明确的关键词</div>
+                <div style={{ color: 'rgba(16,34,58,0.45)', fontSize: 13 }}>璇曡瘯鏇寸煭鐨勬爣棰樿瘝鎴栨洿鏄庣‘鐨勫叧閿瘝</div>
               </Empty>
             ) : (
               <div style={{ display: 'grid', gap: 12 }}>
@@ -412,7 +430,27 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
                               {highlightTitle(item.title, debouncedKeyword)}
                             </div>
                             <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 8, color: 'rgba(16,34,58,0.56)', fontSize: 12 }}>
-                              {item.voiceNumber ? <Tag style={{ borderRadius: 999, marginInlineEnd: 0 }}>{item.voiceNumber} 条语音</Tag> : null}
+                              {hasVoiceRecords(item) ? (
+                                <Tag
+                                  style={{
+                                    borderRadius: 999,
+                                    marginInlineEnd: 0,
+                                    border: '1px solid rgba(124,183,255,0.22)',
+                                    background: 'rgba(124,183,255,0.10)',
+                                    color: '#5ea8ff',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                  }}
+                                >
+                                  <SoundOutlined />
+                                                                    <span>
+                                    {Number(item.voiceNumber || item.voiceCount || 0) > 0
+                                      ? `${item.voiceNumber || item.voiceCount} 条语音`
+                                      : '语音'}
+                                  </span>
+                                </Tag>
+                              ) : null}
                             </div>
                           </div>
                           <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
@@ -424,7 +462,7 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
                           ellipsis={{ rows: 2 }}
                           style={{ margin: '10px 0 0', color: 'rgba(16,34,58,0.58)', lineHeight: 1.7 }}
                         >
-                          {item.deletedAt ? '已删除的笔记，点击可查看或恢复。' : '点击即可打开对应笔记。'}
+                          {item.deletedAt ? '宸插垹闄ょ殑绗旇锛岀偣鍑诲彲鏌ョ湅鎴栨仮澶嶃€? : '鐐瑰嚮鍗冲彲鎵撳紑瀵瑰簲绗旇銆?}
                         </Paragraph>
                       </div>
                     </div>
@@ -452,3 +490,4 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
 }
 
 export default NoteSearchModal
+

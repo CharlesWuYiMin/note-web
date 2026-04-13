@@ -4,8 +4,29 @@ import {
   ClockCircleOutlined,
   FileTextOutlined,
 } from '@ant-design/icons'
+import { SoundOutlined } from '@ant-design/icons'
 
 const { Paragraph, Text } = Typography
+
+function hasVoiceRecords(note) {
+  if (!note) {
+    return false
+  }
+
+  if (Array.isArray(note.voiceNote) && note.voiceNote.length > 0) {
+    return true
+  }
+
+  if (Number(note.voiceNumber) > 0) {
+    return true
+  }
+
+  if (Number(note.voiceCount) > 0) {
+    return true
+  }
+
+  return false
+}
 
 function SearchResultList({ results, query, onResultClick, recentSearches, onRecentSearchClick }) {
   return (
@@ -100,9 +121,28 @@ function SearchResultList({ results, query, onResultClick, recentSearches, onRec
                       <Text strong style={{ fontSize: 15, color: '#10223a', lineHeight: 1.15, minWidth: 0 }}>
                         {item.title || '未命名笔记'}
                       </Text>
-                      <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                        {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : ''}
-                      </Text>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                        {hasVoiceRecords(item) ? (
+                          <Tag
+                            style={{
+                              marginInlineEnd: 0,
+                              borderRadius: 999,
+                              border: '1px solid rgba(124,183,255,0.22)',
+                              background: 'rgba(124,183,255,0.10)',
+                              color: '#5ea8ff',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            <SoundOutlined />
+                            <span>语音</span>
+                          </Tag>
+                        ) : null}
+                        <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                          {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : ''}
+                        </Text>
+                      </div>
                     </div>
 
                     {item.highlight || item.content ? (

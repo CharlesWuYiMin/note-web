@@ -17,6 +17,7 @@ import { CompressOutlined } from '@ant-design/icons'
 import UxIcon from '@/components/common/UxIcon'
 import EditorFactory from '@/components/editors/EditorFactory'
 import useNote from '@/hooks/useNote'
+import { useMemo } from 'react'
 import { useRef } from 'react'
 import SharePanelDialog from '@/components/share/SharePanelDialog'
 
@@ -26,6 +27,26 @@ function normalizeEditorValue(content) {
   }
 
   return typeof content === 'string' ? content : JSON.stringify(content)
+}
+
+function hasVoiceRecords(note) {
+  if (!note) {
+    return false
+  }
+
+  if (Array.isArray(note.voiceNote) && note.voiceNote.length > 0) {
+    return true
+  }
+
+  if (Number(note.voiceNumber) > 0) {
+    return true
+  }
+
+  if (Number(note.voiceCount) > 0) {
+    return true
+  }
+
+  return false
 }
 
 function getWorkspaceEmptyState(pathname, hasRouteId) {
@@ -95,16 +116,20 @@ function EditorWorkspace() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const {
+    notes,
     currentNote,
+    starredNotes,
     isLoading,
+    error,
     loadNoteById,
+    myShares,
+    deletedNotes,
     toggleStar,
     updateName,
     updateContent,
     deleteNote,
     restoreNote,
     permanentDeleteNote,
-    setCurrentNote,
   } = useNote()
   const workspaceRef = useRef(null)
   const [isStarPending, setIsStarPending] = useState(false)
@@ -122,27 +147,59 @@ function EditorWorkspace() {
   const [voicePanelVisible, setVoicePanelVisible] = useState(true)
   const titleInputRef = useRef(null)
   const editorBaselineRef = useRef('')
-  const noteId = currentNote?.id || null
-  const isStarred = Boolean(currentNote?.isStarred)
+  const routeNotePreview = location.state?.note || null
+  const currentRouteNote = currentNote?.id === id ? currentNote : null
+  const notePreview = useMemo(() => {
+    const preview = routeNotePreview
+    if (preview?.id && preview.id === id) {
+      return preview
+    }
+
+    if (preview?.noteId && preview.noteId === id) {
+      return {
+        ...preview,
+        id,
+      }
+    }
+
+    const collectionMatch = [currentNote, ...notes, ...starredNotes, ...deletedNotes].find((item) => item?.id === id)
+      || myShares.find((item) => item?.noteId === id || item?.id === id)
+
+    if (!collectionMatch) {
+      return preview
+    }
+
+    if (collectionMatch?.noteId && !collectionMatch.id) {
+      return {
+        ...collectionMatch,
+        id: collectionMatch.noteId,
+      }
+    }
+
+    return collectionMatch
+  }, [currentNote, deletedNotes, id, myShares, notes, routeNotePreview, starredNotes])
+  const noteForRender = notePreview || currentRouteNote || null
+  const noteId = noteForRender?.id || id || null
+  const isStarred = Boolean(noteForRender?.isStarred)
   const isRecycleBinRoute = location.pathname.startsWith('/cloudnote/recyclebin')
-  const isDeletedNote = isRecycleBinRoute || currentNote?.status === 'deleted'
-  const hasVoiceMaterials = Array.isArray(currentNote?.voiceNote) && currentNote.voiceNote.length > 0
+  const isDeletedNote = isRecycleBinRoute || noteForRender?.status === 'deleted'
+  const hasVoiceMaterials = hasVoiceRecords(noteForRender)
   const showVoiceEditor = forcedVoiceEditorNoteId === noteId || hasVoiceMaterials
-  const showVoiceTrigger = Boolean(currentNote) && !isDeletedNote && (showVoiceEditor || currentNote?.type === 'text')
+  const useVoiceShell = Boolean(noteForRender) && showVoiceEditor
+  const showVoiceTrigger = Boolean(noteForRender) && !isDeletedNote && (showVoiceEditor || noteForRender?.type === 'text')
   const emptyState = getWorkspaceEmptyState(location.pathname, Boolean(id))
-  const showEmptyState = !currentNote && !isLoading
-  const [title, setTitle] = useState(currentNote?.id === id && (currentNote?.title || '').trim()
-    ? currentNote.title
-    : emptyState.title)
+  const displayTitle = noteForRender?.title || (id ? '未命名笔记' : emptyState.title)
+  const isTransitioningNote = Boolean(id) && !noteForRender && !error
+  const showEmptyState = !noteForRender && !isLoading && Boolean(error)
+  const [title, setTitle] = useState(displayTitle)
 
   useEffect(() => {
-    setCurrentNote(null)
     setEditorValue('')
     editorBaselineRef.current = ''
     setForcedVoiceEditorNoteId(null)
     setVoiceAutoStartToken(null)
     setVoicePanelVisible(true)
-    setTitle(emptyState.title)
+    setTitle(notePreview?.title || (id ? '未命名笔记' : emptyState.title))
     setIsTitleEditing(false)
 
     if (!id) {
@@ -150,13 +207,32 @@ function EditorWorkspace() {
     }
 
     loadNoteById(id).catch(() => {})
-  }, [emptyState.title, id, loadNoteById, setCurrentNote])
+  }, [emptyState.title, id, loadNoteById, notePreview?.title])
 
   useEffect(() => {
-    if (!currentNote) return
-    setTitle(currentNote.title || '未命名笔记')
+    if (noteForRender?.title) {
+      setTitle(noteForRender.title)
+      setIsTitleEditing(false)
+      return
+    }
+
+    if (!noteForRender) {
+      return
+    }
+
+    setTitle('未命名笔记')
     setIsTitleEditing(false)
-  }, [currentNote])
+  }, [noteForRender?.id, noteForRender?.title])
+
+  useEffect(() => {
+    if (!noteForRender) {
+      return
+    }
+
+    if (!showVoiceEditor) {
+      setVoicePanelVisible(true)
+    }
+  }, [noteForRender, showVoiceEditor])
 
   useEffect(() => {
     if (!location.state?.openVoicePrompt || !noteId) {
@@ -186,14 +262,14 @@ function EditorWorkspace() {
   }, [])
 
   const handleToggleStar = async () => {
-    if (!noteId || isStarPending) {
+    if (!noteId || isStarPending || !noteForRender) {
       return
     }
 
     setIsStarPending(true)
     try {
       await toggleStar({
-        ...currentNote,
+        ...noteForRender,
         id: noteId,
         isStarred,
       })
@@ -228,7 +304,7 @@ function EditorWorkspace() {
     }
 
     const nextTitle = title.trim() || '未命名笔记'
-    const currentTitle = (currentNote?.title || '').trim() || '未命名笔记'
+    const currentTitle = (noteForRender?.title || '').trim() || '未命名笔记'
 
     if (nextTitle !== title) {
       setTitle(nextTitle)
@@ -258,7 +334,7 @@ function EditorWorkspace() {
     }
 
     if (event.key === 'Escape') {
-      setTitle(currentNote?.title || '未命名笔记')
+      setTitle(noteForRender?.title || '未命名笔记')
       setIsTitleEditing(false)
       titleInputRef.current?.blur()
     }
@@ -437,7 +513,7 @@ function EditorWorkspace() {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {currentNote ? (title || '未命名笔记') : emptyState.title}
+                {displayTitle || '未命名笔记'}
               </button>
 
               {showVoiceTrigger ? (
@@ -574,20 +650,20 @@ function EditorWorkspace() {
             flexDirection: 'column',
           }}
         >
-          {currentNote ? (
+        {noteForRender ? (
               <EditorFactory
                 key={noteId || 'text-editor'}
-                type={showVoiceEditor ? 'voice' : (currentNote?.type || 'text')}
-                note={currentNote}
+                type={useVoiceShell ? 'voice' : (noteForRender?.type || 'text')}
+                note={noteForRender}
                 value={editorValue}
                 onChange={setEditorValue}
                 onSave={handleEditorSave}
                 onNoteRefresh={noteId ? () => loadNoteById(noteId).catch(() => {}) : null}
                 readOnly={isDeletedNote}
-                voicePanelVisible={showVoiceEditor ? voicePanelVisible : false}
+                voicePanelVisible={useVoiceShell ? voicePanelVisible : false}
                 onVoicePanelToggle={handleToggleVoicePanel}
-                autoStartRecordingKey={showVoiceEditor ? voiceAutoStartToken : null}
-                autoStartLanguage={showVoiceEditor ? voicePromptChoice : null}
+                autoStartRecordingKey={useVoiceShell ? voiceAutoStartToken : null}
+                autoStartLanguage={useVoiceShell ? voicePromptChoice : null}
               />
           ) : showEmptyState ? (
             <div
@@ -617,10 +693,24 @@ function EditorWorkspace() {
                 </div>
               </div>
             </div>
+          ) : isTransitioningNote ? (
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'rgba(100,116,139,0.72)',
+                fontSize: 14,
+              }}
+            >
+              正在加载笔记...
+            </div>
           ) : null}
         </div>
 
-        {isLoading && !currentNote ? (
+        {(isLoading || isTransitioningNote) && !noteForRender ? (
           <div
             style={{
               position: 'absolute',

@@ -902,12 +902,28 @@ function VoiceNoteEditor({
 
     try {
       const result = await noteService.uploadVoiceFile(note.id, file)
-      addGeneratedVoiceCard({
-        fileId: result?.fileId,
-        url: result?.url,
-        durationMs,
-        language,
-      })
+      const refreshedNote = await onNoteRefresh?.()
+      const refreshedVoiceNotes = Array.isArray(refreshedNote?.voiceNote) ? refreshedNote.voiceNote : null
+
+      if (refreshedVoiceNotes && refreshedVoiceNotes.length > 0) {
+        const nextState = buildVoiceStateFromNoteVoiceNotes(refreshedVoiceNotes)
+        setRecordings(nextState.recordings)
+        setTranscriptGroups(nextState.transcriptGroups)
+        setSelectedRecording((current) => (
+          current && nextState.recordings.some((item) => item.key === current)
+            ? current
+            : nextState.selectedKey
+        ))
+        transcriptSourceKeyRef.current = nextState.sourceKey
+        sourceRecordingKeyRef.current = nextState.sourceKey
+      } else {
+        addGeneratedVoiceCard({
+          fileId: result?.fileId,
+          url: result?.url,
+          durationMs,
+          language,
+        })
+      }
       message.success('语音上传成功')
     } catch (error) {
       message.error(error?.message || '语音上传失败')
@@ -1161,11 +1177,23 @@ function VoiceNoteEditor({
         }
       `}</style>
 
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, alignItems: 'stretch', overflow: 'hidden' }}>
+      <div
+        style={{
+          display: 'grid',
+          flex: 1,
+          minHeight: 0,
+          alignItems: 'stretch',
+          overflow: 'hidden',
+          gridTemplateColumns: voicePanelVisible
+            ? 'minmax(0, 1fr) minmax(0, 1fr)'
+            : 'minmax(0, 0fr) minmax(0, 1fr)',
+          transition: 'grid-template-columns 320ms cubic-bezier(0.22, 1, 0.36, 1)',
+          willChange: 'grid-template-columns',
+        }}
+      >
         <section
           aria-hidden={!voicePanelVisible}
           style={{
-            flex: voicePanelVisible ? '0 0 50%' : '0 0 0%',
             minWidth: 0,
             minHeight: 0,
             display: 'flex',
@@ -1175,10 +1203,10 @@ function VoiceNoteEditor({
             borderRight: '1px solid rgba(226,232,240,0.8)',
             position: 'relative',
             opacity: voicePanelVisible ? 1 : 0,
-            transform: voicePanelVisible ? 'translateX(0)' : 'translateX(-8px)',
+            transform: voicePanelVisible ? 'translateX(0)' : 'translateX(-12px)',
             pointerEvents: voicePanelVisible ? 'auto' : 'none',
-            transition: 'flex-basis 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1)',
-            willChange: 'flex-basis, opacity, transform',
+            transition: 'opacity 180ms ease, transform 320ms cubic-bezier(0.22, 1, 0.36, 1)',
+            willChange: 'opacity, transform',
           }}
         >
           <div

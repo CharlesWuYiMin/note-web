@@ -36,16 +36,39 @@ function PageEditorV2({
   headerActions = null,
 }) {
   const { api, editor } = getAppConfig()
+  const pageEditorConfig = editor?.page || null
+  const pageEditorAuthConfig = pageEditorConfig?.auth || {}
+  const pageEditorApiUrl = pageEditorConfig?.apiUrl || ''
+  const pageEditorEditorUrl = pageEditorConfig?.editorUrl || ''
+  const pageEditorCollaborationUrl = pageEditorConfig?.collaborationUrl || ''
+  const pageEditorFlowDiagramUrl = pageEditorConfig?.flowDiagramUrl || ''
+  const pageEditorMonacoEditorUrl = pageEditorConfig?.monacoEditorUrl || ''
+  const pageEditorDolphinWebUrl = pageEditorConfig?.dolphinWebUrl || ''
+  const pageEditorObsPrefix = pageEditorConfig?.obsPrefix || ''
+  const pageEditorAuthEnabled = Boolean(pageEditorConfig?.auth?.enabled)
+  const pageEditorAuthAppId = pageEditorAuthConfig.appId || ''
+  const pageEditorAuthSignKey = pageEditorAuthConfig.signKey || ''
+  const pageEditorAuthExpiresInMs = pageEditorAuthConfig.expiresInMs || 0
   const { user, userId, appId } = useAuth()
   const mountRef = useRef(null)
   const editorRef = useRef(null)
   const saveTimerRef = useRef(null)
   const lastSerializedRef = useRef('')
+  const onChangeRef = useRef(onChange)
+  const onSaveRef = useRef(onSave)
   const [editorStatus, setEditorStatus] = useState('loading')
   const [errorMessage, setErrorMessage] = useState('')
   const [mountSize, setMountSize] = useState({ width: 0, height: 0 })
   const isDev = import.meta.env.DEV
-  const useGeneratedEditorJwt = Boolean(editor?.page?.auth?.enabled)
+  const useGeneratedEditorJwt = pageEditorAuthEnabled
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
+
+  useEffect(() => {
+    onSaveRef.current = onSave
+  }, [onSave])
 
   const runtimeAuth = useMemo(
     () => {
@@ -72,13 +95,42 @@ function PageEditorV2({
         appId,
       })
     },
-    [appId, note?.id, user, userId, useGeneratedEditorJwt]
+    [
+      appId,
+      note?.id,
+      pageEditorAuthEnabled,
+      user?.avatar,
+      user?.avatarUrl,
+      user?.id,
+      user?.name,
+      user?.nickName,
+      user?.picture,
+      user?.realName,
+      userId,
+    ]
   )
   const runtimeConfig = useMemo(
     () => {
-      const pageConfig = editor?.page
-      if (pageConfig?.editorUrl && pageConfig?.apiUrl) {
-        return pageConfig
+      if (pageEditorConfig) {
+        const fallback = getRuntimeConfig(api.contentServer, api.contentServer)
+
+        return {
+          ...fallback,
+          auth: {
+            ...fallback.auth,
+            enabled: pageEditorAuthEnabled,
+            appId: pageEditorAuthAppId,
+            signKey: pageEditorAuthSignKey,
+            expiresInMs: pageEditorAuthExpiresInMs,
+          },
+          apiUrl: pageEditorApiUrl || fallback.apiUrl,
+          editorUrl: pageEditorEditorUrl || fallback.editorUrl,
+          collaborationUrl: pageEditorCollaborationUrl || fallback.collaborationUrl,
+          flowDiagramUrl: pageEditorFlowDiagramUrl || fallback.flowDiagramUrl,
+          monacoEditorUrl: pageEditorMonacoEditorUrl || fallback.monacoEditorUrl,
+          dolphinWebUrl: pageEditorDolphinWebUrl || fallback.dolphinWebUrl,
+          obsPrefix: pageEditorObsPrefix || fallback.obsPrefix,
+        }
       }
 
       const fallback = getRuntimeConfig(api.contentServer, api.contentServer)
@@ -87,7 +139,21 @@ function PageEditorV2({
         apiUrl: api.contentServer ? new URL('/api', api.contentServer).toString() : api.baseUrl,
       }
     },
-    [api.baseUrl, api.contentServer, editor?.page]
+    [
+      api.baseUrl,
+      api.contentServer,
+      pageEditorApiUrl,
+      pageEditorAuthAppId,
+      pageEditorAuthEnabled,
+      pageEditorAuthExpiresInMs,
+      pageEditorAuthSignKey,
+      pageEditorCollaborationUrl,
+      pageEditorDolphinWebUrl,
+      pageEditorEditorUrl,
+      pageEditorFlowDiagramUrl,
+      pageEditorMonacoEditorUrl,
+      pageEditorObsPrefix,
+    ]
   )
   const documentConfig = useMemo(() => ({
     docId: note?.id || '',
@@ -206,14 +272,14 @@ function PageEditorV2({
           }
 
           lastSerializedRef.current = nextContent
-          onChange?.(nextContent)
+          onChangeRef.current?.(nextContent)
 
           if (saveTimerRef.current) {
             window.clearTimeout(saveTimerRef.current)
           }
 
           saveTimerRef.current = window.setTimeout(() => {
-            onSave?.(nextContent)
+            onSaveRef.current?.(nextContent)
           }, 500)
         },
       }).then((editor) => {
@@ -260,7 +326,7 @@ function PageEditorV2({
       }
       editorRef.current = null
     }
-  }, [documentConfig, mountReady, onChange, onSave, readOnly, runtimeConfig, runtimeAuth])
+  }, [documentConfig, mountReady, readOnly, runtimeConfig, runtimeAuth])
 
   useEffect(() => {
     if (!mountReady) {

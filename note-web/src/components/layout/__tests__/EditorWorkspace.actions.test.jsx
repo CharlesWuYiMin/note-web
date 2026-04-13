@@ -41,9 +41,13 @@ const noteState = {
 
 vi.mock('@/hooks/useNote', () => ({
   default: () => ({
+    notes: [],
     currentNote: noteState.currentNote,
+    starredNotes: [],
     isLoading: noteState.isLoading,
     loadNoteById: loadNoteByIdMock,
+    myShares: [],
+    deletedNotes: [],
     toggleStar: toggleStarMock,
     updateName: updateNameMock,
     updateContent: updateContentMock,

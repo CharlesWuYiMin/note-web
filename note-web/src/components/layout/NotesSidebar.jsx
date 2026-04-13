@@ -294,7 +294,10 @@ function NotesSidebar({ visible = true }) {
     }
 
     hasRedirectedRef.current = true
-    navigate(getDetailPath(currentSection, sortedNotes[0]), { replace: true })
+    navigate(getDetailPath(currentSection, sortedNotes[0]), {
+      replace: true,
+      state: { note: sortedNotes[0] },
+    })
   }, [visible, isSectionRoot, isLoading, sortedNotes, navigate, currentSection])
 
   const handleSidebarWheel = (event) => {
@@ -738,7 +741,9 @@ function NotesSidebar({ visible = true }) {
                 handleToggleNoteSelection(String(note.id))
                 return
               }
-              navigate(getDetailPath(currentSection, note))
+              navigate(getDetailPath(currentSection, note), {
+                state: { note },
+              })
             }}
             style={{
               width: '100%',
@@ -757,14 +762,14 @@ function NotesSidebar({ visible = true }) {
               transition: 'all 0.18s ease',
             }}
           >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: 12,
-              }}
-            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
               {batchMode ? (
                 <Checkbox
                   checked={selectedNoteIds.includes(String(note.id))}
@@ -773,11 +778,11 @@ function NotesSidebar({ visible = true }) {
                   style={{ marginTop: 2 }}
                 />
               ) : null}
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div
-                  style={{
-                    fontSize: 15,
-                    fontWeight: currentNoteId === String(note.id) ? 700 : 600,
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 15,
+                      fontWeight: currentNoteId === String(note.id) ? 700 : 600,
                     color: '#10223a',
                     lineHeight: 1.35,
                     whiteSpace: 'nowrap',
@@ -792,14 +797,16 @@ function NotesSidebar({ visible = true }) {
                     marginTop: 10,
                     display: 'flex',
                     alignItems: 'center',
+                    justifyContent: 'space-between',
                     gap: 10,
                     flexWrap: 'wrap',
                     fontSize: 12,
                     color: '#475569',
                   }}
                 >
-                  <span>{formatMetaDate(note, sort.field, true)}</span>
-                  {note.notebookName ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+                    <span>{formatMetaDate(note, sort.field, true)}</span>
+                    {note.notebookName ? (
                     <span
                       style={{
                         maxWidth: 112,
@@ -811,25 +818,33 @@ function NotesSidebar({ visible = true }) {
                         padding: '2px 6px',
                         borderRadius: 4,
                       }}
+                      >
+                        {note.notebookName}
+                      </span>
+                    ) : null}
+                  </div>
+                  {hasVoiceRecords(note) ? (
+                    <span
+                      title="有语音记录"
+                      aria-label="有语音记录"
+                      style={{
+                        color: '#7cb7ff',
+                        fontSize: 16,
+                        lineHeight: 1,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        flexShrink: 0,
+                      }}
                     >
-                      {note.notebookName}
+                      <SoundOutlined />
                     </span>
                   ) : null}
+                  </div>
                 </div>
-              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexShrink: 0 }}>
                 {note.isStarred ? (
                   <span style={{ color: '#d97706', fontSize: 16, lineHeight: 1 }}>
                     <StarFilled />
-                  </span>
-                ) : null}
-                {hasVoiceRecords(note) ? (
-                  <span
-                    title="有语音记录"
-                    aria-label="有语音记录"
-                    style={{ color: '#7cb7ff', fontSize: 16, lineHeight: 1, display: 'inline-flex' }}
-                  >
-                    <SoundOutlined />
                   </span>
                 ) : null}
               </div>
