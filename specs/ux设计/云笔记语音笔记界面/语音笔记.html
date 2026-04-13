@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+
+<html class="light" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Welink云笔记</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#2c3437",
+                    "on-tertiary": "#fcf7ff",
+                    "on-error-container": "#6e0a12",
+                    "error-dim": "#67040d",
+                    "on-secondary-container": "#465363",
+                    "on-secondary-fixed": "#344050",
+                    "surface-container-high": "#e3e9ed",
+                    "surface-container": "#eaeff2",
+                    "secondary-container": "#d7e3f8",
+                    "tertiary-dim": "#554e77",
+                    "outline": "#747c80",
+                    "on-tertiary-fixed": "#352f56",
+                    "surface-dim": "#d4dbdf",
+                    "surface": "#f7f9fb",
+                    "on-primary-fixed-variant": "#000a26",
+                    "primary-fixed-dim": "#3873ef",
+                    "on-primary-container": "#000000",
+                    "primary-dim": "#004bba",
+                    "surface-container-lowest": "#ffffff",
+                    "background": "#f7f9fb",
+                    "on-error": "#fff7f6",
+                    "secondary": "#546071",
+                    "secondary-fixed-dim": "#c9d5e9",
+                    "error-container": "#fa746f",
+                    "surface-tint": "#0256d2",
+                    "error": "#a83836",
+                    "surface-bright": "#f7f9fb",
+                    "on-tertiary-container": "#49426a",
+                    "secondary-fixed": "#d7e3f8",
+                    "inverse-on-surface": "#9a9d9f",
+                    "primary": "#0256d2",
+                    "outline-variant": "#acb3b7",
+                    "on-primary-fixed": "#000000",
+                    "surface-variant": "#dce4e8",
+                    "on-secondary": "#f7f9ff",
+                    "on-tertiary-fixed-variant": "#524b74",
+                    "tertiary": "#615a84",
+                    "primary-container": "#4880fd",
+                    "surface-container-highest": "#dce4e8",
+                    "on-secondary-fixed-variant": "#505c6d",
+                    "inverse-primary": "#5b8cff",
+                    "tertiary-fixed": "#d5cbfc",
+                    "surface-container-low": "#f0f4f7",
+                    "primary-fixed": "#4880fd",
+                    "secondary-dim": "#485464",
+                    "on-surface-variant": "#596064",
+                    "tertiary-container": "#d5cbfc",
+                    "on-background": "#2c3437",
+                    "inverse-surface": "#0b0f10",
+                    "tertiary-fixed-dim": "#c7beee",
+                    "on-primary": "#f9f8ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.5rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Manrope"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .glass-panel {
+            background: rgba(247, 249, 251, 0.7);
+            backdrop-filter: blur(20px);
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .workspace-unified {
+            background: #ffffff;
+            box-shadow: 0 4px 40px -12px rgba(0, 0, 0, 0.08);
+            border-radius: 1.5rem;
+        }
+        .waveform-bar {
+            height: 12px;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .waveform-bar span {
+            display: block;
+            width: 2px;
+            background: #cbd5e1;
+            border-radius: 1px;
+        }
+        .waveform-bar span.active {
+            background: #0256d2;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface flex h-screen overflow-hidden p-4 gap-4">
+<!-- SideNavBar Component -->
+<aside class="w-64 flex flex-col py-2 shrink-0">
+<div class="mb-8 px-4">
+<h1 class="text-xl font-bold text-primary font-headline">Welink云笔记</h1>
+</div>
+<button class="mb-6 mx-2 flex items-center justify-center gap-2 bg-gradient-to-r from-primary to-primary-container text-on-primary py-3 px-4 rounded-full shadow-lg hover:opacity-90 transition-all duration-150 active:scale-95">
+<span class="material-symbols-outlined">add</span>
+<span class="font-semibold">新建笔记</span>
+</button>
+<nav class="flex-1 space-y-1 px-2">
+<a class="flex items-center gap-3 px-4 py-3 bg-white text-primary shadow-sm rounded-lg transition-colors font-medium" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span>近期笔记</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-white/50 rounded-lg transition-colors font-medium" href="#">
+<span class="material-symbols-outlined" data-icon="star">star</span>
+<span>星标笔记</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-white/50 rounded-lg transition-colors font-medium" href="#">
+<span class="material-symbols-outlined" data-icon="share">share</span>
+<span>我的分享</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-white/50 rounded-lg transition-colors font-medium" href="#">
+<span class="material-symbols-outlined" data-icon="folder">folder</span>
+<span>笔记本</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-white/50 rounded-lg transition-colors font-medium" href="#">
+<span class="material-symbols-outlined" data-icon="delete">delete</span>
+<span>回收站</span>
+</a>
+</nav>
+</aside>
+<!-- Unified Workspace Area -->
+<main class="flex-1 flex flex-col min-w-0 workspace-unified overflow-hidden border border-slate-200/40">
+<!-- Unified Header -->
+<header class="w-full h-16 flex justify-between items-center px-6 border-b border-slate-100">
+<div class="flex items-center gap-4 flex-1">
+<div class="relative w-full max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 transition-all" placeholder="搜索笔记..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-slate-500 hover:bg-surface-container rounded-full transition-colors relative">
+<span class="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full"></span>
+</button>
+<div class="relative group">
+<button class="flex items-center gap-2 p-1 bg-surface-container-low rounded-full hover:bg-surface-container transition-colors">
+<img alt="User Profile" class="w-8 h-8 rounded-full border-2 border-white shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAha3N_twojKxp-vUX1QEzmFpFNyQF3k8fYgpi0aDGOdFiyq-fzRyIVylr6HtJy1h8LKAIYfKa5iObVaF4XdWVF8kw5LXIVhapVMaAgynujytRE653Uzdbw5we_akzkIXC1rtSkDyt61mAB0DTrWAu9kFetZYxKI1AV84hEz24dMTLP-FQhWjq3cG6qrfjmDlgM2HS9jTZjEd_rQjcBcHJMU63GXf_kP9rLZnJDkoA4O_xsb5krJqswsDC_ZYA1iJpyPlrAnrdSNuA"/>
+</button>
+<div class="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-2xl border border-outline-variant/10 p-5 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200 z-50">
+<div class="flex items-center gap-4 mb-4">
+<img alt="User Avatar" class="w-14 h-14 rounded-full bg-surface-container" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBqyD5gOiHO2PXwMGQhqz5CtS04b2LDazIGh4wLXmZE0jQhN322xCxEc9_e3jGuGUKHbYR5ZKLk49by7ebTPKVasbnam3myEPsSgmzaecdUPR4COiFGILPxeNCSRETjr-8WhASRXuUePE96xTn5DMHw2KyTXU67XjL1DqiLfWINxy1igsFwV66NXOwrsOY1CBPJnubq8LEWU09Jy_K2DwYIrWPus3QO74fUoZZiB2Kw9t4rJMpMB9ZNw1cE1pExDDvo3zatmGkLCI"/>
+<div>
+<h4 class="font-bold text-lg">陈智远</h4>
+<p class="text-xs text-slate-400">ID: 88293104</p>
+</div>
+</div>
+<div class="space-y-4">
+<div class="p-3 bg-surface rounded-xl flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400">language</span>
+<span class="text-sm font-medium">语言设置</span>
+</div>
+<div class="flex bg-surface-container-high p-1 rounded-lg text-[10px] font-bold">
+<span class="px-2 py-1 bg-white rounded shadow-sm text-primary">中文</span>
+<span class="px-2 py-1 text-slate-500">EN</span>
+</div>
+</div>
+<div class="space-y-1">
+<button class="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-surface-container rounded-lg transition-colors">
+<span class="material-symbols-outlined text-sm">account_circle</span> 个人账号管理
+                                </button>
+<button class="w-full flex items-center gap-3 px-3 py-2 text-sm text-error hover:bg-error-container/20 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-sm">logout</span> 退出登录
+                                </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden relative">
+<!-- Recent Notes List -->
+<section class="w-72 flex flex-col border-r border-slate-100 transition-all duration-300 ease-in-out shrink-0 bg-slate-50/50" id="notes-sidebar">
+<div class="p-6">
+<h2 class="text-xs font-bold font-label uppercase tracking-wider mb-4 flex items-center justify-between text-slate-400">
+                        近期笔记
+                        <span class="material-symbols-outlined text-slate-400 text-sm cursor-pointer hover:text-primary">sort</span>
+</h2>
+<div class="space-y-1 overflow-y-auto no-scrollbar max-h-[calc(100vh-200px)]">
+<div class="p-3 bg-primary/5 rounded-xl border border-primary/10">
+<h3 class="font-bold text-sm truncate text-primary">关于产品架构的深度思考</h3>
+</div>
+<div class="p-3 hover:bg-white rounded-xl transition-all cursor-pointer border border-transparent hover:border-slate-100">
+<h3 class="font-medium text-sm truncate text-on-surface/80">客户访谈: 创意总监</h3>
+</div>
+<div class="p-3 hover:bg-white rounded-xl transition-all cursor-pointer border border-transparent hover:border-slate-100">
+<h3 class="font-medium text-sm truncate text-on-surface/80">数字化工作空间设计逻辑</h3>
+</div>
+<div class="p-3 hover:bg-white rounded-xl transition-all cursor-pointer border border-transparent hover:border-slate-100">
+<h3 class="font-medium text-sm truncate text-on-surface/80">周一早会速记</h3>
+</div>
+<div class="p-3 hover:bg-white rounded-xl transition-all cursor-pointer border border-transparent hover:border-slate-100">
+<h3 class="font-medium text-sm truncate text-on-surface/80">2024 年度规划草案</h3>
+</div>
+</div>
+</div>
+</section>
+<!-- Draggable Divider -->
+<div class="group w-px bg-slate-100 hover:bg-primary/30 transition-colors cursor-col-resize relative flex items-center justify-center">
+<button class="absolute left-1/2 -translate-x-1/2 w-6 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-400 hover:text-primary shadow-sm hover:shadow-md transition-all z-10" onclick="document.getElementById('notes-sidebar').classList.toggle('w-0'); document.getElementById('notes-sidebar').classList.toggle('opacity-0');">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+</div>
+<!-- Editor Workspace Container -->
+<div class="flex-1 flex flex-col overflow-hidden">
+<div class="h-14 border-b border-slate-50 flex items-center justify-between px-6 shrink-0 bg-white">
+<div class="flex items-center gap-3">
+<h2 class="text-sm font-semibold text-slate-700 truncate">关于产品架构的深度思考</h2>
+</div>
+<div class="flex items-center gap-1">
+<button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-surface-container transition-colors"><span class="material-symbols-outlined text-lg text-primary" style="font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;">star</span></button><button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-surface-container transition-colors"><span class="material-symbols-outlined text-lg">fullscreen</span></button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-surface-container transition-colors"><span class="material-symbols-outlined text-lg">share</span></button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-surface-container transition-colors"><span class="material-symbols-outlined text-lg text-error/70">delete</span></button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-surface-container transition-colors"><span class="material-symbols-outlined text-lg">more_horiz</span></button>
+</div>
+</div>
+<div class="flex-1 flex overflow-hidden">
+<!-- Voice Features Column (50% width) -->
+<section class="w-1/2 flex flex-col bg-white border-r border-slate-100 overflow-hidden">
+<div class="p-4 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
+<h3 class="text-sm font-bold text-slate-600 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg">mic</span>
+                                语音记录与转写
+                            </h3>
+<div class="flex items-center gap-2">
+<button class="text-xs text-primary font-semibold hover:underline">观点提取</button>
+<span class="text-slate-300">|</span>
+<span class="material-symbols-outlined text-slate-400 text-sm">settings</span>
+</div>
+</div>
+<!-- Voice Card Selection Mechanism -->
+<div class="px-4 py-3 bg-white border-b border-slate-100 overflow-x-auto no-scrollbar flex items-center gap-3 shrink-0">
+<button class="flex flex-col min-w-[140px] p-3 rounded-xl border-2 border-primary bg-primary/5 transition-all text-left">
+<span class="text-[10px] font-bold text-primary/60 uppercase tracking-tighter mb-1">RECORDING 01</span>
+<span class="text-xs font-bold text-primary truncate">产品架构讨论 - 核心</span>
+<span class="text-[10px] text-primary/40 mt-1">02:40 • 今天 10:24</span>
+</button>
+<button class="flex flex-col min-w-[140px] p-3 rounded-xl border-2 border-transparent bg-surface-container hover:bg-surface-container-high transition-all text-left">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-1">RECORDING 02</span>
+<span class="text-xs font-bold text-slate-600 truncate">用户反馈访谈</span>
+<span class="text-[10px] text-slate-400 mt-1">05:12 • 昨天 15:40</span>
+</button>
+<button class="flex flex-col min-w-[140px] p-3 rounded-xl border-2 border-transparent bg-surface-container hover:bg-surface-container-high transition-all text-left">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-1">RECORDING 03</span>
+<span class="text-xs font-bold text-slate-600 truncate">设计走查记录</span>
+<span class="text-[10px] text-slate-400 mt-1">01:45 • 昨天 11:20</span>
+</button>
+</div>
+<!-- Transcript Content -->
+<div class="flex-1 p-4 space-y-6 overflow-y-auto no-scrollbar">
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600">LW</div>
+<span class="text-xs font-bold text-slate-700">Li Wei</span>
+<span class="text-[10px] text-slate-400">00:12</span>
+</div>
+<button class="text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-sm">more_vert</span></button>
+</div>
+<div class="waveform-bar px-1">
+<span class="active h-1"></span><span class="active h-3"></span><span class="active h-2"></span><span class="active h-4"></span><span class="active h-3"></span>
+<span class="h-1"></span><span class="h-2"></span><span class="h-3"></span><span class="h-4"></span><span class="h-2"></span><span class="h-1"></span><span class="h-3"></span><span class="h-2"></span><span class="h-4"></span><span class="h-1"></span>
+</div>
+<p class="text-sm text-slate-600 leading-relaxed bg-slate-50/50 p-2 rounded-lg">
+                                    数字化时代的笔记不应仅仅是文字的堆砌。它应该是一个流动的智慧体。我们需要考虑如何让数据更自然地呈现。
+                                </p>
+</div>
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-[10px] font-bold text-purple-600">ZH</div>
+<span class="text-xs font-bold text-slate-700">Zhang Hua</span>
+<span class="text-[10px] text-slate-400">00:45</span>
+</div>
+<button class="text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-sm">more_vert</span></button>
+</div>
+<div class="waveform-bar px-1">
+<span class="h-2"></span><span class="h-4"></span><span class="h-3"></span><span class="h-1"></span><span class="h-2"></span><span class="h-3"></span><span class="h-4"></span><span class="h-2"></span><span class="h-1"></span><span class="h-3"></span><span class="h-2"></span><span class="h-4"></span><span class="h-1"></span><span class="h-3"></span><span class="h-2"></span>
+</div>
+<p class="text-sm text-slate-600 leading-relaxed bg-slate-50/50 p-2 rounded-lg">
+                                    在这个“数字工作室”的设计中，我们强调意图驱动的交互。每一个像素的选择都是为了减少认知负荷。
+                                </p>
+</div>
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[10px] font-bold text-blue-600">LW</div>
+<span class="text-xs font-bold text-slate-700">Li Wei</span>
+<span class="text-[10px] text-slate-400">01:05</span>
+</div>
+<button class="text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-sm">more_vert</span></button>
+</div>
+<div class="waveform-bar px-1">
+<span class="h-1"></span><span class="h-2"></span><span class="h-1"></span><span class="h-2"></span><span class="h-1"></span><span class="h-2"></span><span class="h-1"></span><span class="h-2"></span><span class="h-1"></span><span class="h-2"></span><span class="h-1"></span><span class="h-2"></span><span class="h-1"></span><span class="h-2"></span><span class="h-1"></span>
+</div>
+<p class="text-sm text-slate-600 leading-relaxed bg-slate-50/50 p-2 rounded-lg">
+                                    这里的留白不是空洞，而是思考的呼吸。界面的每一处反馈都应当直观且优雅。
+                                </p>
+</div>
+</div>
+<!-- Bottom Playback Controls with Speed Selector -->
+<div class="p-6 border-t border-slate-100 bg-white shrink-0">
+<div class="flex items-center gap-4">
+<!-- Capsule Player -->
+<div class="flex-1 flex items-center gap-4 bg-slate-50 border border-slate-100 rounded-full px-4 py-2 shadow-sm">
+<!-- Play Button -->
+<button class="w-10 h-10 flex items-center justify-center rounded-full bg-primary text-white hover:opacity-90 transition-opacity shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-2xl fill-1">play_arrow</span>
+</button>
+<!-- Time Display -->
+<div class="flex flex-col justify-center shrink-0 min-w-[60px]">
+<span class="text-[10px] text-slate-400 leading-tight font-mono">00:00:00</span>
+<span class="text-[10px] text-slate-400 leading-tight font-mono">00:00:32</span>
+</div>
+<!-- Progress Bar -->
+<div class="flex-1 h-1 bg-slate-200 rounded-full overflow-hidden">
+<div class="h-full w-1/3 bg-slate-300 rounded-full"></div>
+</div>
+<!-- Volume Icon -->
+<button class="text-slate-400 hover:text-slate-600 transition-colors">
+<span class="material-symbols-outlined text-xl">volume_up</span>
+</button>
+<!-- Speed Toggle -->
+<button class="text-xs font-bold text-slate-500 hover:text-primary transition-colors px-1">
+        1.0X
+      </button>
+</div>
+<!-- External Mic Action -->
+<button class="w-12 h-12 flex items-center justify-center rounded-full bg-slate-50 border border-slate-100 text-primary shadow-sm hover:bg-white hover:shadow-md transition-all shrink-0" title="追加录音">
+<span class="material-symbols-outlined text-2xl">mic</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Document Editor (50% width) -->
+<section class="w-1/2 flex flex-col bg-white overflow-hidden">
+<div class="flex-1 p-8 lg:p-12 overflow-y-auto no-scrollbar">
+<div class="max-w-2xl mx-auto space-y-6">
+<textarea class="w-full text-3xl font-bold font-headline bg-transparent border-none focus:ring-0 placeholder-slate-200 resize-none h-auto p-0" placeholder="在此输入标题...">关于产品架构的深度思考</textarea>
+<div class="prose prose-slate max-w-none">
+<p class="text-base text-slate-700 leading-relaxed outline-none" contenteditable="true">
+                                        数字化时代的笔记不应仅仅是文字的堆砌。它应该是一个<b>流动的智慧体</b>。
+                                    </p>
+<p class="text-base text-slate-700 leading-relaxed outline-none mt-4" contenteditable="true">
+                                        在这个“数字工作室”的设计中，我们强调<b>意图驱动</b>的交互。每一个像素的选择都是为了减少认知负荷。
+                                    </p>
+<p class="text-base text-slate-700 leading-relaxed outline-none" contenteditable="true">
+                                        这里的留白不是空洞，而是思考的呼吸。界面的每一处反馈都应当直观且优雅。
+                                    </p>
+</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+</div>
+</main>
+</body></html>

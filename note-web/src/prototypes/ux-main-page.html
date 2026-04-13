@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+
+<html class="light" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Welink云笔记</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#2c3437",
+                    "on-tertiary": "#fcf7ff",
+                    "on-error-container": "#6e0a12",
+                    "error-dim": "#67040d",
+                    "on-secondary-container": "#465363",
+                    "on-secondary-fixed": "#344050",
+                    "surface-container-high": "#e3e9ed",
+                    "surface-container": "#eaeff2",
+                    "secondary-container": "#d7e3f8",
+                    "tertiary-dim": "#554e77",
+                    "outline": "#747c80",
+                    "on-tertiary-fixed": "#352f56",
+                    "surface-dim": "#d4dbdf",
+                    "surface": "#f7f9fb",
+                    "on-primary-fixed-variant": "#000a26",
+                    "primary-fixed-dim": "#3873ef",
+                    "on-primary-container": "#000000",
+                    "primary-dim": "#004bba",
+                    "surface-container-lowest": "#ffffff",
+                    "background": "#f7f9fb",
+                    "on-error": "#fff7f6",
+                    "secondary": "#546071",
+                    "secondary-fixed-dim": "#c9d5e9",
+                    "error-container": "#fa746f",
+                    "surface-tint": "#0256d2",
+                    "error": "#a83836",
+                    "surface-bright": "#f7f9fb",
+                    "on-tertiary-container": "#49426a",
+                    "secondary-fixed": "#d7e3f8",
+                    "inverse-on-surface": "#9a9d9f",
+                    "primary": "#0061A4",
+                    "outline-variant": "#acb3b7",
+                    "on-primary-fixed": "#000000",
+                    "surface-variant": "#dce4e8",
+                    "on-secondary": "#f7f9ff",
+                    "on-tertiary-fixed-variant": "#524b74",
+                    "tertiary": "#615a84",
+                    "primary-container": "#4880fd",
+                    "surface-container-highest": "#dce4e8",
+                    "on-secondary-fixed-variant": "#505c6d",
+                    "inverse-primary": "#5b8cff",
+                    "tertiary-fixed": "#d5cbfc",
+                    "surface-container-low": "#f0f4f7",
+                    "primary-fixed": "#4880fd",
+                    "secondary-dim": "#485464",
+                    "on-surface-variant": "#596064",
+                    "tertiary-container": "#d5cbfc",
+                    "on-background": "#2c3437",
+                    "inverse-surface": "#0b0f10",
+                    "tertiary-fixed-dim": "#c7beee",
+                    "on-primary": "#f9f8ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.5rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Manrope"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .glass-panel {
+            background: rgba(247, 249, 251, 0.7);
+            backdrop-filter: blur(20px);
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .workspace-unified {
+            background: #ffffff;
+            box-shadow: 0 4px 40px -12px rgba(0, 0, 0, 0.08);
+            border-radius: 1.5rem;
+        }
+        .ai-inner-shadow {
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.03);
+        }
+        
+        /* Sidebar Collapse Styles */
+        #main-sidebar {
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #main-sidebar.collapsed {
+            width: 80px;
+        }
+        #main-sidebar.collapsed .sidebar-text,
+        #main-sidebar.collapsed .sidebar-header-text {
+            display: none;
+        }
+        #main-sidebar.collapsed .sidebar-nav-item {
+            justify-content: center;
+            padding-left: 0;
+            padding-right: 0;
+        }
+        #main-sidebar.collapsed .sidebar-nav-item span:not(.material-symbols-outlined) {
+            display: none;
+        }
+        #main-sidebar.collapsed .sidebar-button-text {
+            display: none;
+        }
+        #main-sidebar.collapsed .sidebar-button {
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            margin: 0 auto 1.5rem;
+        }
+        
+        /* Tooltip behavior */
+        .sidebar-tooltip {
+            position: absolute;
+            left: 100%;
+            margin-left: 12px;
+            padding: 6px 10px;
+            background: #2c3437;
+            color: white;
+            font-size: 12px;
+            border-radius: 4px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 60;
+        }
+        #main-sidebar.collapsed .sidebar-nav-item:hover .sidebar-tooltip {
+            opacity: 1;
+        }
+
+        /* Resizable handle for AI Panel */
+        #ai-resizer {
+            width: 8px;
+            cursor: col-resize;
+            transition: background 0.2s;
+            z-index: 10;
+        }
+        #ai-resizer:hover, #ai-resizer.resizing {
+            background: rgba(0, 97, 164, 0.1);
+        }
+        #ai-resizer:hover .handle-line, #ai-resizer.resizing .handle-line {
+            background: #0061A4;
+        }
+    </style>
+<style>#main-sidebar.collapsed .sidebar-footer { justify-content: center; }</style></head>
+<body class="bg-surface text-on-surface flex h-screen overflow-hidden p-4 gap-4">
+<!-- SideNavBar Component -->
+<aside class="w-80 flex flex-col py-2 shrink-0 relative collapsed" id="main-sidebar">
+<div class="mb-8 px-4 flex items-center">
+<h1 class="text-xl font-bold text-primary dark:text-blue-100 font-headline sidebar-header-text overflow-hidden whitespace-nowrap">Welink云笔记</h1>
+</div>
+<button class="sidebar-button mb-6 mx-2 flex items-center justify-center gap-2 bg-gradient-to-r from-primary to-primary-container text-on-primary py-3 px-4 rounded-lg shadow-lg hover:opacity-90 transition-all duration-150 active:scale-95">
+<span class="material-symbols-outlined">add</span>
+<span class="font-semibold sidebar-button-text whitespace-nowrap">新建笔记</span>
+</button>
+<nav class="flex-1 space-y-1 px-2">
+<a class="sidebar-nav-item flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 text-primary dark:text-blue-300 shadow-sm rounded-lg transition-colors font-medium relative group" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="sidebar-text">近期笔记</span>
+<div class="sidebar-tooltip">近期笔记</div>
+</a>
+<a class="sidebar-nav-item flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-white/50 rounded-lg transition-colors font-medium relative group" href="#">
+<span class="material-symbols-outlined" data-icon="star">star</span>
+<span class="sidebar-text">星标笔记</span>
+<div class="sidebar-tooltip">星标笔记</div>
+</a>
+<a class="sidebar-nav-item flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-white/50 rounded-lg transition-colors font-medium relative group" href="#">
+<span class="material-symbols-outlined" data-icon="share">share</span>
+<span class="sidebar-text">我的分享</span>
+<div class="sidebar-tooltip">我的分享</div>
+</a>
+<a class="sidebar-nav-item flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-white/50 rounded-lg transition-colors font-medium relative group" href="#">
+<span class="material-symbols-outlined" data-icon="folder">folder</span>
+<span class="sidebar-text">笔记本</span>
+<div class="sidebar-tooltip">笔记本</div>
+</a>
+<a class="sidebar-nav-item flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-white/50 rounded-lg transition-colors font-medium relative group" href="#">
+<span class="material-symbols-outlined" data-icon="delete">delete</span>
+<span class="sidebar-text">回收站</span>
+<div class="sidebar-tooltip">回收站</div>
+</a>
+</nav>
+<div class="mt-auto p-4 border-t border-slate-100/50 flex justify-end sidebar-footer"><button class="p-1.5 hover:bg-white/50 rounded-lg text-slate-500 transition-colors" onclick="toggleSidebar()"><span class="material-symbols-outlined" id="sidebar-toggle-main">menu</span></button></div></aside>
+<!-- Unified Workspace Area -->
+<main class="flex-1 flex flex-col min-w-0 workspace-unified overflow-hidden border border-slate-200/40">
+<!-- Unified Header -->
+<header class="w-full h-16 flex justify-between items-center px-6 border-b border-slate-100">
+<div class="flex items-center gap-4 flex-1">
+<div class="relative w-full max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20 transition-all" placeholder="搜索笔记或标签..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-slate-500 hover:bg-surface-container rounded-full transition-colors relative">
+<span class="material-symbols-outlined" data-icon="auto_awesome" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full"></span>
+</button>
+<!-- Profile Trigger -->
+<div class="relative group">
+<button class="flex items-center gap-2 p-1 bg-surface-container-low rounded-full hover:bg-surface-container transition-colors">
+<img alt="User Profile" class="w-8 h-8 rounded-full border-2 border-white shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAha3N_twojKxp-vUX1QEzmFpFNyQF3k8fYgpi0aDGOdFiyq-fzRyIVylr6HtJy1h8LKAIYfKa5iObVaF4XdWVF8kw5LXIVhapVMaAgynujytRE653Uzdbw5we_akzkIXC1rtSkDyt61mAB0DTrWAu9kFetZYxKI1AV84hEz24dMTLP-FQhWjq3cG6qrfjmDlgM2HS9jTZjEd_rQjcBcHJMU63GXf_kP9rLZnJDkoA4O_xsb5krJqswsDC_ZYA1iJpyPlrAnrdSNuA"/>
+</button>
+<div class="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-2xl border border-outline-variant/10 p-5 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200 z-50">
+<div class="flex items-center gap-4 mb-4">
+<img alt="User Avatar" class="w-14 h-14 rounded-full bg-surface-container" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBqyD5gOiHO2PXwMGQhqz5CtS04b2LDazIGh4wLXmZE0jQhN322xCxEc9_e3jGuGUKHbYR5ZKLk49by7ebTPKVasbnam3myEPsSgmzaecdUPR4COiFGILPxeNCSRETjr-8WhASRXuUePE96xTn5DMHw2KyTXU67XjL1DqiLfWINxy1igsFwV66NXOwrsOY1CBPJnubq8LEWU09Jy_K2DwYIrWPus3QO74fUoZZiB2Kw9t4rJMpMB9ZNw1cE1pExDDvo3zatmGkLCI"/>
+<div>
+<h4 class="font-bold text-lg">陈智远</h4>
+<p class="text-xs text-slate-400">ID: 88293104</p>
+</div>
+</div>
+<div class="space-y-4">
+<div class="p-3 bg-surface rounded-lg flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400">language</span>
+<span class="text-sm font-medium">语言设置</span>
+</div>
+<div class="flex bg-surface-container-high p-1 rounded-lg text-[10px] font-bold">
+<span class="px-2 py-1 bg-white rounded shadow-sm text-primary">中文</span>
+<span class="px-2 py-1 text-slate-500">EN</span>
+</div>
+</div>
+<div class="space-y-1">
+<button class="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-surface-container rounded-lg transition-colors">
+<span class="material-symbols-outlined text-sm">account_circle</span> 个人账号管理
+                                </button>
+<button class="w-full flex items-center gap-3 px-3 py-2 text-sm text-error hover:bg-error-container/20 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-sm">logout</span> 退出登录
+                                </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden relative">
+<!-- Recent Notes List (Collapsed by default in source logic, toggled via divider) -->
+<section class="w-0 opacity-0 flex flex-col border-r border-slate-100 transition-all duration-300 ease-in-out shrink-0 bg-slate-50/30 overflow-hidden" id="notes-sidebar">
+<div class="p-6 w-72">
+<h2 class="text-xs font-bold font-label uppercase tracking-wider mb-4 flex items-center justify-between text-slate-400">
+                        近期笔记
+                        <div class="relative group">
+<span class="material-symbols-outlined text-slate-400 text-lg cursor-pointer hover:text-primary transition-colors" data-icon="sort">sort</span>
+<div class="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-xl border border-slate-100 p-1.5 z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200">
+<button class="w-full flex items-center justify-between px-3 py-2 text-[13px] font-medium text-slate-600 hover:bg-slate-50 rounded-md text-left">
+<span>创建时间</span>
+</button>
+<button class="w-full flex items-center justify-between px-3 py-2 text-[13px] font-medium text-primary bg-primary/5 rounded-md text-left">
+<span>修改时间</span>
+<span class="material-symbols-outlined text-sm">check</span>
+</button>
+<button class="w-full flex items-center justify-between px-3 py-2 text-[13px] font-medium text-slate-600 hover:bg-slate-50 rounded-md text-left">
+<span>笔记名称</span>
+</button>
+</div>
+</div>
+</h2>
+<div class="space-y-1 overflow-y-auto no-scrollbar max-h-[calc(100vh-200px)]">
+<div class="p-3 bg-primary/5 rounded-lg border border-primary/10 flex items-center justify-between group/item"><div class="flex flex-1 min-w-0 flex-row items-center justify-between gap-2">
+<h3 class="font-bold text-sm truncate text-primary max-w-[140px]">关于产品架构的深度思考</h3>
+<div class="flex items-center gap-1.5 mt-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
+<button class="text-primary hover:text-primary-dim">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</button>
+<button class="text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-[16px]">share</span>
+</button>
+<button class="text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-[16px]">more_horiz</span>
+</button>
+</div>
+</div></div>
+<div class="p-3 hover:bg-white rounded-lg transition-all cursor-pointer border border-transparent hover:border-slate-100 flex items-center justify-between group/item">
+<div class="flex flex-1 min-w-0 flex-row items-center justify-between gap-2">
+<h3 class="font-medium text-sm truncate text-on-surface/80 max-w-[140px]">客户访谈: 创意总监</h3>
+<div class="flex items-center gap-1.5 mt-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
+<button class="text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-[16px]">star</span>
+</button>
+<button class="text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-[16px]">share</span>
+</button>
+<button class="text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined text-[16px]">more_horiz</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Draggable Divider -->
+<div class="group w-1 bg-slate-100/50 hover:bg-primary/20 transition-colors cursor-col-resize relative flex items-center justify-center">
+<button class="absolute left-1/2 -translate-x-1/2 w-5 h-8 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-400 hover:text-primary shadow-sm hover:shadow-md transition-all z-10" onclick="document.getElementById('notes-sidebar').classList.toggle('w-0'); document.getElementById('notes-sidebar').classList.toggle('opacity-0'); document.getElementById('sidebar-toggle-icon').textContent = document.getElementById('notes-sidebar').classList.contains('w-0') ? 'chevron_right' : 'chevron_left';">
+<span class="material-symbols-outlined text-[12px]" id="sidebar-toggle-icon">chevron_right</span>
+</button>
+</div>
+<!-- Editor Workspace -->
+<section class="flex-1 flex flex-col bg-white relative">
+<div class="h-14 border-b border-slate-50 flex items-center justify-between px-6 shrink-0">
+<div class="flex items-center gap-3">
+<h2 class="text-sm font-semibold text-slate-700">关于产品架构的深度思考</h2>
+</div>
+<div class="flex items-center gap-1">
+<button class="w-9 h-9 flex items-center justify-center rounded-lg text-primary hover:bg-surface-container transition-colors" title="取消收藏">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">star</span>
+</button>
+<button class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-surface-container transition-colors" title="全屏">
+<span class="material-symbols-outlined text-xl">fullscreen</span>
+</button>
+<button class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-surface-container transition-colors" title="分享">
+<span class="material-symbols-outlined text-xl">share</span>
+</button>
+<button class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-surface-container transition-colors" title="删除">
+<span class="material-symbols-outlined text-xl text-error/70">delete</span>
+</button>
+<div class="relative group">
+<button class="w-9 h-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-surface-container transition-colors" title="更多">
+<span class="material-symbols-outlined text-xl">more_horiz</span>
+</button>
+<div class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-100 p-2 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all z-50">
+<button class="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg text-left">
+<span class="material-symbols-outlined text-lg">history</span> 更多版本
+                                </button>
+<button class="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg text-left">
+<span class="material-symbols-outlined text-lg">info</span> 笔记详情
+                                </button>
+</div>
+</div>
+</div>
+</div>
+<div class="flex-1 p-12 lg:px-20 overflow-y-auto no-scrollbar">
+<div class="max-w-3xl mx-auto space-y-8">
+<textarea class="w-full text-4xl font-bold font-headline bg-transparent border-none focus:ring-0 placeholder-slate-200 resize-none h-auto p-0" placeholder="在此输入标题...">关于产品架构的深度思考</textarea>
+<div class="prose prose-slate max-w-none">
+<p class="text-lg text-slate-700 leading-relaxed outline-none" contenteditable="true">
+                                数字化时代的笔记不应仅仅是文字的堆砌。它应该是一个<b>流动的智慧体</b>。
+                            </p>
+<p class="text-lg text-slate-700 leading-relaxed outline-none mt-6" contenteditable="true">
+                                在这个“数字工作室”的设计中，我们强调<b>意图驱动</b>的交互。每一个像素的选择都是为了减少认知负荷。我们放弃了传统的网格和线条，转而使用色彩的叠层和柔和的光影来定义空间。
+                            </p>
+<p class="text-lg text-slate-700 leading-relaxed outline-none" contenteditable="true">
+                                这里的留白不是空洞，而是思考的呼吸。界面的每一处反馈都应当直观且优雅。
+                            </p>
+</div>
+</div>
+</div>
+</section>
+<!-- Resizable Handle for AI Assistant -->
+<div class="flex items-center justify-center shrink-0 border-l border-slate-100 bg-[#F8F9FA] relative" id="ai-resizer">
+<div class="w-[1px] h-8 bg-slate-300 rounded-full handle-line"></div>
+<div class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-4 flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<div class="w-1 h-1 bg-slate-400 rounded-full"></div>
+<div class="w-1 h-1 bg-slate-400 rounded-full"></div>
+<div class="w-1 h-1 bg-slate-400 rounded-full"></div>
+</div>
+<!-- Visual Indicator Dots -->
+<div class="pointer-events-none flex flex-col gap-0.5 opacity-40">
+<div class="w-1 h-1 bg-slate-600 rounded-full"></div>
+<div class="w-1 h-1 bg-slate-600 rounded-full"></div>
+<div class="w-1 h-1 bg-slate-600 rounded-full"></div>
+</div>
+</div>
+<!-- AI Assistant Panel -->
+<section class="w-80 flex flex-col bg-[#F8F9FA] shrink-0 ai-inner-shadow relative" id="ai-panel">
+<div class="h-14 flex items-center justify-between px-5 shrink-0 bg-[#F8F9FA] border-b border-slate-100/50">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<h3 class="font-bold text-sm text-slate-700">AI 助手</h3>
+</div>
+<button class="p-1.5 hover:bg-slate-200/50 rounded-lg transition-colors text-slate-400">
+<span class="material-symbols-outlined text-xl">close</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto no-scrollbar p-6 space-y-8">
+<div class="space-y-4">
+<h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest px-1">智能处理</h4>
+<div class="grid grid-cols-1 gap-3">
+<button class="flex items-center gap-3 w-full px-4 py-4 bg-white hover:shadow-md border border-transparent rounded-lg transition-all group text-left">
+<div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-xl">summarize</span>
+</div>
+<div class="flex-1">
+<div class="text-[13px] font-bold text-slate-700">文章摘要</div>
+<div class="text-[11px] text-slate-400 mt-0.5">提取核心观点与结论</div>
+</div>
+</button>
+<button class="flex items-center gap-3 w-full px-4 py-4 bg-white hover:shadow-md border border-transparent rounded-lg transition-all group text-left">
+<div class="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-xl">edit_note</span>
+</div>
+<div class="flex-1">
+<div class="text-[13px] font-bold text-slate-700">文案润色</div>
+<div class="text-[11px] text-slate-400 mt-0.5">优化措辞使表达更专业</div>
+</div>
+</button>
+<button class="flex items-center gap-3 w-full px-4 py-4 bg-white hover:shadow-md border border-transparent rounded-lg transition-all group text-left">
+<div class="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600 group-hover:bg-orange-600 group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-xl">unfold_more</span>
+</div>
+<div class="flex-1">
+<div class="text-[13px] font-bold text-slate-700">内容扩写</div>
+<div class="text-[11px] text-slate-400 mt-0.5">基于现有内容丰富细节</div>
+</div>
+</button>
+</div>
+</div>
+<div class="space-y-4">
+<h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest px-1">实时对话</h4>
+<div class="space-y-3">
+<div class="bg-white p-4 rounded-lg rounded-tl-none text-[13px] text-slate-600 leading-relaxed shadow-sm">
+                                您好！我是您的 AI 创作助手。您可以让我总结当前的笔记，或者选中一段文字进行优化。
+                            </div>
+</div>
+</div>
+</div>
+<div class="p-5 bg-[#F8F9FA] border-t border-slate-100/50">
+<div class="relative">
+<textarea class="w-full pl-4 pr-12 py-3.5 bg-white border border-slate-200/60 rounded-lg text-sm focus:ring-2 focus:ring-primary/10 focus:border-primary/30 transition-all shadow-sm resize-none no-scrollbar h-[48px] overflow-hidden leading-tight" placeholder="向 AI 提问..."></textarea>
+<button class="absolute right-2 top-2 w-8 h-8 bg-primary text-white rounded-lg flex items-center justify-center shadow-md hover:bg-primary-dim active:scale-95 transition-all">
+<span class="material-symbols-outlined text-lg">arrow_upward</span>
+</button>
+</div>
+</div>
+</section>
+</div>
+</main>
+<script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('main-sidebar');
+            const toggleIcon = document.getElementById('sidebar-toggle-main');
+            sidebar.classList.toggle('collapsed');
+            
+            if (sidebar.classList.contains('collapsed')) {
+                toggleIcon.textContent = 'menu';
+            } else {
+                toggleIcon.textContent = 'menu_open';
+            }
+        }
+
+        // Resizable AI Panel Logic
+        const resizer = document.getElementById('ai-resizer');
+        const panel = document.getElementById('ai-panel');
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            
+            const windowWidth = window.innerWidth;
+            const newWidth = windowWidth - e.clientX;
+            
+            // Constrain width
+            if (newWidth > 200 && newWidth < 600) {
+                panel.style.width = `${newWidth}px`;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+                document.body.style.userSelect = 'auto';
+            }
+        });
+    </script>
+</body></html>

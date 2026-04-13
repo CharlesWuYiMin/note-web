@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+*.log
+.DS_Store
+.VSCodeCounter/
+note-web/node_modules/
+note-web/dist/
+note-web/build/
+note-web/coverage/
+note-web/.vite/
+note-web/*.log
