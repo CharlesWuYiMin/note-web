@@ -52,6 +52,7 @@ const notesFixture = [
     createdAt: '2026-04-10T08:00:00.000Z',
     updatedAt: '2026-04-10T10:00:00.000Z',
     isStarred: true,
+    voiceNote: [{ id: 'voice-1' }],
   },
 ]
 
@@ -253,6 +254,12 @@ describe('NotesSidebar', () => {
     renderSidebar('/cloudnote/recent/1')
 
     expect(screen.getByText('项目 A')).toBeInTheDocument()
+  })
+
+  it('renders a voice indicator on notes with recordings', () => {
+    renderSidebar('/cloudnote/recent/2')
+
+    expect(screen.getByTitle('有语音记录')).toBeInTheDocument()
   })
 
   it('sorts by title ascending when selected from the menu', async () => {

@@ -79,6 +79,11 @@ function formatElapsed(ms = 0) {
   return [minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':')
 }
 
+function formatPlaybackRate(rate = 1) {
+  const normalized = Number(rate.toFixed(2))
+  return Number.isInteger(normalized) ? normalized.toFixed(1) : String(normalized)
+}
+
 const SPEED_PRESETS = [0.75, 1, 1.25, 1.5, 2]
 
 function getLanguageLabel(language) {
@@ -136,7 +141,8 @@ function buildVoiceStateFromNoteVoiceNotes(voiceNotes = []) {
       time: formatVoiceCardTime(voice?.createdAt || voice?.updatedAt),
       language: voice?.language || 'zh-CN',
       status: transcriptStatus,
-      fileId: voice?.fileId || key,
+      fileId: voice?.fileId ?? null,
+      voiceId: voice?.id ?? null,
       url: voice?.audioUrl || '',
       transcript: voice?.transcript || '',
       transcriptStatus,
@@ -171,8 +177,7 @@ function RecordingCard({ active, code, title, duration, time, language, onClick,
   const metaParts = [duration, time, language ? getLanguageLabel(language) : ''].filter(Boolean)
 
   return (
-    <button
-      type="button"
+    <div
       onClick={onClick}
       style={{
         minWidth: 174,
@@ -185,6 +190,15 @@ function RecordingCard({ active, code, title, duration, time, language, onClick,
         cursor: 'pointer',
         flexShrink: 0,
         position: 'relative',
+        userSelect: 'none',
+      }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onClick?.()
+        }
       }}
     >
       <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.04em', color: active ? 'var(--primary)' : '#94a3b8' }}>
@@ -199,8 +213,16 @@ function RecordingCard({ active, code, title, duration, time, language, onClick,
       {onDelete ? (
         <button
           type="button"
+          tabIndex={-1}
+          onPointerDown={(event) => {
+            event.stopPropagation()
+          }}
+          onMouseDown={(event) => {
+            event.stopPropagation()
+          }}
           onClick={(event) => {
             event.stopPropagation()
+            event.preventDefault()
             onDelete()
           }}
           aria-label="删除语音卡片"
@@ -219,6 +241,8 @@ function RecordingCard({ active, code, title, duration, time, language, onClick,
             justifyContent: 'center',
             cursor: 'pointer',
             boxShadow: '0 6px 14px rgba(15,23,42,0.08)',
+            zIndex: 2,
+            pointerEvents: 'auto',
           }}
         >
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
@@ -230,11 +254,13 @@ function RecordingCard({ active, code, title, duration, time, language, onClick,
           </svg>
         </button>
       ) : null}
-    </button>
+    </div>
   )
 }
 
-function RecorderButton({ title, onClick, children, active = false, danger = false, disabled = false }) {
+function RecorderButton({ title, onClick, children, active = false, danger = false, disabled = false, tone = 'neutral' }) {
+  const isAccent = tone === 'accent'
+
   return (
     <button
       type="button"
@@ -245,10 +271,22 @@ function RecorderButton({ title, onClick, children, active = false, danger = fal
         width: 44,
         height: 44,
         borderRadius: '50%',
-        border: danger ? '1px solid rgba(239,68,68,0.24)' : '1px solid rgba(226,232,240,0.9)',
-        background: danger ? 'rgba(239,68,68,0.08)' : active ? 'rgba(2,86,210,0.08)' : '#ffffff',
-        color: danger ? '#ef4444' : active ? 'var(--primary)' : '#64748b',
-        boxShadow: '0 10px 22px rgba(16,34,58,0.08)',
+        border: danger
+          ? '1px solid rgba(239,68,68,0.24)'
+          : isAccent
+            ? '1px solid rgba(185,208,255,0.92)'
+            : '1px solid rgba(226,232,240,0.94)',
+        background: danger
+          ? 'rgba(239,68,68,0.08)'
+          : isAccent
+            ? active
+              ? 'linear-gradient(180deg, #2f6fff 0%, #1f57e7 100%)'
+              : 'rgba(232,241,255,0.96)'
+            : active
+              ? 'rgba(47,111,255,0.08)'
+              : '#ffffff',
+        color: danger ? '#ef4444' : isAccent ? (active ? '#ffffff' : 'var(--primary)') : active ? 'var(--primary)' : '#64748b',
+        boxShadow: isAccent ? '0 8px 18px rgba(47,111,255,0.12)' : '0 8px 18px rgba(16,34,58,0.06)',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -338,6 +376,10 @@ function VoiceNoteEditor({
   const [playbackVolume, setPlaybackVolume] = useState(1)
   const [playbackRate, setPlaybackRate] = useState(1)
   const [volumePopoverOpen, setVolumePopoverOpen] = useState(false)
+  const [isPlaybackControlsCompact, setIsPlaybackControlsCompact] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteConfirmLoading, setDeleteConfirmLoading] = useState(false)
+  const [pendingDeleteCard, setPendingDeleteCard] = useState(null)
 
   const mediaRecorderRef = useRef(null)
   const mediaStreamRef = useRef(null)
@@ -356,6 +398,7 @@ function VoiceNoteEditor({
   const pendingRecordingMetaRef = useRef(null)
   const transcriptSourceKeyRef = useRef('01')
   const sourceRecordingKeyRef = useRef('01')
+  const playbackControlsRef = useRef(null)
 
   const voicePanelVisible = typeof controlledVisible === 'boolean' ? controlledVisible : localVoicePanelVisible
   const visibleTranscripts = transcriptGroups[selectedRecording] || transcriptGroups[transcriptSourceKeyRef.current] || []
@@ -399,6 +442,23 @@ function VoiceNoteEditor({
       transcriptSourceKeyRef.current = selectedRecording
     }
   }, [selectedRecording])
+
+  useEffect(() => {
+    const node = playbackControlsRef.current
+    if (!node || typeof ResizeObserver === 'undefined') {
+      return undefined
+    }
+
+    const updateCompactState = () => {
+      setIsPlaybackControlsCompact(node.getBoundingClientRect().width < 620)
+    }
+
+    updateCompactState()
+    const observer = new ResizeObserver(() => updateCompactState())
+    observer.observe(node)
+
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     if (autoStartRecordingKey == null || autoStartRecordingRef.current === autoStartRecordingKey) {
@@ -670,10 +730,9 @@ function VoiceNoteEditor({
         width: 244,
         padding: 16,
         borderRadius: 20,
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(247,250,255,0.96))',
-        boxShadow: '0 18px 40px rgba(16,34,58,0.14)',
-        border: '1px solid rgba(226,232,240,0.9)',
-        backdropFilter: 'blur(16px)',
+        background: 'linear-gradient(180deg, rgba(247,250,255,0.98), rgba(255,255,255,0.98))',
+        boxShadow: '0 14px 28px rgba(47,111,255,0.10)',
+        border: '1px solid rgba(191,214,255,0.78)',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -686,14 +745,14 @@ function VoiceNoteEditor({
           onClick={handleToggleMute}
           style={{
             border: 'none',
-            background: 'rgba(2,86,210,0.08)',
+            background: 'rgba(232,241,255,0.96)',
             color: 'var(--primary)',
             borderRadius: 999,
             padding: '6px 12px',
             fontSize: 12,
             fontWeight: 700,
             cursor: 'pointer',
-            boxShadow: 'inset 0 0 0 1px rgba(2,86,210,0.08)',
+            boxShadow: 'inset 0 0 0 1px rgba(191,214,255,0.9)',
           }}
         >
           {playbackVolume <= 0 ? '恢复音量' : '静音'}
@@ -759,48 +818,76 @@ function VoiceNoteEditor({
 
   const handleDeleteRecordingCard = (card) => {
     if (!note?.id || !card?.fileId) {
+      message.warning('当前语音卡片缺少 fileId，暂时无法删除')
       return
     }
 
-    Modal.confirm({
-      title: '删除语音卡片',
-      content: '确认删除这条语音素材吗？删除后将同步清理服务端归档。',
-      okText: '删除',
-      cancelText: '取消',
-      okButtonProps: { danger: true },
-      centered: true,
-      onOk: async () => {
-        try {
-          await noteService.deleteVoiceFile(note.id, card.fileId)
+    setPendingDeleteCard(card)
+    setDeleteConfirmOpen(true)
+  }
 
-          setRecordings((current) => {
-            const remaining = current.filter((item) => item.fileId !== card.fileId)
-            if (remaining.length > 0) {
-              const nextSelected = remaining.find((item) => item.key === selectedRecording) ? selectedRecording : remaining[0].key
-              setSelectedRecording(nextSelected)
-            }
-            return remaining
-          })
+  const confirmDeleteRecordingCard = async () => {
+    const card = pendingDeleteCard
+    if (!note?.id || !card?.fileId) {
+      setDeleteConfirmOpen(false)
+      setPendingDeleteCard(null)
+      return
+    }
 
-          if (selectedRecording === card.key || playbackStateRef.current !== 'idle') {
-            stopPlayback()
+    setDeleteConfirmLoading(true)
+
+    try {
+      await noteService.deleteVoiceFile(note.id, card.fileId)
+
+      const refreshedNote = await onNoteRefresh?.()
+      const refreshedVoiceNotes = Array.isArray(refreshedNote?.voiceNote) ? refreshedNote.voiceNote : null
+
+      if (refreshedVoiceNotes) {
+        const nextState = buildVoiceStateFromNoteVoiceNotes(refreshedVoiceNotes)
+        setRecordings(nextState.recordings)
+        setTranscriptGroups(nextState.transcriptGroups)
+        setSelectedRecording((current) => (
+          current && nextState.recordings.some((item) => item.key === current)
+            ? current
+            : nextState.selectedKey
+        ))
+        transcriptSourceKeyRef.current = nextState.sourceKey
+        sourceRecordingKeyRef.current = nextState.sourceKey
+      } else {
+        setRecordings((current) => {
+          const remaining = current.filter((item) => item.fileId !== card.fileId)
+          if (remaining.length > 0) {
+            const nextSelected = remaining.find((item) => item.key === selectedRecording)
+              ? selectedRecording
+              : remaining[0].key
+            setSelectedRecording(nextSelected)
+          } else {
+            setSelectedRecording(null)
           }
+          return remaining
+        })
 
-          setTranscriptGroups((current) => {
-            const nextGroups = { ...current }
-            if (card.key) {
-              delete nextGroups[card.key]
-            }
-            return nextGroups
-          })
-
-          await onNoteRefresh?.()
-          message.success('语音卡片已删除')
-        } catch (error) {
-          message.error(error?.message || '删除语音卡片失败')
+        if (selectedRecording === card.key || playbackStateRef.current !== 'idle') {
+          stopPlayback()
         }
-      },
-    })
+
+        setTranscriptGroups((current) => {
+          const nextGroups = { ...current }
+          if (card.key) {
+            delete nextGroups[card.key]
+          }
+          return nextGroups
+        })
+      }
+
+      message.success('语音卡片已删除')
+      setDeleteConfirmOpen(false)
+      setPendingDeleteCard(null)
+    } catch (error) {
+      message.error(error?.message || '删除语音卡片失败')
+    } finally {
+      setDeleteConfirmLoading(false)
+    }
   }
 
   const uploadRecordedAudio = async (blob, durationMs, language) => {
@@ -978,6 +1065,28 @@ function VoiceNoteEditor({
         background: 'linear-gradient(180deg, rgba(247,249,251,0.92), rgba(255,255,255,0.98))',
       }}
     >
+      <Modal
+        open={deleteConfirmOpen}
+        title="删除语音卡片"
+        centered
+        okText="删除"
+        cancelText="取消"
+        okButtonProps={{ danger: true, loading: deleteConfirmLoading }}
+        onOk={confirmDeleteRecordingCard}
+        onCancel={() => {
+          if (deleteConfirmLoading) {
+            return
+          }
+          setDeleteConfirmOpen(false)
+          setPendingDeleteCard(null)
+        }}
+        destroyOnHidden
+      >
+        <div style={{ color: '#475569', lineHeight: 1.7 }}>
+          确认删除这条语音素材吗？删除后将同步清理服务端归档。
+        </div>
+      </Modal>
+
       <style>{`
         @keyframes voice-pulse {
           0% { transform: scale(1); }
@@ -1001,19 +1110,19 @@ function VoiceNoteEditor({
         }
 
         .voice-volume-slider .ant-slider-rail {
-          background: linear-gradient(90deg, rgba(226,232,240,0.88), rgba(226,232,240,0.65));
+          background: linear-gradient(90deg, #dbeafe, #bfdbfe);
           height: 6px;
           border-radius: 999px;
         }
 
         .voice-volume-slider .ant-slider-track {
-          background: linear-gradient(90deg, #0057d7 0%, #4f86ff 100%);
+          background: linear-gradient(90deg, #2f6fff 0%, #7aa8ff 100%);
           height: 6px;
           border-radius: 999px;
         }
 
         .voice-volume-slider .ant-slider-handle::after {
-          box-shadow: 0 0 0 3px rgba(2,86,210,0.10);
+          box-shadow: 0 0 0 3px rgba(47,111,255,0.10);
         }
 
         .voice-volume-slider .ant-slider-handle {
@@ -1021,18 +1130,17 @@ function VoiceNoteEditor({
           height: 16px;
           margin-top: -5px;
           border: 2px solid #fff;
-          background: linear-gradient(180deg, #0057d7, #3a7cff);
-          box-shadow: 0 8px 18px rgba(2,86,210,0.22);
+          background: linear-gradient(180deg, #2f6fff, #1f57e7);
+          box-shadow: 0 8px 18px rgba(47,111,255,0.22);
         }
 
         .voice-playback-rate-menu .ant-dropdown-menu {
           min-width: 176px;
           padding: 8px;
           border-radius: 18px;
-          background: rgba(255,255,255,0.98);
-          box-shadow: 0 18px 40px rgba(16,34,58,0.14);
-          border: 1px solid rgba(226,232,240,0.9);
-          backdrop-filter: blur(16px);
+          background: rgba(247,250,255,0.98);
+          box-shadow: 0 14px 28px rgba(47,111,255,0.10);
+          border: 1px solid rgba(191,214,255,0.78);
         }
 
         .voice-playback-rate-menu .ant-dropdown-menu-item {
@@ -1044,380 +1152,386 @@ function VoiceNoteEditor({
         }
 
         .voice-playback-rate-menu .ant-dropdown-menu-item-selected {
-          background: rgba(2,86,210,0.08);
+          background: rgba(47,111,255,0.10);
           color: var(--primary);
         }
 
         .voice-playback-rate-menu .ant-dropdown-menu-item:hover {
-          background: rgba(2,86,210,0.06);
+          background: rgba(47,111,255,0.08);
         }
       `}</style>
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0, alignItems: 'stretch', overflow: 'hidden' }}>
-        {voicePanelVisible ? (
-          <section
+        <section
+          aria-hidden={!voicePanelVisible}
+          style={{
+            flex: voicePanelVisible ? '0 0 50%' : '0 0 0%',
+            minWidth: 0,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            background: '#ffffff',
+            borderRight: '1px solid rgba(226,232,240,0.8)',
+            position: 'relative',
+            opacity: voicePanelVisible ? 1 : 0,
+            transform: voicePanelVisible ? 'translateX(0)' : 'translateX(-8px)',
+            pointerEvents: voicePanelVisible ? 'auto' : 'none',
+            transition: 'flex-basis 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1)',
+            willChange: 'flex-basis, opacity, transform',
+          }}
+        >
+          <div
             style={{
-              flex: '0 0 50%',
-              minWidth: 0,
+              padding: '14px 16px',
+              borderBottom: '1px solid rgba(226,232,240,0.65)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <span style={{ color: 'var(--primary)', display: 'inline-flex', alignItems: 'center' }}>
+                <VoicePulse />
+              </span>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>转写内容</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              <button
+                type="button"
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--primary)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                观点提取
+              </button>
+              <span style={{ width: 1, height: 18, background: 'rgba(203,213,225,0.9)' }} />
+              <Button
+                type="text"
+                icon={<CloseOutlined />}
+                onClick={toggleVoicePanel}
+                style={{
+                  width: 30,
+                  height: 30,
+                  padding: 0,
+                  color: '#94a3b8',
+                }}
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 12,
+              overflowX: 'auto',
+              padding: '12px 16px 14px',
+              borderBottom: '1px solid rgba(226,232,240,0.65)',
+              flexShrink: 0,
+            }}
+          >
+            {recordings.length > 0 ? (
+              recordings.map(({ key, ...recording }) => (
+                <RecordingCard
+                  key={key}
+                  active={selectedRecording === key}
+                  {...recording}
+                  onClick={() => handleSelectRecording(key)}
+                  onDelete={recording.fileId ? () => handleDeleteRecordingCard({ key, ...recording }) : null}
+                />
+              ))
+            ) : (
+              <div
+                style={{
+                  width: '100%',
+                  minHeight: 120,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#94a3b8',
+                  fontSize: 13,
+                  borderRadius: 16,
+                  background: 'linear-gradient(180deg, rgba(248,250,252,0.7), rgba(255,255,255,0.2))',
+                }}
+              >
+                暂无语音卡片，开始录音后会在这里生成
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              flex: 1,
               minHeight: 0,
               display: 'flex',
               flexDirection: 'column',
+              padding: '14px 16px 16px',
+              gap: 14,
               overflow: 'hidden',
-              background: '#ffffff',
-              borderRight: '1px solid rgba(226,232,240,0.8)',
-              position: 'relative',
             }}
           >
-            <div
-              style={{
-                padding: '14px 16px',
-                borderBottom: '1px solid rgba(226,232,240,0.65)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                flexShrink: 0,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <span style={{ color: 'var(--primary)', display: 'inline-flex', alignItems: 'center' }}>
-                  <VoicePulse />
-                </span>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>转写内容</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                <button
-                  type="button"
-                  style={{
-                    border: 'none',
-                    background: 'transparent',
-                    color: 'var(--primary)',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  观点提取
-                </button>
-                <span style={{ width: 1, height: 18, background: 'rgba(203,213,225,0.9)' }} />
-                <Button
-                  type="text"
-                  icon={<CloseOutlined />}
-                  onClick={toggleVoicePanel}
-                  style={{
-                    width: 30,
-                    height: 30,
-                    padding: 0,
-                    color: '#94a3b8',
-                  }}
-                />
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                gap: 12,
-                overflowX: 'auto',
-                padding: '12px 16px 14px',
-                borderBottom: '1px solid rgba(226,232,240,0.65)',
-                flexShrink: 0,
-              }}
-            >
-              {recordings.length > 0 ? (
-                recordings.map(({ key, ...recording }) => (
-                  <RecordingCard
-                    key={key}
-                    active={selectedRecording === key}
-                    {...recording}
-                    onClick={() => handleSelectRecording(key)}
-                    onDelete={selectedRecording === key && recording.fileId ? () => handleDeleteRecordingCard({ key, ...recording }) : null}
-                  />
-                ))
-              ) : (
-                <div
-                  style={{
-                    width: '100%',
-                    minHeight: 120,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#94a3b8',
-                    fontSize: 13,
-                    borderRadius: 16,
-                    background: 'linear-gradient(180deg, rgba(248,250,252,0.7), rgba(255,255,255,0.2))',
-                  }}
-                >
-                  暂无语音卡片，开始录音后会在这里生成
-                </div>
-              )}
-            </div>
-
             <div
               style={{
                 flex: 1,
                 minHeight: 0,
                 display: 'flex',
                 flexDirection: 'column',
-                padding: '14px 16px 16px',
-                gap: 14,
                 overflow: 'hidden',
               }}
             >
-              <div
-                style={{
-                  flex: 1,
-                  minHeight: 0,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  overflow: 'hidden',
-                }}
-              >
-                {visibleTranscripts.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto', minHeight: 0, flex: 1 }}>
-                    {visibleTranscripts.map((item) => (
-                      <TranscriptItem key={`${item.name}-${item.time}`} {...item} />
-                    ))}
-                  </div>
-                ) : (
+              {visibleTranscripts.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto', minHeight: 0, flex: 1 }}>
+                  {visibleTranscripts.map((item) => (
+                    <TranscriptItem key={`${item.name}-${item.time}`} {...item} />
+                  ))}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    display: 'flex',
+                    alignItems: 'stretch',
+                    justifyContent: 'center',
+                  }}
+                >
                   <div
                     style={{
+                      width: '100%',
                       flex: 1,
-                      minHeight: 0,
+                      borderRadius: 24,
+                      background: 'linear-gradient(180deg, rgba(248,250,252,0.78), rgba(255,255,255,0.42))',
+                      border: '1px solid rgba(226,232,240,0.55)',
                       display: 'flex',
-                      alignItems: 'stretch',
+                      alignItems: 'center',
                       justifyContent: 'center',
+                      color: '#94a3b8',
+                      fontSize: 13,
+                      textAlign: 'center',
+                      padding: '24px',
                     }}
                   >
-                    <div
+                    暂无语音卡片，开始录音后会在这里生成
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div
+              ref={playbackControlsRef}
+              style={{
+                flexShrink: 0,
+                padding: '14px 18px 16px',
+                borderRadius: 24,
+                border: '1px solid rgba(191,214,255,0.80)',
+                background: 'linear-gradient(180deg, rgba(247,250,255,0.98), rgba(255,255,255,0.98))',
+                boxShadow: '0 14px 28px rgba(47,111,255,0.08)',
+                zIndex: 2,
+              }}
+            >
+              {recordingState === 'idle' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 48, flexWrap: 'wrap', rowGap: 10 }}>
+                  <RecorderButton
+                    title={isPlaying ? '暂停播放' : '播放'}
+                    onClick={handleTogglePlayback}
+                    disabled={!selectedRecordingData?.fileId}
+                    active={isPlaying}
+                    tone="accent"
+                  >
+                    {isPlaying ? <PauseOutlined style={{ fontSize: 16 }} /> : <PlayCircleFilled style={{ fontSize: 16 }} />}
+                  </RecorderButton>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 68, color: '#64748b', fontSize: 12, fontFamily: 'monospace', fontWeight: 700, lineHeight: 1.15, flexShrink: 0 }}>
+                    <span>{formatElapsed(playbackPositionMs)}</span>
+                    <span>{formatElapsed(playbackDurationMs || selectedRecordingData?.durationMs || 32000)}</span>
+                  </div>
+
+                  <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button
+                      type="button"
+                      onClick={handlePlaybackSeek}
+                      aria-label="播放进度"
                       style={{
-                        width: '100%',
                         flex: 1,
-                        borderRadius: 24,
-                        background: 'linear-gradient(180deg, rgba(248,250,252,0.78), rgba(255,255,255,0.42))',
-                        border: '1px solid rgba(226,232,240,0.55)',
+                        minWidth: 0,
+                        height: 10,
+                        border: 'none',
+                        background: 'transparent',
+                        padding: 0,
+                        cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#94a3b8',
-                        fontSize: 13,
-                        textAlign: 'center',
-                        padding: '24px',
                       }}
                     >
-                      暂无语音卡片，开始录音后会在这里生成
-                    </div>
+                      <div style={{ width: '100%', height: 4, borderRadius: 999, background: '#dbeafe', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            width: `${playbackDurationMs > 0 ? Math.min(100, (playbackPositionMs / playbackDurationMs) * 100) : 0}%`,
+                            height: '100%',
+                            borderRadius: 999,
+                            background: 'linear-gradient(90deg, #2f6fff 0%, #7aa8ff 100%)',
+                            transition: 'width 120ms linear',
+                          }}
+                        />
+                      </div>
+                    </button>
                   </div>
-                )}
-              </div>
 
-              <div
-                style={{
-                  flexShrink: 0,
-                  padding: '14px 18px 16px',
-                  borderRadius: 22,
-                  border: '1px solid rgba(226,232,240,0.78)',
-                  background: 'rgba(255,255,255,0.96)',
-                  boxShadow: '0 18px 42px rgba(15,23,42,0.10)',
-                  backdropFilter: 'blur(14px)',
-                  zIndex: 2,
-                }}
-              >
-                {recordingState === 'idle' ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 52 }}>
-                    <RecorderButton
-                      title={isPlaying ? '暂停播放' : '播放'}
-                      onClick={handleTogglePlayback}
-                      disabled={!selectedRecordingData?.fileId}
-                      active={isPlaying}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#64748b', flexShrink: 0, flexWrap: 'wrap' }}>
+                    <Popover
+                      open={volumePopoverOpen}
+                      onOpenChange={setVolumePopoverOpen}
+                      trigger="click"
+                      placement="topRight"
+                      content={volumePopoverContent}
+                      overlayClassName="voice-volume-popover"
+                      overlayStyle={{ zIndex: 1200 }}
                     >
-                      {isPlaying ? <PauseOutlined style={{ fontSize: 16 }} /> : <PlayCircleFilled style={{ fontSize: 16 }} />}
-                    </RecorderButton>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 64, color: '#94a3b8', fontSize: 11, fontFamily: 'monospace' }}>
-                      <span>{formatElapsed(playbackPositionMs)}</span>
-                      <span>{formatElapsed(playbackDurationMs || selectedRecordingData?.durationMs || 32000)}</span>
-                    </div>
-
-                    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
                       <button
                         type="button"
-                        onClick={handlePlaybackSeek}
-                        aria-label="播放进度"
+                        title="调整音量"
+                        aria-label="调整音量"
                         style={{
-                          flex: 1,
-                          minWidth: 0,
-                          height: 8,
                           border: 'none',
                           background: 'transparent',
-                          padding: 0,
+                          color: playbackVolume <= 0 ? '#cbd5e1' : '#334155',
                           cursor: 'pointer',
-                          display: 'flex',
+                          padding: 0,
+                          display: 'inline-flex',
                           alignItems: 'center',
+                          transition: 'transform 160ms ease, color 160ms ease',
+                          transform: volumePopoverOpen ? 'translateY(-1px)' : 'none',
                         }}
                       >
-                        <div style={{ width: '100%', height: 4, borderRadius: 999, background: '#e5edf7', overflow: 'hidden' }}>
-                          <div
-                            style={{
-                              width: `${playbackDurationMs > 0 ? Math.min(100, (playbackPositionMs / playbackDurationMs) * 100) : 0}%`,
-                              height: '100%',
-                              borderRadius: 999,
-                              background: 'linear-gradient(90deg, #0057d7 0%, #7aa8ff 100%)',
-                              transition: 'width 120ms linear',
-                            }}
-                          />
-                        </div>
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+                          <path d="M3 14h4l5 4V6L7 10H3v4Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                          {playbackVolume > 0 ? (
+                            <>
+                              <path d="M16 9a4 4 0 0 1 0 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                              <path d="M18.5 6.5a8 8 0 0 1 0 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                            </>
+                          ) : (
+                            <path d="M15 9l6 6M21 9l-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                          )}
+                        </svg>
                       </button>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#94a3b8', flexShrink: 0 }}>
-                        <Popover
-                          open={volumePopoverOpen}
-                          onOpenChange={setVolumePopoverOpen}
-                          trigger="click"
-                          placement="topRight"
-                          content={volumePopoverContent}
-                          overlayClassName="voice-volume-popover"
-                          overlayStyle={{ zIndex: 1200 }}
-                        >
-                          <button
-                            type="button"
-                            title="调整音量"
-                            aria-label="调整音量"
+                    </Popover>
+                    <Dropdown
+                      trigger={['click']}
+                      placement="topRight"
+                      menu={{
+                        items: SPEED_PRESETS.map((rate) => ({
+                          key: String(rate),
+                          label: (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 92 }}>
+                              <span>{`${formatPlaybackRate(rate)}X`}</span>
+                              {playbackRate === rate ? <span style={{ color: 'var(--primary)', fontWeight: 800 }}>✓</span> : null}
+                            </div>
+                          ),
+                        })),
+                        onClick: ({ key }) => handlePlaybackRateSelect(Number(key)),
+                        selectable: true,
+                        selectedKeys: [String(playbackRate)],
+                      }}
+                      overlayClassName="voice-playback-rate-menu"
+                      >
+                        <button
+                          type="button"
+                          title="调整倍速"
+                          aria-label="调整倍速"
                             style={{
                               border: 'none',
-                              background: 'transparent',
-                              color: playbackVolume <= 0 ? '#cbd5e1' : '#64748b',
-                              cursor: 'pointer',
-                              padding: 0,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              transition: 'transform 160ms ease, color 160ms ease',
-                              transform: volumePopoverOpen ? 'translateY(-1px)' : 'none',
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
-                              <path d="M3 14h4l5 4V6L7 10H3v4Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-                              {playbackVolume > 0 ? (
-                                <>
-                                  <path d="M16 9a4 4 0 0 1 0 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                  <path d="M18.5 6.5a8 8 0 0 1 0 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                </>
-                              ) : (
-                                <path d="M15 9l6 6M21 9l-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                              )}
-                            </svg>
-                          </button>
-                        </Popover>
-                        <Dropdown
-                          trigger={['click']}
-                          placement="topRight"
-                          menu={{
-                            items: SPEED_PRESETS.map((rate) => ({
-                              key: String(rate),
-                              label: (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 92 }}>
-                                  <span>{`${rate.toFixed(2).replace(/\.00$/, '')}X`}</span>
-                                  {playbackRate === rate ? <span style={{ color: 'var(--primary)', fontWeight: 800 }}>✓</span> : null}
-                                </div>
-                              ),
-                            })),
-                            onClick: ({ key }) => handlePlaybackRateSelect(Number(key)),
-                            selectable: true,
-                            selectedKeys: [String(playbackRate)],
-                          }}
-                          overlayClassName="voice-playback-rate-menu"
-                        >
-                          <button
-                            type="button"
-                            title="调整倍速"
-                            aria-label="调整倍速"
-                            style={{
-                              border: 'none',
-                              background: 'rgba(248,250,252,0.82)',
-                              color: '#475569',
+                              background: 'rgba(232,241,255,0.96)',
+                              color: '#334155',
                               fontSize: 12,
                               fontWeight: 700,
                               cursor: 'pointer',
                               padding: '5px 10px',
                               borderRadius: 999,
-                              backgroundImage: 'linear-gradient(180deg, rgba(248,250,252,0.95), rgba(255,255,255,0.72))',
-                              boxShadow: 'inset 0 0 0 1px rgba(226,232,240,0.85)',
+                              backgroundImage: 'linear-gradient(180deg, rgba(243,248,255,0.98), rgba(232,241,255,0.88))',
+                              boxShadow: 'inset 0 0 0 1px rgba(191,214,255,0.9)',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 4,
                             }}
-                          >
-                            <span>{`${playbackRate.toFixed(2).replace(/\.00$/, '')}X`}</span>
-                            <DownOutlined style={{ fontSize: 10, color: '#94a3b8' }} />
-                          </button>
-                        </Dropdown>
-                      </div>
-                    </div>
-
-                    <RecorderButton title="开始录音" onClick={handleStartMicClick} active>
-                      <MicIcon size={18} color="currentColor" />
-                    </RecorderButton>
+                        >
+                          <span>{`${formatPlaybackRate(playbackRate)}X`}</span>
+                          <DownOutlined style={{ fontSize: 10, color: '#94a3b8' }} />
+                        </button>
+                      </Dropdown>
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <RecorderButton
-                      title={isRecording ? '暂停录音' : '继续录音'}
-                      onClick={isRecording ? handlePauseRecording : handleResumeRecording}
-                      active={isRecording}
-                      disabled={isUploading}
-                    >
-                      {isRecording ? <PauseOutlined style={{ fontSize: 16 }} /> : <PlayCircleFilled style={{ fontSize: 16 }} />}
-                    </RecorderButton>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 96, color: '#64748b' }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>
-                        {isUploading ? '正在上传' : isPaused ? '已暂停' : `录音中 · ${getLanguageLabel(pendingLanguage)}`}
-                      </div>
-                      <div style={{ fontSize: 16, fontWeight: 800, color: '#475569', fontFamily: 'monospace' }}>
-                        {formatElapsed(recordingElapsedMs)}
-                      </div>
+                  <RecorderButton title="开始录音" onClick={handleStartMicClick} active tone="accent">
+                    <MicIcon size={18} color="currentColor" />
+                  </RecorderButton>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', rowGap: 12 }}>
+                  <RecorderButton
+                    title={isRecording ? '暂停录音' : '继续录音'}
+                    onClick={isRecording ? handlePauseRecording : handleResumeRecording}
+                    active={isRecording}
+                    disabled={isUploading}
+                  >
+                    {isRecording ? <PauseOutlined style={{ fontSize: 16 }} /> : <PlayCircleFilled style={{ fontSize: 16 }} />}
+                  </RecorderButton>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 96, color: '#64748b', flexShrink: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>
+                      {isUploading ? '正在上传' : isPaused ? '已暂停' : `录音中 · ${getLanguageLabel(pendingLanguage)}`}
                     </div>
-
-                    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 2, height: 22 }}>
-                      {[10, 16, 24, 14, 20, 10, 18, 12, 16, 10, 14].map((height, index) => {
-                        const animatedHeight = isRecording && !isUploading
-                          ? height + (((recordingPulseTick + index) % 5) - 2) * 1.5
-                          : isPlaying
-                            ? height + (((playbackPulseTick + index) % 5) - 2) * 1.2
-                            : height
-
-                        return (
-                          <span
-                            key={index}
-                            style={{
-                              width: 2,
-                              height: animatedHeight,
-                              borderRadius: 999,
-                              background: isRecording && !isUploading
-                                ? 'linear-gradient(180deg, #0057d7, #7aa8ff)'
-                                : isPlaying
-                                  ? 'linear-gradient(180deg, #3b82f6, #93c5fd)'
-                                  : 'rgba(148,163,184,0.28)',
-                              transform: isRecording && !isUploading ? 'translateY(0) scaleY(1)' : 'none',
-                              transition: 'height 140ms ease, background 140ms ease, transform 140ms ease',
-                            }}
-                          />
-                        )
-                      })}
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#475569', fontFamily: 'monospace' }}>
+                      {formatElapsed(recordingElapsedMs)}
                     </div>
-
-                    <RecorderButton title="终止录音" onClick={handleStopRecording} danger disabled={isUploading}>
-                      {isUploading ? <LoadingOutlined style={{ fontSize: 16 }} /> : <StopOutlined style={{ fontSize: 16 }} />}
-                    </RecorderButton>
                   </div>
-                )}
-              </div>
+
+                  <div style={{ flex: '1 1 200px', minWidth: 120, display: 'flex', alignItems: 'center', gap: 2, height: 22 }}>
+                    {[10, 16, 24, 14, 20, 10, 18, 12, 16, 10, 14].map((height, index) => {
+                      const animatedHeight = isRecording && !isUploading
+                        ? height + (((recordingPulseTick + index) % 5) - 2) * 1.5
+                        : isPlaying
+                          ? height + (((playbackPulseTick + index) % 5) - 2) * 1.2
+                          : height
+
+                      return (
+                        <span
+                          key={index}
+                          style={{
+                            width: 2,
+                            height: animatedHeight,
+                            borderRadius: 999,
+                            background: isRecording && !isUploading
+                              ? 'linear-gradient(180deg, #0057d7, #7aa8ff)'
+                              : isPlaying
+                                ? 'linear-gradient(180deg, #3b82f6, #93c5fd)'
+                                : 'rgba(148,163,184,0.28)',
+                            transform: isRecording && !isUploading ? 'translateY(0) scaleY(1)' : 'none',
+                            transition: 'height 140ms ease, background 140ms ease, transform 140ms ease',
+                          }}
+                        />
+                      )
+                    })}
+                  </div>
+
+                  <RecorderButton title="终止录音" onClick={handleStopRecording} danger disabled={isUploading}>
+                    {isUploading ? <LoadingOutlined style={{ fontSize: 16 }} /> : <StopOutlined style={{ fontSize: 16 }} />}
+                  </RecorderButton>
+                </div>
+              )}
             </div>
-          </section>
-        ) : null}
+          </div>
+        </section>
 
         <section
           style={{
-            flex: voicePanelVisible ? '0 0 50%' : '0 0 100%',
+            flex: '1 1 0%',
             minWidth: 0,
             display: 'flex',
             flexDirection: 'column',
@@ -1427,7 +1541,6 @@ function VoiceNoteEditor({
           }}
         >
           <PageEditor
-            key={`${note?.id || 'voice-note'}-${voicePanelVisible ? 'split' : 'full'}`}
             note={note}
             {...editorProps}
           />

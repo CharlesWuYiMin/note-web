@@ -162,16 +162,6 @@ function PageEditorV2({
 
     if (isDev) {
       const mountRect = mountRef.current.getBoundingClientRect()
-      console.debug('[PageEditor] init', {
-        noteId: note?.id,
-        readOnly,
-        mountRect: {
-          width: Math.round(mountRect.width),
-          height: Math.round(mountRect.height),
-        },
-        runtimeConfig,
-        documentConfig,
-      })
     }
 
     frameId = window.requestAnimationFrame(() => {

@@ -8,6 +8,7 @@ import {
   StarFilled,
   SortAscendingOutlined,
   UnorderedListOutlined,
+  SoundOutlined,
 } from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import useNote from '@/hooks/useNote'
@@ -68,6 +69,22 @@ function resolveNotebookName(note, notebookNameById, fallbackNotebookName = '') 
   ]
 
   return candidates.find((value) => typeof value === 'string' && value.trim()) || ''
+}
+
+function hasVoiceRecords(note) {
+  if (Array.isArray(note?.voiceNote) && note.voiceNote.length > 0) {
+    return true
+  }
+
+  if (Number(note?.voiceNumber) > 0) {
+    return true
+  }
+
+  if (Number(note?.voiceCount) > 0) {
+    return true
+  }
+
+  return false
 }
 
 function NotesSidebar({ visible = true }) {
@@ -800,11 +817,22 @@ function NotesSidebar({ visible = true }) {
                   ) : null}
                 </div>
               </div>
-              {note.isStarred ? (
-                <span style={{ color: '#d97706', fontSize: 16, lineHeight: 1, marginTop: 2 }}>
-                  <StarFilled />
-                </span>
-              ) : null}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexShrink: 0 }}>
+                {note.isStarred ? (
+                  <span style={{ color: '#d97706', fontSize: 16, lineHeight: 1 }}>
+                    <StarFilled />
+                  </span>
+                ) : null}
+                {hasVoiceRecords(note) ? (
+                  <span
+                    title="有语音记录"
+                    aria-label="有语音记录"
+                    style={{ color: '#7cb7ff', fontSize: 16, lineHeight: 1, display: 'inline-flex' }}
+                  >
+                    <SoundOutlined />
+                  </span>
+                ) : null}
+              </div>
             </div>
           </button>
         ))}

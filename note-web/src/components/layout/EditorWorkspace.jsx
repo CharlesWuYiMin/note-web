@@ -107,7 +107,6 @@ function EditorWorkspace() {
     setCurrentNote,
   } = useNote()
   const workspaceRef = useRef(null)
-  const [title, setTitle] = useState('')
   const [isStarPending, setIsStarPending] = useState(false)
   const [isTitleSaving, setIsTitleSaving] = useState(false)
   const [isTitleEditing, setIsTitleEditing] = useState(false)
@@ -117,9 +116,9 @@ function EditorWorkspace() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [editorValue, setEditorValue] = useState('')
   const [voicePromptOpen, setVoicePromptOpen] = useState(false)
-  const [voicePromptChoice, setVoicePromptChoice] = useState('voice')
+  const [voicePromptChoice, setVoicePromptChoice] = useState('zh-CN')
   const [forcedVoiceEditorNoteId, setForcedVoiceEditorNoteId] = useState(null)
-  const [voiceAutoStartToken, setVoiceAutoStartToken] = useState(0)
+  const [voiceAutoStartToken, setVoiceAutoStartToken] = useState(null)
   const [voicePanelVisible, setVoicePanelVisible] = useState(true)
   const titleInputRef = useRef(null)
   const editorBaselineRef = useRef('')
@@ -129,15 +128,19 @@ function EditorWorkspace() {
   const isDeletedNote = isRecycleBinRoute || currentNote?.status === 'deleted'
   const hasVoiceMaterials = Array.isArray(currentNote?.voiceNote) && currentNote.voiceNote.length > 0
   const showVoiceEditor = forcedVoiceEditorNoteId === noteId || hasVoiceMaterials
+  const showVoiceTrigger = Boolean(currentNote) && !isDeletedNote && (showVoiceEditor || currentNote?.type === 'text')
   const emptyState = getWorkspaceEmptyState(location.pathname, Boolean(id))
   const showEmptyState = !currentNote && !isLoading
+  const [title, setTitle] = useState(currentNote?.id === id && (currentNote?.title || '').trim()
+    ? currentNote.title
+    : emptyState.title)
 
   useEffect(() => {
     setCurrentNote(null)
     setEditorValue('')
     editorBaselineRef.current = ''
     setForcedVoiceEditorNoteId(null)
-    setVoiceAutoStartToken(0)
+    setVoiceAutoStartToken(null)
     setVoicePanelVisible(true)
     setTitle(emptyState.title)
     setIsTitleEditing(false)
@@ -160,7 +163,7 @@ function EditorWorkspace() {
       return
     }
 
-    setVoicePromptChoice('voice')
+    setVoicePromptChoice('zh-CN')
     setVoicePromptOpen(true)
     navigate(location.pathname, { replace: true, state: null })
   }, [location.pathname, location.state, navigate, noteId])
@@ -339,19 +342,26 @@ function EditorWorkspace() {
     setVoicePanelVisible((value) => !value)
   }
 
-  const handleConfirmVoicePrompt = () => {
-    setVoicePromptOpen(false)
-    if (voicePromptChoice === 'voice') {
-      setForcedVoiceEditorNoteId(noteId || null)
-      setVoicePanelVisible(true)
-      setVoiceAutoStartToken((token) => token + 1)
-      message.success('已开启语音转录')
+  const handleVoiceTriggerClick = () => {
+    if (!noteId || isDeletedNote) {
       return
     }
 
-    setForcedVoiceEditorNoteId(null)
-    setVoiceAutoStartToken(0)
-    message.info('已保留为文本笔记')
+    if (showVoiceEditor) {
+      handleToggleVoicePanel()
+      return
+    }
+
+    setVoicePromptChoice('zh-CN')
+    setVoicePromptOpen(true)
+  }
+
+  const handleConfirmVoicePrompt = () => {
+    setVoicePromptOpen(false)
+    setForcedVoiceEditorNoteId(noteId || null)
+    setVoicePanelVisible(true)
+    setVoiceAutoStartToken((token) => (typeof token === 'number' ? token + 1 : 1))
+    message.success('已开启语音转录')
   }
 
   return (
@@ -430,32 +440,32 @@ function EditorWorkspace() {
                 {currentNote ? (title || '未命名笔记') : emptyState.title}
               </button>
 
-              {showVoiceEditor ? (
+              {showVoiceTrigger ? (
                 <Button
                   type="text"
-                  aria-label="语音记录"
+                  aria-label={showVoiceEditor ? '语音记录' : '开启语音转录'}
                   icon={<SoundOutlined style={{ fontSize: 9 }} />}
-                  onClick={handleToggleVoicePanel}
+                  onClick={handleVoiceTriggerClick}
                   style={{
-                    height: 18,
-                    minHeight: 18,
-                    padding: '0 7px',
+                    height: 20,
+                    minHeight: 20,
+                    padding: '0 8px',
                     borderRadius: 999,
                     color: 'var(--primary)',
                     background: 'rgba(2,86,210,0.08)',
                     fontWeight: 700,
-                  fontSize: 11,
-                  lineHeight: '16px',
-                  boxShadow: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  marginBottom: 2,
-                  flexShrink: 0,
-                }}
-              >
-                语音记录
-              </Button>
+                    fontSize: 11,
+                    lineHeight: '18px',
+                    boxShadow: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    marginBottom: 2,
+                    flexShrink: 0,
+                  }}
+                >
+                  语音记录
+                </Button>
               ) : null}
             </div>
           )}
@@ -565,19 +575,20 @@ function EditorWorkspace() {
           }}
         >
           {currentNote ? (
-            <EditorFactory
-              key={noteId || 'text-editor'}
-              type={showVoiceEditor ? 'voice' : (currentNote?.type || 'text')}
-              note={currentNote}
-              value={editorValue}
-              onChange={setEditorValue}
-              onSave={handleEditorSave}
-              onNoteRefresh={noteId ? () => loadNoteById(noteId).catch(() => {}) : null}
-              readOnly={isDeletedNote}
-              voicePanelVisible={showVoiceEditor ? voicePanelVisible : false}
-              onVoicePanelToggle={handleToggleVoicePanel}
-              autoStartRecordingKey={showVoiceEditor ? voiceAutoStartToken : null}
-            />
+              <EditorFactory
+                key={noteId || 'text-editor'}
+                type={showVoiceEditor ? 'voice' : (currentNote?.type || 'text')}
+                note={currentNote}
+                value={editorValue}
+                onChange={setEditorValue}
+                onSave={handleEditorSave}
+                onNoteRefresh={noteId ? () => loadNoteById(noteId).catch(() => {}) : null}
+                readOnly={isDeletedNote}
+                voicePanelVisible={showVoiceEditor ? voicePanelVisible : false}
+                onVoicePanelToggle={handleToggleVoicePanel}
+                autoStartRecordingKey={showVoiceEditor ? voiceAutoStartToken : null}
+                autoStartLanguage={showVoiceEditor ? voicePromptChoice : null}
+              />
           ) : showEmptyState ? (
             <div
               style={{
@@ -638,7 +649,8 @@ function EditorWorkspace() {
         onCancel={() => {
           setVoicePromptOpen(false)
           setForcedVoiceEditorNoteId(null)
-          setVoiceAutoStartToken(0)
+          setVoiceAutoStartToken(null)
+          setVoicePromptChoice('zh-CN')
         }}
         footer={null}
         centered
@@ -658,12 +670,11 @@ function EditorWorkspace() {
       >
         <div style={{ padding: '24px 26px 22px' }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: '#111827', marginBottom: 18 }}>是否开启语音转录</div>
-          <div style={{ fontSize: 14, color: '#64748b', marginBottom: 18 }}>创建后先按文本笔记保存，需要时再打开语音转录面板。</div>
 
           <div style={{ display: 'flex', gap: 16, marginBottom: 18 }}>
             {[
-              { key: 'voice', label: '开启', hint: '打开语音特性框' },
-              { key: 'text', label: '仅文本', hint: '保持普通文本笔记' },
+              { key: 'zh-CN', label: '中文' },
+              { key: 'en-US', label: '英文' },
             ].map((option) => (
               <button
                 key={option.key}
@@ -684,11 +695,10 @@ function EditorWorkspace() {
                   flexDirection: 'column',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  gap: 10,
+                  gap: 0,
                 }}
               >
                 <div>{option.label}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.78 }}>{option.hint}</div>
               </button>
             ))}
           </div>
@@ -715,7 +725,7 @@ function EditorWorkspace() {
               boxShadow: '0 14px 28px rgba(2,86,210,0.24)',
             }}
           >
-            {voicePromptChoice === 'voice' ? '开启语音转录' : '进入文本笔记'}
+            开启语音转录
           </Button>
         </div>
       </Modal>

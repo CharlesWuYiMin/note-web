@@ -18,6 +18,7 @@ const noteState = {
   currentNote: {
     id: 'note-1',
     title: '测试笔记',
+    type: 'text',
     isStarred: false,
     content: '正文',
   },
@@ -35,6 +36,7 @@ vi.mock('@/hooks/useNote', () => ({
     deleteNote: deleteNoteMock,
     restoreNote: restoreNoteMock,
     permanentDeleteNote: permanentDeleteNoteMock,
+    setCurrentNote: vi.fn(),
   }),
 }))
 
@@ -69,6 +71,7 @@ describe('EditorWorkspace', () => {
     noteState.currentNote = {
       id: 'note-1',
       title: '测试笔记',
+      type: 'text',
       isStarred: false,
       content: '正文',
     }
@@ -102,6 +105,23 @@ describe('EditorWorkspace', () => {
     render(<EditorWorkspace />)
 
     expect(screen.getByTestId('editor-factory')).toHaveAttribute('data-type', 'text')
+  })
+
+  it('shows the voice capsule for text notes without recordings and opens the prompt', async () => {
+    const user = userEvent.setup()
+
+    render(<EditorWorkspace />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '编辑笔记标题' })).toHaveTextContent('测试笔记')
+    })
+
+    await user.click(screen.getByRole('button', { name: '开启语音转录' }))
+
+    expect(screen.getByText('是否开启语音转录')).toBeInTheDocument()
+    expect(screen.getByText('中文')).toBeInTheDocument()
+    expect(screen.getByText('英文')).toBeInTheDocument()
+    expect(screen.queryByText('创建后先按文本笔记保存，需要时再打开语音转录面板。')).not.toBeInTheDocument()
   })
 
   it('requests fullscreen when clicking the fullscreen button', async () => {

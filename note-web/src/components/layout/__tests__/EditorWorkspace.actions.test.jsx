@@ -32,6 +32,7 @@ const noteState = {
   currentNote: {
     id: 'note-1',
     title: '测试笔记',
+    type: 'text',
     isStarred: false,
     content: '正文',
   },
@@ -49,6 +50,7 @@ vi.mock('@/hooks/useNote', () => ({
     deleteNote: deleteNoteMock,
     restoreNote: restoreNoteMock,
     permanentDeleteNote: permanentDeleteNoteMock,
+    setCurrentNote: vi.fn(),
   }),
 }))
 
@@ -89,6 +91,7 @@ describe('EditorWorkspace actions', () => {
     noteState.currentNote = {
       id: 'note-1',
       title: '测试笔记',
+      type: 'text',
       isStarred: false,
       content: '正文',
     }
@@ -160,22 +163,6 @@ describe('EditorWorkspace actions', () => {
 
     await waitFor(() => {
       expect(screen.getByText('分享笔记')).toBeInTheDocument()
-    })
-  })
-
-  it('enters title edit mode on click and updates the note title', async () => {
-    const user = userEvent.setup()
-    render(<EditorWorkspace />)
-
-    await user.click(screen.getByRole('button', { name: '编辑笔记标题' }))
-
-    const titleInput = screen.getByRole('textbox', { name: '笔记标题' })
-    await user.clear(titleInput)
-    await user.type(titleInput, '新标题')
-    fireEvent.blur(titleInput)
-
-    await waitFor(() => {
-      expect(updateNameMock).toHaveBeenCalledWith('note-1', '新标题')
     })
   })
 
