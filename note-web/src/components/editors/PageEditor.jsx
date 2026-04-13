@@ -43,7 +43,6 @@ function PageEditorV2({
   const lastSerializedRef = useRef('')
   const [editorStatus, setEditorStatus] = useState('loading')
   const [errorMessage, setErrorMessage] = useState('')
-  const [debugMessage, setDebugMessage] = useState('')
   const [mountSize, setMountSize] = useState({ width: 0, height: 0 })
   const isDev = import.meta.env.DEV
   const useGeneratedEditorJwt = Boolean(editor?.page?.auth?.enabled)
@@ -160,9 +159,6 @@ function PageEditorV2({
     let frameId = null
     setEditorStatus('loading')
     setErrorMessage('')
-    setDebugMessage('')
-    console.log("dev = ",isDev)
-    console.log("mountRef = ",mountRef.current)
 
     if (isDev) {
       const mountRect = mountRef.current.getBoundingClientRect()
@@ -176,7 +172,6 @@ function PageEditorV2({
         runtimeConfig,
         documentConfig,
       })
-      setDebugMessage(`init ${note?.id || 'no-note'} ${Math.round(mountRect.width)}x${Math.round(mountRect.height)}`)
     }
 
     frameId = window.requestAnimationFrame(() => {
@@ -247,7 +242,6 @@ function PageEditorV2({
             noteId: note?.id,
             hasEditor: Boolean(editor),
           })
-          setDebugMessage(`ready ${note?.id || 'no-note'}`)
         }
       }).catch((error) => {
         if (cancelled) {
@@ -258,7 +252,6 @@ function PageEditorV2({
         setErrorMessage(error?.message || '页面编辑器初始化失败')
         if (isDev) {
           console.error('[PageEditor] failed', error)
-          setDebugMessage(`failed ${note?.id || 'no-note'}`)
         }
       })
     })
@@ -320,27 +313,6 @@ function PageEditorV2({
           flexDirection: 'column',
         }}
       >
-        {isDev ? (
-          <div
-            style={{
-              position: 'absolute',
-              top: 8,
-              left: 8,
-              zIndex: 2,
-              padding: '4px 8px',
-              borderRadius: 999,
-              fontSize: 11,
-              lineHeight: 1.2,
-              color: editorStatus === 'error' ? '#b91c1c' : '#64748b',
-              background: 'rgba(255,255,255,0.92)',
-              border: '1px solid rgba(148,163,184,0.18)',
-              pointerEvents: 'none',
-              boxShadow: '0 4px 12px rgba(16,34,58,0.06)',
-            }}
-          >
-            {debugMessage || editorStatus}
-          </div>
-        ) : null}
         {editorStatus === 'error' ? (
           <Alert
             type="error"
