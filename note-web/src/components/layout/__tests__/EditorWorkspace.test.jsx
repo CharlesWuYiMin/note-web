@@ -13,6 +13,7 @@ const restoreNoteMock = vi.fn()
 const permanentDeleteNoteMock = vi.fn()
 const navigateMock = vi.fn()
 const locationMock = { pathname: '/cloudnote/recent/note-1' }
+const paramsMock = { id: 'note-1' }
 
 const noteState = {
   currentNote: {
@@ -54,7 +55,7 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
   return {
     ...actual,
-    useParams: () => ({ id: 'note-1' }),
+    useParams: () => paramsMock,
     useNavigate: () => navigateMock,
     useLocation: () => locationMock,
   }
@@ -79,7 +80,9 @@ describe('EditorWorkspace', () => {
       isStarred: false,
       content: '正文',
     }
+    paramsMock.id = 'note-1'
     locationMock.pathname = '/cloudnote/recent/note-1'
+    locationMock.state = undefined
     noteState.isLoading = false
     Object.defineProperty(document, 'fullscreenEnabled', {
       configurable: true,
@@ -126,6 +129,46 @@ describe('EditorWorkspace', () => {
     expect(screen.getByText('中文')).toBeInTheDocument()
     expect(screen.getByText('英文')).toBeInTheDocument()
     expect(screen.queryByText('创建后先按文本笔记保存，需要时再打开语音转录面板。')).not.toBeInTheDocument()
+  })
+
+  it('does not reload note details again when only the route preview title changes', async () => {
+    locationMock.state = {
+      note: {
+        id: 'note-1',
+        title: '第一次预览标题',
+      },
+    }
+
+    const { rerender } = render(<EditorWorkspace />)
+
+    await waitFor(() => {
+      expect(loadNoteByIdMock).toHaveBeenCalledTimes(1)
+    })
+
+    locationMock.state = {
+      note: {
+        id: 'note-1',
+        title: '第二次预览标题',
+      },
+    }
+
+    rerender(<EditorWorkspace />)
+
+    expect(loadNoteByIdMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders the section empty state without loading the editor when no note exists on a root route', () => {
+    paramsMock.id = undefined
+    locationMock.pathname = '/cloudnote/recent'
+    noteState.currentNote = null
+    noteState.isLoading = false
+
+    render(<EditorWorkspace />)
+
+    expect(screen.getByText('近期笔记')).toBeInTheDocument()
+    expect(screen.getByText('当前还没有可打开的笔记，创建一条新的内容后会显示在这里。')).toBeInTheDocument()
+    expect(screen.queryByTestId('editor-factory')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument()
   })
 
   it('requests fullscreen when clicking the fullscreen button', async () => {

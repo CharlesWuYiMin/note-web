@@ -1,5 +1,5 @@
 ﻿﻿import React, { useEffect, useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { ConfigProvider, Spin } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import LoginPage from '@/pages/Login/LoginPage'
@@ -8,7 +8,7 @@ import EditorWorkspace from '@/components/layout/EditorWorkspace'
 import SearchResultPage from '@/pages/Search/SearchResultPage'
 import useAuthStore from '@/store/useAuthStore'
 import authService from '@/services/authService'
-import { KooEditor, getRuntimeConfig } from '@cloud/koopage-editor-sdk'
+import { schedulePageEditorPreload } from '@/utils/pageEditorPreload'
 
 function AuthProvider({ children }) {
   const [authState, setAuthState] = useState({
@@ -16,7 +16,6 @@ function AuthProvider({ children }) {
     isAuthenticated: false,
     error: null,
   })
-  const location = useLocation()
   const { login: storeLogin, checkAuthStatus } = useAuthStore()
 
   useEffect(() => {
@@ -43,11 +42,9 @@ function AuthProvider({ children }) {
     }
 
     initAuth()
-  }, [location, storeLogin, checkAuthStatus])
+  }, [storeLogin, checkAuthStatus])
 
-  useEffect(()=>{
-    KooEditor.preload("https://innovation.huaweiapaas.com/editor",{httpSettings:undefined})
-  },[])
+  useEffect(() => schedulePageEditorPreload(), [])
 
   if (authState.isLoading) {
     return (

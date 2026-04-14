@@ -110,6 +110,54 @@ function getWorkspaceEmptyState(pathname, hasRouteId) {
       }
 }
 
+function WorkspaceStateView({ title, description, loading = false }) {
+  return (
+    <section
+      style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#fff',
+        position: 'relative',
+        height: '100%',
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '48px 24px',
+        }}
+      >
+        {loading ? (
+          <Spin />
+        ) : (
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 420,
+              padding: '12px 20px',
+              textAlign: 'center',
+            }}
+          >
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={null} />
+            <div style={{ marginTop: 8, fontSize: 18, fontWeight: 800, color: '#10223a' }}>
+              {title}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.8, color: 'rgba(16,34,58,0.58)' }}>
+              {description}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 function EditorWorkspace() {
   const params = useParams()
   const id = params.id
@@ -192,6 +240,8 @@ function EditorWorkspace() {
   const displayTitle = noteForRender?.title || (id ? '未命名笔记' : emptyState.title)
   const isTransitioningNote = Boolean(id) && !noteForRender && !error
   const showEmptyState = !noteForRender && !isLoading && Boolean(error)
+  const showSectionEmptyState = !id && !noteForRender && !isLoading
+  const showSectionLoadingState = !id && !noteForRender && isLoading
   const [title, setTitle] = useState(displayTitle)
 
   useEffect(() => {
@@ -208,7 +258,7 @@ function EditorWorkspace() {
     }
 
     loadNoteById(id).catch(() => {})
-  }, [emptyState.title, id, loadNoteById, notePreview?.title])
+  }, [emptyState.title, id, loadNoteById])
 
   useEffect(() => {
     if (noteForRender?.title) {
@@ -439,6 +489,14 @@ function EditorWorkspace() {
     setVoicePanelVisible(true)
     setVoiceAutoStartToken((token) => (typeof token === 'number' ? token + 1 : 1))
     message.success('已开启语音转录')
+  }
+
+  if (showSectionLoadingState) {
+    return <WorkspaceStateView loading title={emptyState.title} description={emptyState.description} />
+  }
+
+  if (showSectionEmptyState) {
+    return <WorkspaceStateView title={emptyState.title} description={emptyState.description} />
   }
 
   return (

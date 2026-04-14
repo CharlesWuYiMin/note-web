@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import noteService from '@/services/noteService'
 
+const inFlightNoteDetails = new Map()
+
 function normalizeCollection(data) {
   if (Array.isArray(data)) {
     return data
@@ -85,23 +87,35 @@ const useNoteStore = create((set, get) => ({
       return null
     }
 
-    set({ isLoading: true, error: null })
-    try {
-      const note = await noteService.getNoteById(id)
-      const noteMeta = note ? omitContent(note) : null
-      set((state) => ({
-        currentNote: noteMeta,
-        notes: noteMeta ? mergeNoteIntoCollection(state.notes, noteMeta) : state.notes,
-        starredNotes: noteMeta ? mergeNoteIntoCollection(state.starredNotes, noteMeta) : state.starredNotes,
-        myShares: noteMeta ? mergeNoteIntoCollection(state.myShares, noteMeta) : state.myShares,
-        deletedNotes: noteMeta ? mergeNoteIntoCollection(state.deletedNotes, noteMeta) : state.deletedNotes,
-        isLoading: false,
-      }))
-      return note || null
-    } catch (error) {
-      set({ currentNote: null, error: error.message, isLoading: false })
-      throw error
+    if (inFlightNoteDetails.has(id)) {
+      return inFlightNoteDetails.get(id)
     }
+
+    set({ isLoading: true, error: null })
+    const requestPromise = noteService.getNoteById(id)
+      .then((note) => {
+        const noteMeta = note ? omitContent(note) : null
+        set((state) => ({
+          currentNote: noteMeta,
+          notes: noteMeta ? mergeNoteIntoCollection(state.notes, noteMeta) : state.notes,
+          starredNotes: noteMeta ? mergeNoteIntoCollection(state.starredNotes, noteMeta) : state.starredNotes,
+          myShares: noteMeta ? mergeNoteIntoCollection(state.myShares, noteMeta) : state.myShares,
+          deletedNotes: noteMeta ? mergeNoteIntoCollection(state.deletedNotes, noteMeta) : state.deletedNotes,
+          isLoading: false,
+        }))
+        return note || null
+      })
+      .catch((error) => {
+        set({ currentNote: null, error: error.message, isLoading: false })
+        throw error
+      })
+      .finally(() => {
+        inFlightNoteDetails.delete(id)
+      })
+
+    inFlightNoteDetails.set(id, requestPromise)
+
+    return requestPromise
   },
 
   fetchStarredNotes: async (params = {}) => {

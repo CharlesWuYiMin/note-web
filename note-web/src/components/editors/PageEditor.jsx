@@ -5,6 +5,7 @@ import { KooEditor, getRuntimeConfig } from '@cloud/koopage-editor-sdk'
 import useAuth from '@/hooks/useAuth'
 import authService from '@/services/authService'
 import { getAppConfig } from '@/utils/config'
+import { preloadPageEditorResources } from '@/utils/pageEditorPreload'
 
 function serializeContent(editor) {
   if (!editor?.getContent) {
@@ -216,19 +217,19 @@ function PageEditorV2({
   }, [])
 
   useEffect(() => {
-    if (!mountRef.current) {
+    if (!mountRef.current || !mountReady) {
       return undefined
     }
-
 
     let cancelled = false
     let frameId = null
     setEditorStatus('loading')
     setErrorMessage('')
 
-    if (isDev) {
-      const mountRect = mountRef.current.getBoundingClientRect()
-    }
+    preloadPageEditorResources({
+      editorUrl: runtimeConfig?.editorUrl,
+      appId: runtimeAuth?.appId || pageEditorAuthAppId || appId || authService.getAppId(),
+    })
 
     frameId = window.requestAnimationFrame(() => {
       KooEditor.create({
@@ -326,7 +327,7 @@ function PageEditorV2({
       }
       editorRef.current = null
     }
-  }, [documentConfig, mountReady, readOnly, runtimeConfig, runtimeAuth])
+  }, [appId, documentConfig, mountReady, pageEditorAuthAppId, readOnly, runtimeConfig, runtimeAuth])
 
   useEffect(() => {
     if (!mountReady) {

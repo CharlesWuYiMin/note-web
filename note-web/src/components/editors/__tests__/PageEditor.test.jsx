@@ -5,6 +5,7 @@ import PageEditor from '@/components/editors/PageEditor'
 
 const mocks = vi.hoisted(() => ({
   createMock: vi.fn(),
+  preloadMock: vi.fn(),
   destroyMock: vi.fn(),
   resizeMock: vi.fn(),
   refreshMock: vi.fn(),
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@cloud/koopage-editor-sdk', () => ({
   KooEditor: {
     create: mocks.createMock,
+    preload: mocks.preloadMock,
   },
   getRuntimeConfig: vi.fn(() => ({
     editorUrl: 'http://editor.local',
@@ -61,6 +63,7 @@ vi.mock('@/utils/config', () => ({
 describe('PageEditor', () => {
   beforeEach(() => {
     mocks.createMock.mockReset()
+    mocks.preloadMock.mockReset()
     mocks.destroyMock.mockReset()
     mocks.resizeMock.mockReset()
     mocks.refreshMock.mockReset()

@@ -131,6 +131,24 @@ describe('useNoteStore', () => {
       })
     })
 
+    it('reuses the same in-flight detail request for duplicate loads', async () => {
+      const detail = { id: '1', title: 'detail note', content: 'body' }
+      let resolveRequest
+      mockGetNoteById.mockReturnValue(new Promise((resolve) => {
+        resolveRequest = resolve
+      }))
+
+      const firstPromise = useNoteStore.getState().loadNoteById('1')
+      const secondPromise = useNoteStore.getState().loadNoteById('1')
+
+      expect(mockGetNoteById).toHaveBeenCalledTimes(1)
+
+      resolveRequest(detail)
+
+      await expect(firstPromise).resolves.toEqual(detail)
+      await expect(secondPromise).resolves.toEqual(detail)
+    })
+
     it('merges refreshed note metadata into list collections', async () => {
       const refreshed = {
         id: '1',
