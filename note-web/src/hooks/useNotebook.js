@@ -11,6 +11,7 @@ export function useNotebook() {
     createNotebook,
     updateNotebook,
     deleteNotebook,
+    moveNotebook,
     clearError,
   } = useNotebookStore()
 
@@ -29,6 +30,7 @@ export function useNotebook() {
     createNotebook,
     updateNotebook,
     deleteNotebook,
+    moveNotebook,
     clearError,
   }
 }

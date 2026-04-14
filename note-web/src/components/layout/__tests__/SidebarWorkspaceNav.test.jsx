@@ -7,6 +7,8 @@ import SidebarWorkspaceNav from '@/components/layout/SidebarWorkspaceNav'
 const fetchNotebooksMock = vi.fn()
 const createNotebookMock = vi.fn()
 const updateNotebookMock = vi.fn()
+const deleteNotebookMock = vi.fn()
+const moveNotebookMock = vi.fn()
 const setCurrentNotebookMock = vi.fn()
 const createNoteMock = vi.fn()
 
@@ -25,6 +27,8 @@ vi.mock('@/hooks/useNotebook', () => ({
     fetchNotebooks: fetchNotebooksMock,
     createNotebook: createNotebookMock,
     updateNotebook: updateNotebookMock,
+    deleteNotebook: deleteNotebookMock,
+    moveNotebook: moveNotebookMock,
     setCurrentNotebook: setCurrentNotebookMock,
   }),
 }))
@@ -46,6 +50,7 @@ vi.mock('@/store/useNotebookStore', () => ({
 describe('SidebarWorkspaceNav', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     notebookState.notebooks = [
       { id: 'default-nb', name: '默认笔记本', isDefault: true },
       { id: 'work-nb', name: '工作', isDefault: false },
@@ -134,6 +139,37 @@ describe('SidebarWorkspaceNav', () => {
     await waitFor(() => {
       expect(updateNotebookMock).toHaveBeenCalledWith('work-nb', { name: '项目文档' })
     })
+  })
+
+  it('does not allow renaming the default notebook', async () => {
+    const user = userEvent.setup()
+    render(<SidebarWorkspaceNav collapsed={false} onToggle={vi.fn()} onNavigate={vi.fn()} currentPath="/cloudnote/notebooks" />)
+
+    const target = await screen.findByText('默认笔记本')
+    await user.dblClick(target)
+
+    expect(updateNotebookMock).not.toHaveBeenCalled()
+    expect(screen.queryByDisplayValue('默认笔记本')).not.toBeInTheDocument()
+  })
+
+  it('creates a text note from the notebook row menu', async () => {
+    const user = userEvent.setup()
+    const navigateMock = vi.fn()
+    createNoteMock.mockResolvedValue({ id: 'note-2', title: 'note', type: 'text' })
+
+    render(<SidebarWorkspaceNav collapsed={false} onToggle={vi.fn()} onNavigate={navigateMock} currentPath="/cloudnote/notebooks" />)
+
+    await user.click(await screen.findByLabelText('笔记本更多操作：工作'))
+    await user.click(await screen.findByText('新建文本笔记'))
+
+    await waitFor(() => {
+      expect(createNoteMock).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'text',
+        notebookId: 'work-nb',
+      }))
+    })
+
+    expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recent/note-2', undefined)
   })
 })
 

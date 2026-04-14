@@ -1,8 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Input, Tooltip } from 'antd'
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Button, Input, Modal, Tooltip, message } from 'antd'
 import {
   ApartmentOutlined,
   AudioOutlined,
+  ArrowDownOutlined,
+  ArrowUpOutlined,
   BookOutlined,
   DeleteOutlined,
   DownOutlined,
@@ -14,6 +17,7 @@ import {
   HistoryOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MoreOutlined,
   PlusOutlined,
   RightOutlined,
   ShareAltOutlined,
@@ -115,6 +119,133 @@ function NewCreatePanel({ onCreate }) {
   )
 }
 
+function NotebookActionMenuPanel({ items, onAction }) {
+  const toneStyles = {
+    blue: { color: '#1677ff', background: 'rgba(22,119,255,0.10)' },
+    cyan: { color: '#0891b2', background: 'rgba(8,145,178,0.10)' },
+    orange: { color: '#ea580c', background: 'rgba(234,88,12,0.10)' },
+    purple: { color: '#6d28d9', background: 'rgba(109,40,217,0.10)' },
+    gray: { color: '#64748b', background: 'rgba(100,116,139,0.10)' },
+    red: { color: '#ef4444', background: 'rgba(239,68,68,0.10)' },
+  }
+
+  return (
+    <div
+      style={{
+        width: 156,
+        padding: 8,
+        borderRadius: 13,
+        background: 'rgba(255,255,255,0.98)',
+        boxShadow: '0 10px 18px rgba(16,34,58,0.10)',
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {items.map((item) => {
+          if (item.type === 'divider') {
+            return (
+              <div
+                key={item.key}
+                style={{
+                height: 1,
+                  margin: '6px 5px',
+                  background: 'rgba(226,232,240,0.88)',
+                }}
+              />
+            )
+          }
+
+          const disabled = Boolean(item.disabled)
+          const tone = item.tone || 'gray'
+          const colors = toneStyles[tone] || toneStyles.gray
+          const iconBoxSize = item.variant === 'create' ? 27 : 25
+          const iconFontSize = item.variant === 'create' ? 14 : 13
+          const disabledTone = {
+            color: 'rgba(148,163,184,0.68)',
+            background: 'rgba(148,163,184,0.10)',
+          }
+
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                if (!disabled) {
+                  onAction(item.key)
+                }
+              }}
+              disabled={disabled}
+              style={{
+                height: 36,
+                width: '100%',
+                border: 'none',
+                background: 'transparent',
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                borderRadius: 10,
+                padding: '0 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                transition: 'background 0.15s ease',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(event) => {
+                if (!disabled) {
+                  event.currentTarget.style.background = item.danger
+                    ? 'rgba(239,68,68,0.022)'
+                    : 'rgba(2,86,210,0.018)'
+                }
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.style.background = 'transparent'
+              }}
+            >
+              <span
+                style={{
+                  width: iconBoxSize,
+                  height: iconBoxSize,
+                  borderRadius: 7,
+                  flexShrink: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: disabled
+                    ? disabledTone.color
+                    : item.danger
+                      ? '#ef4444'
+                      : colors.color,
+                  background: disabled
+                    ? disabledTone.background
+                    : item.danger
+                      ? 'rgba(239,68,68,0.10)'
+                      : colors.background,
+                  fontSize: iconFontSize,
+                }}
+              >
+                {item.icon}
+              </span>
+              <span
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  fontSize: 15,
+                  lineHeight: 1.12,
+                  fontWeight: disabled ? 500 : (item.danger ? 600 : 500),
+                  color: disabled
+                    ? disabledTone.color
+                    : (item.danger ? '#dc2626' : '#1f2937'),
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {item.label}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
   const { createNote } = useNote()
   const {
@@ -122,7 +253,9 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
     currentNotebook,
     fetchNotebooks,
     createNotebook,
+    deleteNotebook,
     updateNotebook,
+    moveNotebook,
     setCurrentNotebook,
   } = useNotebook()
   const [notebooksExpanded, setNotebooksExpanded] = useState(currentPath?.startsWith('/cloudnote/notebooks'))
@@ -130,6 +263,8 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
   const [editingNotebookId, setEditingNotebookId] = useState(null)
   const [editingName, setEditingName] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const [activeNotebookMenuId, setActiveNotebookMenuId] = useState(null)
+  const [activeNotebookMenuPosition, setActiveNotebookMenuPosition] = useState(null)
   const createCloseTimerRef = useRef(null)
 
   const navItems = [
@@ -152,6 +287,50 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!activeNotebookMenuId) {
+      setActiveNotebookMenuPosition(null)
+      return undefined
+    }
+
+    const handleOutsideClick = (event) => {
+      const target = event.target
+      if (!(target instanceof HTMLElement)) {
+        return
+      }
+
+      if (target.closest('[data-notebook-menu-root="true"]')) {
+        return
+      }
+
+      setActiveNotebookMenuId(null)
+      setActiveNotebookMenuPosition(null)
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick)
+    }
+  }, [activeNotebookMenuId])
+
+  useEffect(() => {
+    if (!activeNotebookMenuId) {
+      return undefined
+    }
+
+    const handleDismiss = () => {
+      setActiveNotebookMenuId(null)
+      setActiveNotebookMenuPosition(null)
+    }
+
+    window.addEventListener('scroll', handleDismiss, true)
+    window.addEventListener('resize', handleDismiss)
+    return () => {
+      window.removeEventListener('scroll', handleDismiss, true)
+      window.removeEventListener('resize', handleDismiss)
+    }
+  }, [activeNotebookMenuId])
+
   const sortedNotebooks = useMemo(
     () => [...notebooks].sort((left, right) => Number(Boolean(right.isDefault)) - Number(Boolean(left.isDefault))),
     [notebooks]
@@ -162,7 +341,11 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
     return useNotebookStore.getState().notebooks
   }
 
-  const resolveTargetNotebookId = async () => {
+  const resolveTargetNotebookId = async (preferredNotebookId = null) => {
+    if (preferredNotebookId) {
+      return preferredNotebookId
+    }
+
     if (currentNotebook?.id) {
       return currentNotebook.id
     }
@@ -177,9 +360,10 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
     setNotebooksExpanded(nextExpanded)
     if (nextExpanded) {
       await ensureNotebooksLoaded()
+      if (!currentPath?.startsWith('/cloudnote/notebooks')) {
+        onNavigate?.('/cloudnote/notebooks')
+      }
     }
-
-    onNavigate?.('/cloudnote/notebooks')
   }
 
   const handleNotebookCreate = async (event) => {
@@ -194,7 +378,7 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
     onNavigate?.('/cloudnote/notebooks')
   }
 
-  const handleCreateOption = async (option) => {
+  const handleCreateOption = async (option, preferredNotebookId = null) => {
     closeCreatePanel()
 
     if (option.key === 'notebook') {
@@ -202,7 +386,7 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
       return
     }
 
-    const notebookId = await resolveTargetNotebookId()
+    const notebookId = await resolveTargetNotebookId(preferredNotebookId)
     if (!notebookId) {
       return
     }
@@ -270,6 +454,9 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
   }
 
   const startRenameNotebook = (notebook) => {
+    if (notebook?.isDefault) {
+      return
+    }
     setEditingNotebookId(notebook.id)
     setEditingName(notebook.name || '')
   }
@@ -287,7 +474,60 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
     setEditingName('')
   }
 
+  const handleNotebookMenuAction = async (key, notebook) => {
+    setActiveNotebookMenuId(null)
+    setActiveNotebookMenuPosition(null)
+
+    switch (key) {
+      case 'create-text':
+        await handleCreateOption({ key: 'text', type: 'text' }, notebook.id)
+        return
+      case 'create-outline':
+        await handleCreateOption({ key: 'outline', type: 'outline' }, notebook.id)
+        return
+      case 'create-handwritten':
+        await handleCreateOption({ key: 'handwritten', type: 'handwritten' }, notebook.id)
+        return
+      case 'create-voice':
+        await handleCreateOption({ key: 'voice', type: 'voice' }, notebook.id)
+        return
+      case 'rename':
+        startRenameNotebook(notebook)
+        return
+      case 'move-up':
+        moveNotebook?.(notebook.id, 'up')
+        return
+      case 'move-down':
+        moveNotebook?.(notebook.id, 'down')
+        return
+      case 'delete':
+        Modal.confirm({
+          title: '删除笔记本',
+          content: `确定要删除“${notebook.name}”吗？删除后可在回收站中恢复。`,
+          okText: '删除',
+          cancelText: '取消',
+          okButtonProps: { danger: true },
+          centered: true,
+          onOk: async () => {
+            try {
+              await deleteNotebook?.(notebook.id)
+              message.success('删除成功')
+            } catch (error) {
+              message.error(error?.message || '删除失败，请稍后重试')
+            }
+          },
+        })
+        return
+      default:
+        return
+    }
+  }
+
   const notebookSectionActive = currentPath?.startsWith('/cloudnote/notebooks')
+  const movableNotebooks = useMemo(
+    () => sortedNotebooks.filter((notebook) => !notebook.isDefault),
+    [sortedNotebooks]
+  )
 
   return (
     <aside
@@ -440,22 +680,39 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
               {!collapsed && (
                 <>
                   <span style={{ flex: 1, fontSize: 18, lineHeight: 1.3 }}>笔记本</span>
+                <Button
+                  aria-label="新建笔记本"
+                  type="text"
+                  size="small"
+                  icon={<PlusOutlined />}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleNotebookCreate(event)
+                  }}
+                  style={{
+                    color: 'rgba(16,34,58,0.64)',
+                    width: 24,
+                    height: 24,
+                    borderRadius: 8,
+                  }}
+                />
                   <Button
-                    aria-label="新建笔记本"
+                    aria-label={notebooksExpanded ? '收起笔记本' : '展开笔记本'}
                     type="text"
                     size="small"
-                    icon={<PlusOutlined />}
-                    onClick={handleNotebookCreate}
+                    icon={notebooksExpanded ? <DownOutlined /> : <RightOutlined />}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      handleNotebookToggle()
+                    }}
                     style={{
-                      color: 'rgba(16,34,58,0.64)',
+                      color: 'rgba(16,34,58,0.48)',
                       width: 24,
                       height: 24,
                       borderRadius: 8,
+                      padding: 0,
                     }}
                   />
-                  <span style={{ fontSize: 11, color: 'rgba(16,34,58,0.48)' }}>
-                    {notebooksExpanded ? <DownOutlined /> : <RightOutlined />}
-                  </span>
                 </>
               )}
             </div>
@@ -476,6 +733,34 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
                 const isSelected = currentNotebook?.id === notebook.id
                 const isEditing = editingNotebookId === notebook.id
                 const isHovered = hoveredNotebookId === notebook.id
+                const movableIndex = movableNotebooks.findIndex((item) => item.id === notebook.id)
+                const isDefaultNotebook = Boolean(notebook.isDefault)
+                const isFirstMovableNotebook = movableIndex === 0
+                const isLastMovableNotebook = movableIndex === movableNotebooks.length - 1
+                const notebookMenuItems = [
+                  { key: 'create-text', label: '新建文本笔记', icon: <FileTextOutlined />, tone: 'blue', variant: 'create' },
+                  { key: 'create-outline', label: '新建大纲笔记', icon: <ApartmentOutlined />, tone: 'cyan', variant: 'create' },
+                  { key: 'create-handwritten', label: '新建手写笔记', icon: <HighlightOutlined />, tone: 'orange', variant: 'create' },
+                  { key: 'create-voice', label: '新建语音笔记', icon: <AudioOutlined />, tone: 'purple', variant: 'create' },
+                  { key: 'divider-1', type: 'divider' },
+                  { key: 'rename', label: '重命名', icon: <EditOutlined />, tone: 'gray', disabled: isDefaultNotebook },
+                  {
+                    key: 'move-up',
+                    label: '向上移动',
+                    icon: <ArrowUpOutlined />,
+                    tone: 'gray',
+                    disabled: isDefaultNotebook || isFirstMovableNotebook,
+                  },
+                  {
+                    key: 'move-down',
+                    label: '向下移动',
+                    icon: <ArrowDownOutlined />,
+                    tone: 'gray',
+                    disabled: isDefaultNotebook || isLastMovableNotebook,
+                  },
+                  { key: 'divider-2', type: 'divider' },
+                  { key: 'delete', label: '删除', icon: <DeleteOutlined />, tone: 'red', danger: true, disabled: isDefaultNotebook },
+                ]
 
                 return (
                   <div
@@ -485,12 +770,13 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
                     onMouseEnter={() => setHoveredNotebookId(notebook.id)}
                     onMouseLeave={() => setHoveredNotebookId(null)}
                     style={{
+                      position: 'relative',
                       minHeight: 36,
-                      padding: '8px 10px',
-                      borderRadius: 12,
+                      padding: '6px 8px 6px 10px',
+                      borderRadius: 13,
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 8,
+                      gap: 7,
                       cursor: 'pointer',
                       background: isSelected
                         ? 'rgba(0,97,164,0.08)'
@@ -500,7 +786,7 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    <FileOutlined style={{ fontSize: 16, color: isSelected ? 'var(--primary)' : 'rgba(16,34,58,0.54)' }} />
+                    <FileOutlined style={{ fontSize: 15, color: isSelected ? 'var(--primary)' : 'rgba(16,34,58,0.52)' }} />
                     {isEditing ? (
                       <Input
                         autoFocus
@@ -526,22 +812,66 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: isSelected ? 700 : 500,
-                            lineHeight: 1.35,
+                            lineHeight: 1.25,
                           }}
                         >
                           {notebook.name}
                         </span>
-                        {isHovered && !notebook.isDefault && (
-                          <EditOutlined
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} data-notebook-menu-root="true">
+                          <Button
+                            type="text"
+                            aria-label={`笔记本更多操作：${notebook.name}`}
+                            icon={<MoreOutlined style={{ fontSize: 16 }} />}
                             onClick={(event) => {
                               event.stopPropagation()
-                              startRenameNotebook(notebook)
+                              const buttonRect = event.currentTarget.getBoundingClientRect()
+                              setActiveNotebookMenuId((prev) => {
+                                if (prev === notebook.id) {
+                                  setActiveNotebookMenuPosition(null)
+                                  return null
+                                }
+
+                                setActiveNotebookMenuPosition({
+                                  top: buttonRect.top,
+                                  left: buttonRect.right + 12,
+                                })
+                                return notebook.id
+                              })
                             }}
-                            style={{ color: 'rgba(16,34,58,0.45)', fontSize: 13 }}
+                            onMouseDown={(event) => event.stopPropagation()}
+                            style={{
+                              width: 24,
+                              height: 24,
+                              minWidth: 24,
+                              borderRadius: 8,
+                              padding: 0,
+                              color: 'rgba(100,116,139,0.88)',
+                              opacity: isHovered || isSelected ? 1 : 0.72,
+                              flexShrink: 0,
+                            }}
                           />
-                        )}
+                          {activeNotebookMenuId === notebook.id && activeNotebookMenuPosition && createPortal(
+                            <div
+                              style={{
+                                position: 'fixed',
+                                top: activeNotebookMenuPosition.top,
+                                left: activeNotebookMenuPosition.left,
+                                zIndex: 9999,
+                                pointerEvents: 'auto',
+                              }}
+                              onClick={(event) => event.stopPropagation()}
+                              onMouseDown={(event) => event.stopPropagation()}
+                            >
+                              <NotebookActionMenuPanel
+                                items={notebookMenuItems}
+                                onAction={(actionKey) => handleNotebookMenuAction(actionKey, notebook)}
+                              />
+                            </div>,
+                            document.body
+                          )}
+                        </div>
                       </>
                     )}
                   </div>

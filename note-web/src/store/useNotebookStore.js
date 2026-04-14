@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 import notebookService from '@/services/notebookService'
+import { getItem, setItem } from '@/utils/storageUtils'
+
+const NOTEBOOK_ORDER_STORAGE_KEY = 'cloudnote:notebook-order'
 
 function normalizeNotebookCollection(data) {
   if (Array.isArray(data)) {
@@ -21,6 +24,36 @@ function normalizeNotebookCollection(data) {
   return []
 }
 
+function readNotebookOrder() {
+  const storedOrder = getItem(NOTEBOOK_ORDER_STORAGE_KEY, [])
+  return Array.isArray(storedOrder)
+    ? storedOrder.filter((id) => typeof id === 'string' && id.length > 0)
+    : []
+}
+
+function persistNotebookOrder(orderIds) {
+  setItem(NOTEBOOK_ORDER_STORAGE_KEY, orderIds)
+}
+
+function normalizeNotebookOrder(notebooks, orderIds = []) {
+  const notebookMap = new Map(notebooks.map((notebook) => [notebook.id, notebook]))
+  const defaultNotebooks = notebooks.filter((notebook) => notebook.isDefault)
+  const movableNotebooks = notebooks.filter((notebook) => !notebook.isDefault)
+  const preservedOrderIds = orderIds.filter((id) => notebookMap.has(id) && !notebookMap.get(id)?.isDefault)
+  const remainingIds = movableNotebooks
+    .map((notebook) => notebook.id)
+    .filter((id) => !preservedOrderIds.includes(id))
+  const nextOrderIds = [...preservedOrderIds, ...remainingIds]
+
+  return {
+    notebooks: [
+      ...defaultNotebooks,
+      ...nextOrderIds.map((id) => notebookMap.get(id)).filter(Boolean),
+    ],
+    orderIds: nextOrderIds,
+  }
+}
+
 const useNotebookStore = create((set, get) => ({
   notebooks: [],
   currentNotebook: null,
@@ -31,8 +64,10 @@ const useNotebookStore = create((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const data = await notebookService.getNotebooks()
+      const normalized = normalizeNotebookOrder(normalizeNotebookCollection(data), readNotebookOrder())
+      persistNotebookOrder(normalized.orderIds)
       set({
-        notebooks: normalizeNotebookCollection(data),
+        notebooks: normalized.notebooks,
         isLoading: false,
       })
     } catch (error) {
@@ -54,10 +89,15 @@ const useNotebookStore = create((set, get) => ({
           noteCount: 0,
           isDefault: false,
         }
-      set((state) => ({
-        notebooks: [...state.notebooks, newNotebook],
+      const nextNotebookState = normalizeNotebookOrder(
+        [...get().notebooks, newNotebook],
+        readNotebookOrder()
+      )
+      persistNotebookOrder(nextNotebookState.orderIds)
+      set({
+        notebooks: nextNotebookState.notebooks,
         isLoading: false,
-      }))
+      })
       return newNotebook
     } catch (error) {
       set({ error: error.message, isLoading: false })
@@ -89,8 +129,13 @@ const useNotebookStore = create((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       await notebookService.deleteNotebook(id)
+      const nextNotebookState = normalizeNotebookOrder(
+        get().notebooks.filter((notebook) => notebook.id !== id),
+        readNotebookOrder()
+      )
+      persistNotebookOrder(nextNotebookState.orderIds)
       set((state) => ({
-        notebooks: state.notebooks.filter((nb) => nb.id !== id),
+        notebooks: nextNotebookState.notebooks,
         currentNotebook:
           state.currentNotebook?.id === id ? null : state.currentNotebook,
         isLoading: false,
@@ -99,6 +144,35 @@ const useNotebookStore = create((set, get) => ({
       set({ error: error.message, isLoading: false })
       throw error
     }
+  },
+
+  moveNotebook: (id, direction) => {
+    const state = get()
+    const movableNotebooks = state.notebooks.filter((notebook) => !notebook.isDefault)
+    const currentIndex = movableNotebooks.findIndex((notebook) => notebook.id === id)
+
+    if (currentIndex < 0) {
+      return
+    }
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+    if (targetIndex < 0 || targetIndex >= movableNotebooks.length) {
+      return
+    }
+
+    const nextMovableNotebooks = [...movableNotebooks]
+    ;[nextMovableNotebooks[currentIndex], nextMovableNotebooks[targetIndex]] = [
+      nextMovableNotebooks[targetIndex],
+      nextMovableNotebooks[currentIndex],
+    ]
+
+    persistNotebookOrder(nextMovableNotebooks.map((notebook) => notebook.id))
+    set({
+      notebooks: [
+        ...state.notebooks.filter((notebook) => notebook.isDefault),
+        ...nextMovableNotebooks,
+      ],
+    })
   },
 
   clearError: () => set({ error: null }),
