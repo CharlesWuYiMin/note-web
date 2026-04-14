@@ -15,11 +15,12 @@ function FloatingCard({ children, style = {} }) {
   return (
     <div
       style={{
-        background: 'rgba(255,255,255,0.96)',
+        background: 'rgba(255,255,255,0.72)',
         borderRadius: 28,
-        boxShadow: '0 18px 44px rgba(16,34,58,0.10)',
-        border: '1px solid rgba(255,255,255,0.88)',
-        backdropFilter: 'blur(16px)',
+        boxShadow: '0 18px 42px rgba(15,23,42,0.09), 0 4px 14px rgba(15,23,42,0.04)',
+        border: '1px solid rgba(255,255,255,0.58)',
+        backdropFilter: 'blur(22px) saturate(160%)',
+        WebkitBackdropFilter: 'blur(22px) saturate(160%)',
         overflow: 'hidden',
         ...style,
       }}
@@ -58,7 +59,7 @@ function MainLayoutFloating() {
         flexDirection: 'row',
         alignItems: 'stretch',
         background: 'var(--surface)',
-        padding: '14px 18px 18px 18px',
+        padding: '8px 8px 6px 8px',
         gap: '0',
         minHeight: '100vh',
       }}
@@ -95,15 +96,15 @@ function MainLayoutFloating() {
           flexDirection: 'column',
           background: 'transparent',
           minWidth: 0,
-          minHeight: 'calc(100vh - 28px)',
-          height: 'calc(100vh - 32px)',
-          marginLeft: sidebarCollapsed ? 8 : 12,
+          minHeight: 'calc(100vh - 14px)',
+          height: 'calc(100vh - 14px)',
+          marginLeft: sidebarCollapsed ? 4 : 8,
           position: 'relative',
           zIndex: 4,
           overflow: 'visible',
         }}
       >
-        <div style={{ marginBottom: 10, flexShrink: 0 }}>
+        <div style={{ marginBottom: 6, flexShrink: 0 }}>
           <Header
             onToggleAIPanel={() => setAiPanelVisible((value) => !value)}
             onOpenSearch={openSearchModal}
@@ -134,11 +135,13 @@ function MainLayoutFloating() {
           style={{
             display: 'flex',
             flex: 1,
-            gap: 8,
+            gap: 4,
             minHeight: 0,
-            height: 'calc(100vh - 100px)',
-            overflow: 'hidden',
+            height: 'calc(100vh - 80px)',
+            padding: '4px 6px 6px 6px',
+            overflow: 'visible',
             position: 'relative',
+            boxSizing: 'border-box',
           }}
         >
           <FloatingCard
@@ -160,7 +163,7 @@ function MainLayoutFloating() {
                 height: '100%',
                 minHeight: 0,
                 alignSelf: 'stretch',
-                background: 'rgba(226,232,240,0.92)',
+                background: 'rgba(226,232,240,0.72)',
                 position: 'relative',
                 flexShrink: 0,
                 boxShadow: 'none',
@@ -187,9 +190,9 @@ function MainLayoutFloating() {
                   justifyContent: 'center',
                   lineHeight: 1,
                   borderRadius: 999,
-                  background: '#ffffff',
-                  border: '1px solid rgba(226,232,240,0.72)',
-                  boxShadow: '0 1px 4px rgba(16,34,58,0.08)',
+                  background: 'rgba(255,255,255,0.82)',
+                  border: '1px solid rgba(226,232,240,0.62)',
+                  boxShadow: '0 2px 10px rgba(16,34,58,0.06)',
                   color: 'rgba(148,163,184,1)',
                   opacity: 1,
                   zIndex: 10,

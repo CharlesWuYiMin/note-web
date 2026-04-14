@@ -171,5 +171,21 @@ describe('SidebarWorkspaceNav', () => {
 
     expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recent/note-2', undefined)
   })
+
+  it('calls deleteNotebook after confirming delete in the notebook row menu', async () => {
+    const user = userEvent.setup()
+    const confirmMock = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<SidebarWorkspaceNav collapsed={false} onToggle={vi.fn()} onNavigate={vi.fn()} currentPath="/cloudnote/notebooks" />)
+
+    await user.click(await screen.findByLabelText('笔记本更多操作：工作'))
+    await user.click(await screen.findByText('删除'))
+
+    await waitFor(() => {
+      expect(deleteNotebookMock).toHaveBeenCalledWith('work-nb')
+    })
+
+    confirmMock.mockRestore()
+  })
 })
 

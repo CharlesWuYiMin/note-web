@@ -39,6 +39,10 @@ function hasVoiceRecords(note) {
     return true
   }
 
+  if (Array.isArray(note.voiceRealtimeSessions) && note.voiceRealtimeSessions.length > 0) {
+    return true
+  }
+
   if (Number(note.voiceNumber) > 0) {
     return true
   }
@@ -48,6 +52,22 @@ function hasVoiceRecords(note) {
   }
 
   return false
+}
+
+function getWorkspaceSectionItems(pathname, { notes, starredNotes, myShares, deletedNotes }) {
+  if (pathname.startsWith('/cloudnote/starred') || pathname.startsWith('/cloudnote/star')) {
+    return starredNotes
+  }
+
+  if (pathname.startsWith('/cloudnote/shares')) {
+    return myShares
+  }
+
+  if (pathname.startsWith('/cloudnote/recyclebin')) {
+    return deletedNotes
+  }
+
+  return notes
 }
 
 function getWorkspaceEmptyState(pathname, hasRouteId) {
@@ -236,12 +256,23 @@ function EditorWorkspace() {
   const showVoiceEditor = forcedVoiceEditorNoteId === noteId || hasVoiceMaterials
   const useVoiceShell = Boolean(noteForRender) && showVoiceEditor
   const showVoiceTrigger = Boolean(noteForRender) && !isDeletedNote && (showVoiceEditor || noteForRender?.type === 'text')
+  const sectionItems = useMemo(
+    () => getWorkspaceSectionItems(location.pathname, {
+      notes,
+      starredNotes,
+      myShares,
+      deletedNotes,
+    }),
+    [deletedNotes, location.pathname, myShares, notes, starredNotes]
+  )
+  const hasSectionItems = sectionItems.length > 0
+  const sectionEmptyState = getWorkspaceEmptyState(location.pathname, false)
   const emptyState = getWorkspaceEmptyState(location.pathname, Boolean(id))
   const displayTitle = noteForRender?.title || (id ? '未命名笔记' : emptyState.title)
   const isTransitioningNote = Boolean(id) && !noteForRender && !error
   const showEmptyState = !noteForRender && !isLoading && Boolean(error)
-  const showSectionEmptyState = !id && !noteForRender && !isLoading
-  const showSectionLoadingState = !id && !noteForRender && isLoading
+  const showSectionEmptyState = !isLoading && !hasSectionItems
+  const showSectionLoadingState = isLoading && !hasSectionItems
   const [title, setTitle] = useState(displayTitle)
 
   useEffect(() => {
@@ -492,11 +523,11 @@ function EditorWorkspace() {
   }
 
   if (showSectionLoadingState) {
-    return <WorkspaceStateView loading title={emptyState.title} description={emptyState.description} />
+    return <WorkspaceStateView loading title={sectionEmptyState.title} description={sectionEmptyState.description} />
   }
 
   if (showSectionEmptyState) {
-    return <WorkspaceStateView title={emptyState.title} description={emptyState.description} />
+    return <WorkspaceStateView title={sectionEmptyState.title} description={sectionEmptyState.description} />
   }
 
   return (

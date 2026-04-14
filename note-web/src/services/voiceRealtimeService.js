@@ -71,6 +71,26 @@ async function createVoiceRealtimeSession(noteId, language) {
   return extractPayload(response)
 }
 
+async function getVoiceRealtimeSession(sessionId) {
+  const response = await request.get(`/voice-realtime/sessions/${sessionId}`)
+  return extractPayload(response)
+}
+
+async function pauseVoiceRealtimeSession(sessionId) {
+  const response = await request.post(`/voice-realtime/sessions/${sessionId}/pause`)
+  return extractPayload(response)
+}
+
+async function resumeVoiceRealtimeSession(sessionId) {
+  const response = await request.post(`/voice-realtime/sessions/${sessionId}/resume`)
+  return extractPayload(response)
+}
+
+async function finishVoiceRealtimeSession(sessionId) {
+  const response = await request.post(`/voice-realtime/sessions/${sessionId}/finish`)
+  return extractPayload(response)
+}
+
 function createVoiceRealtimeSocket(params) {
   if (typeof WebSocket === 'undefined') {
     throw new Error('当前浏览器不支持 WebSocket')
@@ -84,4 +104,8 @@ export default {
   buildVoiceRealtimeWsUrl,
   createVoiceRealtimeSession,
   createVoiceRealtimeSocket,
+  finishVoiceRealtimeSession,
+  getVoiceRealtimeSession,
+  pauseVoiceRealtimeSession,
+  resumeVoiceRealtimeSession,
 }

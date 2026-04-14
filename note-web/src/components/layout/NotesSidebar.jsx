@@ -76,6 +76,10 @@ function hasVoiceRecords(note) {
     return true
   }
 
+  if (Array.isArray(note?.voiceRealtimeSessions) && note.voiceRealtimeSessions.length > 0) {
+    return true
+  }
+
   if (Number(note?.voiceNumber) > 0) {
     return true
   }
@@ -486,7 +490,7 @@ function NotesSidebar({ visible = true }) {
         opacity: visible ? 1 : 0,
         overflow: 'hidden',
         transition: 'width 0.2s ease, opacity 0.2s ease',
-        background: 'linear-gradient(180deg, #fbfdff 0%, #f5f8fc 100%)',
+        background: '#ffffff',
         borderRight: 'none',
         display: 'flex',
         flexDirection: 'column',

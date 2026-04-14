@@ -51,14 +51,16 @@ describe('NoteService', () => {
   })
 
   describe('getNoteById', () => {
-    it('calls GET /notes/:id with the note id', async () => {
+    it('calls GET /notes/:id with withContent enabled', async () => {
       const id = '123'
       const mockNote = { id, title: 'test note' }
       mockGet.mockResolvedValue(mockNote)
 
       const result = await noteService.getNoteById(id)
 
-      expect(mockGet).toHaveBeenCalledWith(`/notes/${id}`)
+      expect(mockGet).toHaveBeenCalledWith(`/notes/${id}`, {
+        params: { withContent: true },
+      })
       expect(result).toEqual(mockNote)
     })
   })
@@ -88,13 +90,15 @@ describe('NoteService', () => {
       const result = await noteService.uploadVoiceFile('note-123', file)
 
       expect(mockPost).toHaveBeenCalledTimes(1)
-      const [url, body] = mockPost.mock.calls[0]
+      const [url, body, config] = mockPost.mock.calls[0]
       expect(url).toBe('/voice-notes/upload')
       expect(body).toBeInstanceOf(FormData)
       expect(Array.from(body.entries())).toEqual([
-        ['noteId', 'note-123'],
         ['file', file],
       ])
+      expect(config).toEqual({
+        params: { noteId: 'note-123' },
+      })
       expect(result).toEqual({ fileId: 'file-1', url: '/v1/note/files/file-1' })
     })
   })

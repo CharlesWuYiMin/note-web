@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Button, Input, Modal, Tooltip, message } from 'antd'
+import { Button, Input, Tooltip, message } from 'antd'
 import {
   ApartmentOutlined,
   AudioOutlined,
@@ -299,7 +299,10 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
         return
       }
 
-      if (target.closest('[data-notebook-menu-root="true"]')) {
+      if (
+        target.closest('[data-notebook-menu-root="true"]') ||
+        target.closest('[data-notebook-menu-panel="true"]')
+      ) {
         return
       }
 
@@ -501,22 +504,14 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
         moveNotebook?.(notebook.id, 'down')
         return
       case 'delete':
-        Modal.confirm({
-          title: '删除笔记本',
-          content: `确定要删除“${notebook.name}”吗？删除后可在回收站中恢复。`,
-          okText: '删除',
-          cancelText: '取消',
-          okButtonProps: { danger: true },
-          centered: true,
-          onOk: async () => {
-            try {
-              await deleteNotebook?.(notebook.id)
-              message.success('删除成功')
-            } catch (error) {
-              message.error(error?.message || '删除失败，请稍后重试')
-            }
-          },
-        })
+        if (window.confirm(`确定要删除“${notebook.name}”吗？删除后可在回收站中恢复。`)) {
+          try {
+            await deleteNotebook?.(notebook.id)
+            message.success('删除成功')
+          } catch (error) {
+            message.error(error?.message || '删除失败，请稍后重试')
+          }
+        }
         return
       default:
         return
@@ -854,6 +849,7 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
                           />
                           {activeNotebookMenuId === notebook.id && activeNotebookMenuPosition && createPortal(
                             <div
+                              data-notebook-menu-panel="true"
                               style={{
                                 position: 'fixed',
                                 top: activeNotebookMenuPosition.top,

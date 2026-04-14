@@ -90,6 +90,16 @@ function formatPlaybackRate(rate = 1) {
 const SPEED_PRESETS = [0.75, 1, 1.25, 1.5, 2]
 
 function getLanguageLabel(language) {
+  const normalized = String(language || '').replace(/_/g, '-').toLowerCase()
+
+  if (normalized.startsWith('en-')) {
+    return '英文'
+  }
+
+  if (normalized.startsWith('zh-')) {
+    return '中文'
+  }
+
   return LANGUAGE_OPTIONS.find((option) => option.value === language)?.label || '中文'
 }
 
@@ -119,10 +129,25 @@ function formatVoiceCardTime(value) {
   return `${year}/${month}/${day} ${hours}:${minutes}`
 }
 
+function truncateText(value, maxLength = 48) {
+  const text = String(value || '').trim()
+
+  if (!text) {
+    return ''
+  }
+
+  if (text.length <= maxLength) {
+    return text
+  }
+
+  return `${text.slice(0, Math.max(0, maxLength - 1))}…`
+}
+
 function getTranscriptStatusLabel(status) {
   const statusMap = {
     pending: '待转写',
     processing: '转写中',
+    paused: '已暂停',
     completed: '已转写',
     failed: '转写失败',
   }
@@ -134,7 +159,7 @@ function normalizeRealtimeLanguage(language) {
   return language === 'en-US' ? 'en_US' : 'zh_CN'
 }
 
-function createLiveRecordingCard({ key, language, title = '' }) {
+function createLiveRecordingCard({ key, language, title = '', sessionId = null }) {
   return {
     code: `RECORDING ${key}`,
     key,
@@ -145,11 +170,13 @@ function createLiveRecordingCard({ key, language, title = '' }) {
     language,
     status: 'processing',
     fileId: null,
+    sessionId,
     voiceId: null,
     url: '',
     isLocalPreview: false,
     transcript: '',
     transcriptStatus: 'processing',
+    kind: 'live',
   }
 }
 
@@ -163,6 +190,19 @@ function createTranscriptEntry({ avatar = 'REC', name = 'Recording', time = '刚
   }
 }
 
+function getNextRecordingKey(recordings = []) {
+  const maxIndex = recordings.reduce((max, item) => {
+    const numericKey = Number.parseInt(item?.key, 10)
+    if (Number.isFinite(numericKey)) {
+      return Math.max(max, numericKey)
+    }
+
+    return max
+  }, 0)
+
+  return String(maxIndex + 1).padStart(2, '0')
+}
+
 function getRealtimeStatusMeta(recordingState) {
   const statusMap = {
     recording: {
@@ -174,6 +214,11 @@ function getRealtimeStatusMeta(recordingState) {
       label: '已暂停',
       tone: 'paused',
       hint: '当前会话已暂停，等待继续录音',
+    },
+    interrupted: {
+      label: '连接中断',
+      tone: 'interrupted',
+      hint: '连接暂时中断，恢复后可继续录音',
     },
     uploading: {
       label: '处理中',
@@ -202,6 +247,11 @@ function RealtimeStatusBadge({ recordingState, compact = false }) {
       background: 'rgba(245,158,11,0.10)',
       color: '#d97706',
       border: '1px solid rgba(245,158,11,0.24)',
+    },
+    interrupted: {
+      background: 'rgba(251,191,36,0.12)',
+      color: '#b45309',
+      border: '1px solid rgba(251,191,36,0.28)',
     },
     processing: {
       background: 'rgba(99,102,241,0.10)',
@@ -254,50 +304,263 @@ function RealtimeStatusBadge({ recordingState, compact = false }) {
   )
 }
 
-function buildVoiceStateFromNoteVoiceNotes(voiceNotes = []) {
-  const recordings = voiceNotes.map((voice, index) => {
-    const key = String(index + 1).padStart(2, '0')
-    const transcriptStatus = voice?.transcriptStatus || 'pending'
+function getSessionSummaryStatus(session = {}) {
+  if (session?.status === 'finished') {
+    return 'completed'
+  }
 
-    return {
-      code: `RECORDING ${key}`,
-      key,
-      title: `语音卡片 ${key}`,
-      duration: getTranscriptStatusLabel(transcriptStatus),
-      durationMs: Number.isFinite(voice?.durationMs) ? voice.durationMs : 0,
-      time: formatVoiceCardTime(voice?.createdAt || voice?.updatedAt),
-      language: voice?.language || 'zh-CN',
-      status: transcriptStatus,
-      fileId: voice?.fileId ?? null,
-      voiceId: voice?.id ?? null,
-      url: voice?.audioUrl || '',
-      isLocalPreview: false,
-      transcript: voice?.transcript || '',
-      transcriptStatus,
+  if (session?.status === 'failed') {
+    return 'failed'
+  }
+
+  if (session?.status === 'paused') {
+    return 'paused'
+  }
+
+  if (session?.status === 'opened' || session?.status === 'streaming') {
+    return 'processing'
+  }
+
+  return session?.status || 'processing'
+}
+
+function normalizeTranscriptCards(cards = [], fallbackName = '分段') {
+  return cards
+    .filter(Boolean)
+    .sort((left, right) => (
+      Number(left?.segmentIndex || 0) - Number(right?.segmentIndex || 0)
+      || Number(left?.startOffsetMs || 0) - Number(right?.startOffsetMs || 0)
+    ))
+    .map((card, index) => {
+      const segmentIndex = Number(card?.segmentIndex || index + 1)
+      const transcript = String(card?.transcript || card?.segmentTranscript || card?.finalTranscript || '').trim()
+
+      return createTranscriptEntry({
+        avatar: `C${String(segmentIndex).padStart(2, '0')}`,
+        name: `${fallbackName} ${String(segmentIndex).padStart(2, '0')}`,
+        time: card?.startTimeLabel || formatVoiceCardTime(card?.createdAt || card?.updatedAt),
+        text: transcript || '暂无分段正文',
+        active: Boolean(card?.active),
+      })
+    })
+}
+
+function buildVoiceTranscriptGroups({ fileVoice, session } = {}) {
+  const transcriptItems = []
+  const fileTranscript = String(fileVoice?.transcript || '').trim()
+  const sessionTranscript = String(session?.finalTranscript || session?.partialTranscript || '').trim()
+  const sessionCards = Array.isArray(session?.cards) ? session.cards : []
+
+  if (fileTranscript) {
+    transcriptItems.push(createTranscriptEntry({
+      avatar: 'FILE',
+      name: '文件正文',
+      time: formatVoiceCardTime(fileVoice?.createdAt || fileVoice?.updatedAt || session?.finishedAt || session?.startedAt),
+      text: fileTranscript,
+      active: fileVoice?.transcriptStatus === 'processing' || session?.status === 'streaming',
+    }))
+  }
+
+  if (sessionTranscript && sessionTranscript !== fileTranscript) {
+    transcriptItems.push(createTranscriptEntry({
+      avatar: 'SES',
+      name: '会话正文',
+      time: formatVoiceCardTime(session?.finishedAt || session?.updatedAt || session?.startedAt),
+      text: sessionTranscript,
+      active: session?.status === 'streaming' || session?.status === 'opened',
+    }))
+  }
+
+  transcriptItems.push(...normalizeTranscriptCards(sessionCards))
+
+  if (transcriptItems.length === 0) {
+    transcriptItems.push(createTranscriptEntry({
+      avatar: 'REC',
+      name: '实时转写',
+      time: '刚刚',
+      text: getTranscriptStatusLabel(fileVoice?.transcriptStatus || getSessionSummaryStatus(session)),
+      active: false,
+    }))
+  }
+
+  return transcriptItems
+}
+
+function buildVoiceStateFromNote(note = {}) {
+  const voiceNotes = Array.isArray(note?.voiceNote) ? note.voiceNote.filter(Boolean) : []
+  const voiceRealtimeSessions = Array.isArray(note?.voiceRealtimeSessions) ? note.voiceRealtimeSessions.filter(Boolean) : []
+  const sessionById = new Map()
+  let preferredSelectedKey = null
+
+  voiceRealtimeSessions.forEach((session) => {
+    if (session?.sessionId) {
+      sessionById.set(session.sessionId, session)
     }
   })
 
-  const transcriptGroups = voiceNotes.reduce((acc, voice, index) => {
+  const recordings = []
+  const transcriptGroups = {}
+  const usedSessionIds = new Set()
+
+  voiceNotes.forEach((voice, index) => {
     const key = String(index + 1).padStart(2, '0')
-    const transcriptStatus = voice?.transcriptStatus || 'pending'
+    const session = voice?.sessionId ? sessionById.get(voice.sessionId) || null : null
+    if (session?.sessionId) {
+      usedSessionIds.add(session.sessionId)
+    }
 
-    acc[key] = [{
-      avatar: 'REC',
-      name: `Recording ${key}`,
-      time: formatVoiceCardTime(voice?.createdAt || voice?.updatedAt),
-      text: voice?.transcript || getTranscriptStatusLabel(transcriptStatus),
-      active: transcriptStatus === 'completed' || transcriptStatus === 'processing',
-    }]
-    return acc
-  }, {})
+    const transcriptStatus = voice?.transcriptStatus || (voice?.transcript ? 'completed' : getSessionSummaryStatus(session) || 'pending')
 
-  const selectedKey = recordings[0]?.key || null
+    recordings.push({
+      code: `FILE ${key}`,
+      key,
+      title: session?.sessionId ? `语音文件 ${key}` : `语音卡片 ${key}`,
+      duration: getTranscriptStatusLabel(transcriptStatus),
+      durationMs: Number.isFinite(voice?.durationMs) ? voice.durationMs : Number(session?.durationMs) || 0,
+      time: formatVoiceCardTime(voice?.createdAt || voice?.updatedAt || session?.finishedAt || session?.startedAt),
+      language: voice?.language || session?.language || 'zh-CN',
+      status: transcriptStatus,
+      fileId: voice?.fileId ?? null,
+      sessionId: voice?.sessionId ?? session?.sessionId ?? null,
+      voiceId: voice?.id ?? null,
+      url: voice?.audioUrl || '',
+      isLocalPreview: false,
+      transcript: voice?.transcript || session?.finalTranscript || '',
+      transcriptStatus,
+      kind: 'file',
+    })
+
+    transcriptGroups[key] = buildVoiceTranscriptGroups({ fileVoice: voice, session })
+  })
+
+  voiceRealtimeSessions.forEach((session) => {
+    if (!session?.sessionId || usedSessionIds.has(session.sessionId)) {
+      return
+    }
+
+    const hasSessionContent = Boolean(
+      String(session?.finalTranscript || session?.partialTranscript || '').trim()
+      || (Array.isArray(session?.cards) && session.cards.length > 0)
+      || session?.status
+    )
+
+    if (!hasSessionContent) {
+      return
+    }
+
+    const key = String(recordings.length + 1).padStart(2, '0')
+
+    recordings.push({
+      code: `SESSION ${key}`,
+      key,
+      title: `实时会话 ${key}`,
+      duration: getTranscriptStatusLabel(getSessionSummaryStatus(session)),
+      durationMs: Number(session?.receivedBytes) || 0,
+      time: formatVoiceCardTime(session?.startedAt || session?.finishedAt || session?.updatedAt),
+      language: session?.language || 'zh_CN',
+      status: session?.status || 'opened',
+      fileId: session?.fileId ?? null,
+      sessionId: session?.sessionId ?? null,
+      voiceId: session?.id ?? null,
+      url: '',
+      isLocalPreview: false,
+      transcript: String(session?.finalTranscript || session?.partialTranscript || '').trim(),
+      transcriptStatus: getSessionSummaryStatus(session),
+      kind: 'session',
+    })
+
+    transcriptGroups[key] = buildVoiceTranscriptGroups({ session })
+
+    if (!preferredSelectedKey) {
+      const hasCards = Array.isArray(session?.cards) && session.cards.length > 0
+      const hasTranscript = Boolean(String(session?.finalTranscript || session?.partialTranscript || '').trim())
+      const isActiveSession = session?.status === 'streaming' || session?.status === 'opened'
+
+      if (isActiveSession || hasCards || hasTranscript) {
+        preferredSelectedKey = key
+      }
+    }
+  })
+
+  const selectedKey = preferredSelectedKey || recordings[0]?.key || null
 
   return {
     recordings,
     transcriptGroups,
     selectedKey,
     sourceKey: selectedKey || '01',
+  }
+}
+
+function buildVoiceDetailModel(note = {}) {
+  const voiceNotes = Array.isArray(note?.voiceNote) ? note.voiceNote.filter(Boolean) : []
+  const voiceRealtimeSessions = Array.isArray(note?.voiceRealtimeSessions) ? note.voiceRealtimeSessions.filter(Boolean) : []
+
+  const files = voiceNotes.map((voice, index) => {
+    const transcript = String(voice?.transcript || '').trim()
+    const transcriptStatus = voice?.transcriptStatus || (transcript ? 'completed' : 'pending')
+    const timeLabel = formatVoiceCardTime(voice?.createdAt || voice?.updatedAt)
+
+    return {
+      kind: 'file',
+      key: voice?.fileId || voice?.id || `file-${index}`,
+      index: index + 1,
+      fileId: voice?.fileId || '',
+      sessionId: voice?.sessionId || '',
+      language: voice?.language || 'zh-CN',
+      status: transcriptStatus,
+      statusLabel: getTranscriptStatusLabel(transcriptStatus),
+      timeLabel,
+      duration: Number.isFinite(voice?.durationMs) ? voice.durationMs : 0,
+      transcript,
+      transcriptPreview: transcript ? transcript.slice(0, 72) : getTranscriptStatusLabel(transcriptStatus),
+      audioUrl: voice?.audioUrl || '',
+    }
+  })
+
+  const sessions = voiceRealtimeSessions.map((session, index) => {
+    const sessionTranscript = String(session?.finalTranscript || session?.partialTranscript || '').trim()
+    const cards = Array.isArray(session?.cards)
+      ? session.cards
+          .filter(Boolean)
+          .sort((left, right) => (
+            Number(left?.segmentIndex || 0) - Number(right?.segmentIndex || 0)
+            || Number(left?.startOffsetMs || 0) - Number(right?.startOffsetMs || 0)
+          ))
+          .map((card) => ({
+            key: `${session?.sessionId || `session-${index}`}-${card?.segmentIndex ?? 'card'}`,
+            segmentIndex: Number(card?.segmentIndex || 0),
+            transcript: String(card?.transcript || card?.segmentTranscript || '').trim(),
+            startTimeLabel: card?.startTimeLabel || '',
+            startOffsetMs: Number(card?.startOffsetMs || 0),
+          }))
+      : []
+
+    return {
+      kind: 'session',
+      key: session?.sessionId || `session-${index}`,
+      index: index + 1,
+      sessionId: session?.sessionId || '',
+      status: session?.status || 'opened',
+      statusLabel: getTranscriptStatusLabel(getSessionSummaryStatus(session)),
+      language: session?.language || 'zh_CN',
+      audioMimeType: session?.audioMimeType || 'audio/webm',
+      startedAt: session?.startedAt || '',
+      finishedAt: session?.finishedAt || '',
+      timeLabel: formatVoiceCardTime(session?.startedAt || session?.finishedAt || session?.updatedAt),
+      finalTranscript: sessionTranscript,
+      finalTranscriptPreview: sessionTranscript ? sessionTranscript.slice(0, 96) : '暂无最终文本',
+      cards,
+      cardCount: cards.length,
+    }
+  })
+
+  return {
+    files,
+    sessions,
+    fileCount: files.length,
+    sessionCount: sessions.length,
+    cardCount: sessions.reduce((total, session) => total + session.cardCount, 0),
   }
 }
 
@@ -382,6 +645,250 @@ function RecordingCard({ active, code, title, duration, time, language, onClick,
           </svg>
         </button>
       ) : null}
+    </div>
+  )
+}
+
+function VoiceDetailPanel({ note, recordings, selectedRecording, onSelectRecording }) {
+  const detail = buildVoiceDetailModel(note)
+  const recordingKeyByFileId = new Map()
+  const recordingKeyBySessionId = new Map()
+
+  recordings.forEach((item) => {
+    if (item?.fileId) {
+      recordingKeyByFileId.set(item.fileId, item.key)
+    }
+
+    if (item?.sessionId) {
+      recordingKeyBySessionId.set(item.sessionId, item.key)
+    }
+  })
+
+  const resolveRecordingKey = (recording) => {
+    if (!recording) {
+      return null
+    }
+
+    if (recording.kind === 'file' && recording.fileId) {
+      return recordingKeyByFileId.get(recording.fileId) || null
+    }
+
+    if (recording.kind === 'session' && recording.sessionId) {
+      return recordingKeyBySessionId.get(recording.sessionId) || null
+    }
+
+    return null
+  }
+
+  const handleSelect = (recording) => {
+    const key = resolveRecordingKey(recording)
+    if (key) {
+      onSelectRecording?.(key)
+    }
+  }
+
+  if (detail.fileCount === 0 && detail.sessionCount === 0) {
+    return null
+  }
+
+  const sectionCardStyle = {
+    borderRadius: 16,
+    border: '1px solid rgba(226,232,240,0.9)',
+    background: 'rgba(255,255,255,0.96)',
+    boxShadow: '0 10px 20px rgba(15,23,42,0.04)',
+    padding: 12,
+  }
+
+  const itemBaseStyle = (active) => ({
+    width: '100%',
+    textAlign: 'left',
+    border: active ? '1px solid rgba(2,86,210,0.45)' : '1px solid rgba(226,232,240,0.9)',
+    background: active ? 'rgba(2,86,210,0.06)' : 'rgba(248,250,252,0.9)',
+    borderRadius: 14,
+    padding: '10px 12px',
+    cursor: 'pointer',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    boxShadow: active ? '0 10px 20px rgba(2,86,210,0.08)' : 'none',
+  })
+
+  return (
+    <div style={{ padding: '0 16px 14px', flexShrink: 0 }}>
+      <div
+        style={{
+          ...sectionCardStyle,
+          border: '1px solid rgba(191,214,255,0.75)',
+          background: 'linear-gradient(180deg, rgba(247,250,255,0.98), rgba(255,255,255,0.98))',
+          maxHeight: 300,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>详情聚合</div>
+            <div style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>
+              文件 {detail.fileCount} · 会话 {detail.sessionCount} · 卡片 {detail.cardCount}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gap: 12 }}>
+          <section style={sectionCardStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>文件</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>{detail.fileCount} 条</div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 10 }}>
+              {detail.files.length > 0 ? detail.files.map((file) => {
+                const active = selectedRecording === resolveRecordingKey(file)
+                return (
+                  <button
+                    key={file.key}
+                    type="button"
+                    onClick={() => handleSelect(file)}
+                    style={itemBaseStyle(active)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
+                          {file.fileId || `语音文件 ${file.index}`}
+                        </div>
+                        <div style={{ marginTop: 2, fontSize: 12, color: '#64748b' }}>
+                          {file.timeLabel} · {getLanguageLabel(file.language)}
+                        </div>
+                      </div>
+                      <span style={{
+                        flexShrink: 0,
+                        fontSize: 11,
+                        fontWeight: 800,
+                        color: active ? 'var(--primary)' : '#475569',
+                        background: active ? 'rgba(2,86,210,0.10)' : 'rgba(148,163,184,0.12)',
+                        borderRadius: 999,
+                        padding: '3px 8px',
+                      }}>
+                        {file.statusLabel}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, lineHeight: 1.6, color: '#334155' }}>
+                      {file.transcriptPreview || '暂无正文'}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                      {file.sessionId ? `sessionId: ${file.sessionId}` : '未关联会话'}
+                    </div>
+                  </button>
+                )
+              }) : (
+                <div style={{ fontSize: 12, color: '#94a3b8', padding: '4px 0' }}>暂无语音文件</div>
+              )}
+            </div>
+          </section>
+
+          <section style={sectionCardStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>会话</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>{detail.sessionCount} 条</div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 10 }}>
+              {detail.sessions.length > 0 ? detail.sessions.map((session) => {
+                const active = selectedRecording === resolveRecordingKey(session)
+                return (
+                  <div
+                    key={session.key}
+                    style={{
+                      borderRadius: 14,
+                      border: active ? '1px solid rgba(2,86,210,0.45)' : '1px solid rgba(226,232,240,0.9)',
+                      background: active ? 'rgba(2,86,210,0.06)' : 'rgba(248,250,252,0.9)',
+                      boxShadow: active ? '0 10px 20px rgba(2,86,210,0.08)' : 'none',
+                      padding: 12,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleSelect(session)}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        border: 'none',
+                        background: 'transparent',
+                        padding: 0,
+                        cursor: 'pointer',
+                        display: 'grid',
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
+                            {session.sessionId || `实时会话 ${session.index}`}
+                          </div>
+                          <div style={{ marginTop: 2, fontSize: 12, color: '#64748b' }}>
+                            {session.timeLabel} · {getLanguageLabel(session.language)} · {session.audioMimeType}
+                          </div>
+                        </div>
+                        <span style={{
+                          flexShrink: 0,
+                          fontSize: 11,
+                          fontWeight: 800,
+                          color: active ? 'var(--primary)' : '#475569',
+                          background: active ? 'rgba(2,86,210,0.10)' : 'rgba(148,163,184,0.12)',
+                          borderRadius: 999,
+                          padding: '3px 8px',
+                        }}>
+                          {session.statusLabel}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, lineHeight: 1.6, color: '#334155' }}>
+                        {session.finalTranscriptPreview}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                        {session.cardCount} 张卡片
+                        {session.finishedAt ? ` · 结束于 ${formatVoiceCardTime(session.finishedAt)}` : ''}
+                      </div>
+                    </button>
+
+                    {session.cards.length > 0 ? (
+                      <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b' }}>cards</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {session.cards.map((card) => (
+                            <button
+                              key={card.key}
+                              type="button"
+                              onClick={() => handleSelect(session)}
+                              style={{
+                                border: '1px solid rgba(191,214,255,0.9)',
+                                background: 'rgba(255,255,255,0.92)',
+                                borderRadius: 999,
+                                padding: '6px 10px',
+                                fontSize: 11,
+                                color: '#334155',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                              }}
+                              title={card.transcript}
+                            >
+                              <span style={{ fontWeight: 800, color: 'var(--primary)' }}>#{String(card.segmentIndex || 0).padStart(2, '0')}</span>
+                              <span>{card.transcript ? truncateText(card.transcript, 20) : '暂无正文'}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              }) : (
+                <div style={{ fontSize: 12, color: '#94a3b8', padding: '4px 0' }}>暂无实时会话</div>
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
   )
 }
@@ -529,7 +1036,16 @@ function VoiceNoteEditor({
   const realtimeClosingRef = useRef(false)
   const realtimeAbortRef = useRef(false)
   const realtimeCleanupSilentRef = useRef(false)
+  const realtimeReconnectTimerRef = useRef(null)
+  const realtimeReconnectAttemptsRef = useRef(0)
   const realtimeAudioChunksRef = useRef([])
+  const voiceActivityContextRef = useRef(null)
+  const voiceActivitySourceRef = useRef(null)
+  const voiceActivityAnalyserRef = useRef(null)
+  const voiceActivityBufferRef = useRef(null)
+  const voiceActivityTimerRef = useRef(null)
+  const voiceActivitySilenceStartedAtRef = useRef(0)
+  const voiceActivityAutoResumeRef = useRef(false)
   const localPreviewUrlsRef = useRef(new Set())
   const playbackAudioRef = useRef(null)
   const playbackObjectUrlRef = useRef('')
@@ -554,6 +1070,7 @@ function VoiceNoteEditor({
   const selectedRecordingData = recordings.find((item) => item.key === selectedRecording) || null
   const isRecording = recordingState === 'recording'
   const isPaused = recordingState === 'paused'
+  const isInterrupted = recordingState === 'interrupted'
   const isUploading = recordingState === 'uploading'
   const isPlaying = playbackState === 'playing'
   const toggleVoicePanel = onVoicePanelToggle || (() => setLocalVoicePanelVisible((value) => !value))
@@ -633,11 +1150,14 @@ function VoiceNoteEditor({
   }, [autoStartLanguage, autoStartRecordingKey, note?.id])
 
   useEffect(() => {
-    const voiceNotes = Array.isArray(note?.voiceNote) ? note.voiceNote : []
+    const hasVoiceData = (
+      (Array.isArray(note?.voiceNote) && note.voiceNote.length > 0)
+      || (Array.isArray(note?.voiceRealtimeSessions) && note.voiceRealtimeSessions.length > 0)
+    )
     clearRealtimeSession()
     clearLocalPreviewUrls()
 
-    if (voiceNotes.length === 0) {
+    if (!hasVoiceData) {
       setRecordings([])
       setTranscriptGroups({})
       setSelectedRecording(null)
@@ -647,7 +1167,7 @@ function VoiceNoteEditor({
       return
     }
 
-    const nextState = buildVoiceStateFromNoteVoiceNotes(voiceNotes)
+    const nextState = buildVoiceStateFromNote(note)
     setRecordings(nextState.recordings)
     setTranscriptGroups(nextState.transcriptGroups)
     setSelectedRecording((current) => (
@@ -658,7 +1178,7 @@ function VoiceNoteEditor({
     transcriptSourceKeyRef.current = nextState.sourceKey
     sourceRecordingKeyRef.current = nextState.sourceKey
     stopPlayback()
-  }, [note?.id, note?.voiceNote])
+  }, [note?.id, note?.voiceNote, note?.voiceRealtimeSessions])
 
   useEffect(() => {
     return () => {
@@ -748,6 +1268,184 @@ function VoiceNoteEditor({
     localPreviewUrlsRef.current.clear()
   }
 
+  const clearRealtimeReconnectTimer = () => {
+    if (realtimeReconnectTimerRef.current) {
+      window.clearTimeout(realtimeReconnectTimerRef.current)
+      realtimeReconnectTimerRef.current = null
+    }
+    realtimeReconnectAttemptsRef.current = 0
+  }
+
+  const stopVoiceActivityMonitor = () => {
+    if (voiceActivityTimerRef.current) {
+      window.clearTimeout(voiceActivityTimerRef.current)
+      voiceActivityTimerRef.current = null
+    }
+
+    voiceActivitySilenceStartedAtRef.current = 0
+    voiceActivityAutoResumeRef.current = false
+
+    if (voiceActivitySourceRef.current) {
+      try {
+        voiceActivitySourceRef.current.disconnect()
+      } catch {
+        // ignore monitor cleanup errors
+      }
+      voiceActivitySourceRef.current = null
+    }
+
+    if (voiceActivityAnalyserRef.current) {
+      try {
+        voiceActivityAnalyserRef.current.disconnect()
+      } catch {
+        // ignore monitor cleanup errors
+      }
+      voiceActivityAnalyserRef.current = null
+    }
+
+    if (voiceActivityContextRef.current) {
+      void voiceActivityContextRef.current.close().catch(() => {})
+      voiceActivityContextRef.current = null
+    }
+
+    voiceActivityBufferRef.current = null
+  }
+
+  const getRealtimeSilenceThresholdMs = () => {
+    const segmentSilenceMs = Number(realtimeSessionRef.current?.segmentSilenceMs)
+    if (Number.isFinite(segmentSilenceMs) && segmentSilenceMs > 0) {
+      return Math.max(800, Math.min(1200, Math.floor(segmentSilenceMs * 0.8)))
+    }
+
+    return 1200
+  }
+
+  const getRealtimeAudioLevel = () => {
+    const analyser = voiceActivityAnalyserRef.current
+    const buffer = voiceActivityBufferRef.current
+    if (!analyser || !buffer) {
+      return 0
+    }
+
+    analyser.getByteTimeDomainData(buffer)
+
+    let sumSquares = 0
+    for (let index = 0; index < buffer.length; index += 1) {
+      const normalized = (buffer[index] - 128) / 128
+      sumSquares += normalized * normalized
+    }
+
+    return Math.sqrt(sumSquares / buffer.length)
+  }
+
+  const createRealtimePauseSignal = async () => {
+    const sessionId = realtimeSessionIdRef.current
+    const signaled = sendRealtimePayload({ type: 'pause' })
+    if (!signaled && sessionId) {
+      await voiceRealtimeService.pauseVoiceRealtimeSession(sessionId).catch(() => {})
+    }
+  }
+
+  const createRealtimeResumeSignal = async (mimeType = realtimeMimeTypeRef.current) => {
+    const sessionId = realtimeSessionIdRef.current
+    const signaled = sendRealtimePayload({ type: 'resume', mimeType })
+    if (!signaled && sessionId) {
+      await voiceRealtimeService.resumeVoiceRealtimeSession(sessionId).catch(() => {})
+    }
+  }
+
+  const startVoiceActivityMonitor = async (stream) => {
+    stopVoiceActivityMonitor()
+
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextCtor || !stream) {
+      return false
+    }
+
+    try {
+      const context = new AudioContextCtor()
+      const source = context.createMediaStreamSource(stream)
+      const analyser = context.createAnalyser()
+      analyser.fftSize = 2048
+      analyser.smoothingTimeConstant = 0.8
+      source.connect(analyser)
+      await context.resume().catch(() => {})
+
+      voiceActivityContextRef.current = context
+      voiceActivitySourceRef.current = source
+      voiceActivityAnalyserRef.current = analyser
+      voiceActivityBufferRef.current = new Uint8Array(analyser.fftSize)
+
+      const tick = async () => {
+        const recorder = mediaRecorderRef.current
+        if (!recorder || realtimeFinishedRef.current || realtimeClosingRef.current) {
+          return
+        }
+
+        const currentState = recordingStateRef.current
+        if (currentState === 'idle' || currentState === 'uploading' || currentState === 'interrupted') {
+          return
+        }
+
+        const level = getRealtimeAudioLevel()
+        const speaking = level >= 0.02
+        const now = Date.now()
+
+        if (speaking) {
+          voiceActivitySilenceStartedAtRef.current = 0
+
+          if (voiceActivityAutoResumeRef.current) {
+            await resumeRealtimeRecording({ auto: true })
+            return
+          }
+
+          if (currentState === 'recording') {
+            voiceActivityAutoResumeRef.current = false
+          }
+        } else if (currentState === 'recording' && recorder.state === 'recording' && !voiceActivityAutoResumeRef.current) {
+          if (!voiceActivitySilenceStartedAtRef.current) {
+            voiceActivitySilenceStartedAtRef.current = now
+          }
+
+          if (now - voiceActivitySilenceStartedAtRef.current >= getRealtimeSilenceThresholdMs()) {
+            voiceActivityAutoResumeRef.current = true
+            await createRealtimePauseSignal()
+            updateLiveRecordingCard((card) => ({
+              ...card,
+              duration: '转写中',
+            }))
+            return
+          }
+        }
+
+        voiceActivityTimerRef.current = window.setTimeout(() => {
+          void tick()
+        }, 120)
+      }
+
+      voiceActivityTimerRef.current = window.setTimeout(() => {
+        void tick()
+      }, 120)
+      return true
+    } catch {
+      stopVoiceActivityMonitor()
+      return false
+    }
+  }
+
+  const detachRealtimeSocket = () => {
+    const socket = realtimeSocketRef.current
+    if (!socket) {
+      return
+    }
+
+    socket.onopen = null
+    socket.onmessage = null
+    socket.onerror = null
+    socket.onclose = null
+    realtimeSocketRef.current = null
+  }
+
   const createLocalPreviewUrl = () => {
     if (realtimeAudioChunksRef.current.length === 0) {
       return ''
@@ -779,12 +1477,11 @@ function VoiceNoteEditor({
   }
 
   const clearRealtimeSession = () => {
+    clearRealtimeReconnectTimer()
+
     const socket = realtimeSocketRef.current
     if (socket) {
-      socket.onopen = null
-      socket.onmessage = null
-      socket.onerror = null
-      socket.onclose = null
+      detachRealtimeSocket()
       try {
         realtimeClosingRef.current = true
         if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
@@ -810,24 +1507,206 @@ function VoiceNoteEditor({
     realtimeFinishedRef.current = false
     realtimeClosingRef.current = false
     realtimeAudioChunksRef.current = []
+    stopVoiceActivityMonitor()
     setLiveTranscriptText('')
     setLiveTranscriptSegments([])
   }
 
-  const syncVoiceCardsFromNote = (refreshedNote) => {
-    const refreshedVoiceNotes = Array.isArray(refreshedNote?.voiceNote) ? refreshedNote.voiceNote : null
-
-    if (!refreshedVoiceNotes || refreshedVoiceNotes.length === 0) {
+  const markRealtimeInterrupted = (reason = '实时转写连接已断开') => {
+    if (recordingStateRef.current === 'idle') {
       return false
     }
 
-    const nextState = buildVoiceStateFromNoteVoiceNotes(refreshedVoiceNotes)
+    if (mediaRecorderRef.current?.state === 'recording') {
+      accumulatedElapsedRef.current += Date.now() - recordingStartedAtRef.current
+      setRecordingElapsedMs(accumulatedElapsedRef.current)
+      stopElapsedTimer()
+
+      try {
+        mediaRecorderRef.current.pause()
+      } catch {
+        // ignore interruption cleanup errors
+      }
+    }
+
+    detachRealtimeSocket()
+    setRecordingState('interrupted')
+    recordingStateRef.current = 'interrupted'
+    updateLiveRecordingCard((card) => ({
+      ...card,
+      duration: '连接中断',
+      durationMs: accumulatedElapsedRef.current,
+      status: 'paused',
+      transcriptStatus: 'paused',
+    }))
+
+    if (reason) {
+      message.warning(`${reason}，可继续恢复录音`)
+    }
+
+    return true
+  }
+
+  const pauseRealtimeRecording = async ({ auto = false } = {}) => {
+    if (mediaRecorderRef.current?.state !== 'recording') {
+      return false
+    }
+
+    accumulatedElapsedRef.current += Date.now() - recordingStartedAtRef.current
+    setRecordingElapsedMs(accumulatedElapsedRef.current)
+    stopElapsedTimer()
+    voiceActivitySilenceStartedAtRef.current = 0
+    voiceActivityAutoResumeRef.current = auto
+
+    try {
+      await createRealtimePauseSignal()
+    } catch {
+      // ignore pause fallback errors
+    }
+
+    try {
+      mediaRecorderRef.current.pause()
+    } catch {
+      // ignore pause errors
+    }
+
+    setRecordingState('paused')
+    recordingStateRef.current = 'paused'
+    updateLiveRecordingCard((card) => ({
+      ...card,
+      duration: auto ? '静音中' : '已暂停',
+    }))
+
+    return true
+  }
+
+  const resumeRealtimeRecording = async ({ auto = false } = {}) => {
+    const recorder = mediaRecorderRef.current
+    const recorderState = recorder?.state
+    const needsRemoteResume = voiceActivityAutoResumeRef.current
+
+    if (recorderState !== 'paused' && !needsRemoteResume) {
+      return false
+    }
+
+    const sessionId = realtimeSessionIdRef.current
+    const session = await resolveRealtimeSession(realtimeSessionRef.current || sessionId)
+
+    if (!session) {
+      throw new Error('缺少可恢复的实时会话')
+    }
+
+    if (!realtimeSocketRef.current || realtimeSocketRef.current.readyState !== WebSocket.OPEN) {
+      try {
+        await voiceRealtimeService.resumeVoiceRealtimeSession(sessionId).catch(() => {})
+        const resumedSession = await resolveRealtimeSession(session)
+        realtimeSessionRef.current = resumedSession || session
+        await createRealtimeSocketConnection(realtimeSessionRef.current, realtimeMimeTypeRef.current)
+      } catch (error) {
+        message.error(error?.message || '恢复连接失败')
+        markRealtimeInterrupted(error?.message || '恢复连接失败')
+        return false
+      }
+    }
+
+    if (recorderState === 'paused') {
+      recordingStartedAtRef.current = Date.now()
+      try {
+        recorder.resume()
+      } catch {
+        // ignore resume errors
+      }
+    }
+
+    setRecordingState('recording')
+    recordingStateRef.current = 'recording'
+    startElapsedTimer()
+    voiceActivityAutoResumeRef.current = false
+    voiceActivitySilenceStartedAtRef.current = 0
+    void createRealtimeResumeSignal(realtimeMimeTypeRef.current)
+    updateLiveRecordingCard((card) => ({
+      ...card,
+      duration: '转写中',
+    }))
+
+    return true
+  }
+
+  const scheduleRealtimeReconnect = (reason = '实时转写连接已断开') => {
+    if (realtimeFinishedRef.current || realtimeClosingRef.current) {
+      return false
+    }
+
+    if (recordingStateRef.current !== 'recording') {
+      return false
+    }
+
+    if (realtimeReconnectTimerRef.current) {
+      return true
+    }
+
+    const sessionId = realtimeSessionIdRef.current
+    if (!sessionId) {
+      return false
+    }
+
+    const session = realtimeSessionRef.current || {
+      sessionId,
+      websocketPath: `/v1/note/voice-realtime/ws?sessionId=${sessionId}`,
+    }
+
+    const attempt = realtimeReconnectAttemptsRef.current + 1
+    realtimeReconnectAttemptsRef.current = attempt
+
+    const delay = Math.min(1500, 200 * attempt)
+    realtimeReconnectTimerRef.current = window.setTimeout(async () => {
+      realtimeReconnectTimerRef.current = null
+
+      if (realtimeFinishedRef.current || realtimeClosingRef.current || recordingStateRef.current !== 'recording') {
+        return
+      }
+
+      try {
+        detachRealtimeSocket()
+        const resolvedSession = await resolveRealtimeSession(session)
+        if (!resolvedSession) {
+          throw new Error('缺少可恢复的实时会话')
+        }
+        realtimeSessionRef.current = resolvedSession
+        await createRealtimeSocketConnection(resolvedSession, realtimeMimeTypeRef.current)
+        realtimeReconnectAttemptsRef.current = 0
+        updateLiveRecordingCard((card) => ({
+          ...card,
+          duration: '转写中',
+        }))
+      } catch (error) {
+        console.warn('Realtime voice reconnect failed', error)
+        scheduleRealtimeReconnect(reason)
+      }
+    }, delay)
+
+    return true
+  }
+
+  const syncVoiceCardsFromNote = (refreshedNote, preferred = {}) => {
+    const nextState = buildVoiceStateFromNote(refreshedNote || {})
+
+    if (nextState.recordings.length === 0) {
+      return false
+    }
+
     setRecordings(nextState.recordings)
     setTranscriptGroups(nextState.transcriptGroups)
     setSelectedRecording((current) => (
-      current && nextState.recordings.some((item) => item.key === current)
-        ? current
-        : nextState.selectedKey
+      preferred.recordingKey && nextState.recordings.some((item) => item.key === preferred.recordingKey)
+        ? preferred.recordingKey
+        : preferred.fileId && nextState.recordings.some((item) => item.fileId === preferred.fileId)
+          ? nextState.recordings.find((item) => item.fileId === preferred.fileId)?.key
+          : preferred.sessionId && nextState.recordings.some((item) => item.sessionId === preferred.sessionId)
+            ? nextState.recordings.find((item) => item.sessionId === preferred.sessionId)?.key
+            : (current && nextState.recordings.some((item) => item.key === current)
+              ? current
+              : nextState.selectedKey)
     ))
     transcriptSourceKeyRef.current = nextState.sourceKey
     sourceRecordingKeyRef.current = nextState.sourceKey
@@ -835,9 +1714,9 @@ function VoiceNoteEditor({
   }
 
   const registerLiveRecordingCard = (language, title = '') => {
-    const key = String(recordingsRef.current.length + 1).padStart(2, '0')
+    const key = getNextRecordingKey(recordingsRef.current)
     realtimeDraftKeyRef.current = key
-    setRecordings((current) => [createLiveRecordingCard({ key, language, title }), ...current])
+    setRecordings((current) => [createLiveRecordingCard({ key, language, title, sessionId: realtimeSessionIdRef.current }), ...current])
     setSelectedRecording(key)
     setLiveTranscriptText('')
     setLiveTranscriptSegments([])
@@ -964,16 +1843,48 @@ function VoiceNoteEditor({
     }))
   }
 
-  const appendLiveSegment = (text) => {
+  const resolveRealtimeSession = async (sessionOrId) => {
+    const sessionId = typeof sessionOrId === 'string'
+      ? sessionOrId
+      : sessionOrId?.sessionId
+
+    if (!sessionId) {
+      return null
+    }
+
+    try {
+      const latestSession = await voiceRealtimeService.getVoiceRealtimeSession(sessionId)
+      return {
+        ...(typeof sessionOrId === 'object' && sessionOrId ? sessionOrId : {}),
+        ...(latestSession || {}),
+        sessionId,
+      }
+    } catch {
+      return typeof sessionOrId === 'object' && sessionOrId
+        ? sessionOrId
+        : {
+            sessionId,
+            websocketPath: `/v1/note/voice-realtime/ws?sessionId=${sessionId}`,
+          }
+    }
+  }
+
+  const appendLiveSegment = (text, segmentIndex = null) => {
     const normalizedText = String(text || '').trim()
     if (!normalizedText) {
       return
     }
 
+    const resolvedIndex = Number.isFinite(segmentIndex) && segmentIndex > 0
+      ? segmentIndex
+      : liveTranscriptSegmentsRef.current.length + 1
+    const segmentLabel = String(resolvedIndex).padStart(2, '0')
+
     setLiveTranscriptSegments((current) => ([
       ...current,
       createTranscriptEntry({
-        name: '实时转写',
+        avatar: `C${segmentLabel}`,
+        name: `卡片 ${segmentLabel}`,
         time: '刚刚',
         text: normalizedText,
         active: false,
@@ -1065,6 +1976,8 @@ function VoiceNoteEditor({
       realtimeCleanupSilentRef.current = silent
     }
 
+    stopVoiceActivityMonitor()
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
         mediaRecorderRef.current.stop()
@@ -1083,23 +1996,66 @@ function VoiceNoteEditor({
   }
 
   const finalizeRealtimeRecording = async () => {
+    clearRealtimeReconnectTimer()
+    const sessionId = realtimeSessionIdRef.current
+    const audioMimeType = realtimeMimeTypeRef.current || 'audio/webm'
+    const audioBlob = realtimeAudioChunksRef.current.length > 0
+      ? new Blob(realtimeAudioChunksRef.current, { type: audioMimeType })
+      : null
+    let uploadedVoice = null
+
     try {
-      sendRealtimePayload({ type: 'finish' })
+      const finishPromise = waitForRealtimeFinish()
+      const signaled = sendRealtimePayload({ type: 'finish' })
+      if (!signaled && sessionId) {
+        await voiceRealtimeService.finishVoiceRealtimeSession(sessionId).catch(() => {})
+      }
+
       await Promise.race([
-        waitForRealtimeFinish(),
+        finishPromise,
         new Promise((resolve) => window.setTimeout(resolve, 5000)),
       ])
-    } finally {
+
+      if (audioBlob && audioBlob.size > 0 && note?.id) {
+        try {
+          uploadedVoice = await noteService.uploadVoiceFile(note.id, audioBlob)
+        } catch (error) {
+          preserveInterruptedRecordingDraft(error?.message || '音频上传失败')
+          throw error
+        }
+      }
+
+      if (uploadedVoice) {
+        updateLiveRecordingCard((card) => ({
+          ...card,
+          fileId: uploadedVoice.fileId || card.fileId,
+          url: uploadedVoice.url || card.url,
+          duration: uploadedVoice.duration != null ? `${uploadedVoice.duration}s` : card.duration,
+          durationMs: Number.isFinite(uploadedVoice.duration) ? uploadedVoice.duration * 1000 : card.durationMs,
+          status: 'completed',
+          transcriptStatus: 'completed',
+          transcript: liveTranscriptSegmentsRef.current.map((item) => item.text).filter(Boolean).join('\n') || liveTranscriptTextRef.current || card.transcript,
+          sessionId: sessionId || card.sessionId,
+        }))
+      }
+
       try {
         const refreshedNote = await onNoteRefresh?.()
-        const synced = syncVoiceCardsFromNote(refreshedNote)
-        if (!synced) {
-          discardLiveRecordingCard()
+        const synced = syncVoiceCardsFromNote(refreshedNote, {
+          fileId: uploadedVoice?.fileId,
+          sessionId,
+        })
+        if (!synced && !uploadedVoice) {
+          preserveInterruptedRecordingDraft('实时语音已结束，但未能同步到详情')
         }
-      } finally {
-        cleanupRealtimeRecording({ abort: false })
-        resetRecordingSession()
+      } catch (error) {
+        if (!uploadedVoice) {
+          preserveInterruptedRecordingDraft(error?.message || '实时语音已结束，详情刷新失败')
+        }
       }
+    } finally {
+      cleanupRealtimeRecording({ abort: false })
+      resetRecordingSession()
     }
   }
 
@@ -1127,6 +2083,9 @@ function VoiceNoteEditor({
     switch (payload.type) {
       case 'session.ready':
         realtimeSessionRef.current = payload
+        if (Number.isFinite(payload?.segmentSilenceMs)) {
+          realtimeSessionRef.current.segmentSilenceMs = payload.segmentSilenceMs
+        }
         break
       case 'transcript.partial':
         setLiveTranscriptText(String(payload.transcript || payload.finalTranscript || '').trim())
@@ -1138,32 +2097,45 @@ function VoiceNoteEditor({
       case 'transcript.segment': {
         const segmentText = String(payload.segmentTranscript || payload.finalTranscript || payload.transcript || '').trim()
         if (segmentText) {
-          appendLiveSegment(segmentText)
+          appendLiveSegment(segmentText, payload?.segmentIndex)
         }
         setLiveTranscriptText('')
         break
       }
       case 'session.paused':
-        setRecordingState('paused')
-        recordingStateRef.current = 'paused'
-        updateLiveRecordingCard((card) => ({
-          ...card,
-          duration: '已暂停',
-        }))
-        break
-      case 'session.resumed':
-        setRecordingState('recording')
-        recordingStateRef.current = 'recording'
+        voiceActivityAutoResumeRef.current = true
         updateLiveRecordingCard((card) => ({
           ...card,
           duration: '转写中',
         }))
         break
+      case 'session.resumed':
+        voiceActivityAutoResumeRef.current = false
+        voiceActivitySilenceStartedAtRef.current = 0
+        if (mediaRecorderRef.current?.state === 'paused') {
+          recordingStartedAtRef.current = Date.now()
+          try {
+            mediaRecorderRef.current.resume()
+          } catch {
+            // ignore resume errors
+          }
+          setRecordingState('recording')
+          recordingStateRef.current = 'recording'
+          startElapsedTimer()
+          updateLiveRecordingCard((card) => ({
+            ...card,
+            duration: '转写中',
+          }))
+        }
+        break
       case 'session.finished':
         realtimeFinishedRef.current = true
+        clearRealtimeReconnectTimer()
         resolveRealtimeFinish()
         break
+      case 'session.failed':
       case 'session.error':
+        clearRealtimeReconnectTimer()
         message.error(payload.error || '实时转写失败')
         rejectRealtimeFinish(new Error(payload.error || '实时转写失败'))
         break
@@ -1198,22 +2170,16 @@ function VoiceNoteEditor({
 
       socket.onerror = () => {
         const error = new Error('实时转写连接失败')
-        if (!realtimeFinishedRef.current && !realtimeClosingRef.current && recordingStateRef.current !== 'idle') {
-          preserveInterruptedRecordingDraft(error.message)
-          message.error(error.message)
-          cleanupRealtimeRecording({ abort: true, silent: true })
-          resetRecordingSession()
+        if (!realtimeFinishedRef.current && !realtimeClosingRef.current && recordingStateRef.current === 'recording') {
+          scheduleRealtimeReconnect(error.message)
         }
         reject(error)
       }
 
       socket.onclose = () => {
-        if (!realtimeFinishedRef.current && !realtimeClosingRef.current && recordingStateRef.current !== 'idle') {
+        if (!realtimeFinishedRef.current && !realtimeClosingRef.current && recordingStateRef.current === 'recording') {
           const error = new Error('实时转写连接已断开')
-          preserveInterruptedRecordingDraft(error.message)
-          message.error(error.message)
-          cleanupRealtimeRecording({ abort: true, silent: true })
-          resetRecordingSession()
+          scheduleRealtimeReconnect(error.message)
           reject(error)
         }
       }
@@ -1444,10 +2410,9 @@ function VoiceNoteEditor({
       await noteService.deleteVoiceFile(note.id, card.fileId)
 
       const refreshedNote = await onNoteRefresh?.()
-      const refreshedVoiceNotes = Array.isArray(refreshedNote?.voiceNote) ? refreshedNote.voiceNote : null
 
-      if (refreshedVoiceNotes) {
-        const nextState = buildVoiceStateFromNoteVoiceNotes(refreshedVoiceNotes)
+      if (refreshedNote) {
+        const nextState = buildVoiceStateFromNote(refreshedNote)
         setRecordings(nextState.recordings)
         setTranscriptGroups(nextState.transcriptGroups)
         setSelectedRecording((current) => (
@@ -1538,17 +2503,24 @@ function VoiceNoteEditor({
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
       const recordingMimeType = recorder.mimeType || mimeType || 'audio/webm'
 
-      await createRealtimeSocketConnection(session, recordingMimeType)
+      const resolvedSession = await resolveRealtimeSession(session)
+      if (!resolvedSession?.sessionId) {
+        throw new Error('创建实时语音会话失败')
+      }
+
+      await createRealtimeSocketConnection(resolvedSession, recordingMimeType)
 
       realtimeAbortRef.current = false
       realtimeCleanupSilentRef.current = false
-      realtimeSessionRef.current = session
-      realtimeSessionIdRef.current = sessionId
+      realtimeSessionRef.current = resolvedSession
+      realtimeSessionIdRef.current = resolvedSession.sessionId
       realtimeMimeTypeRef.current = recordingMimeType
       realtimePendingChunksRef.current = []
       realtimeAudioChunksRef.current = []
       realtimeFinishedRef.current = false
       realtimeDraftKeyRef.current = null
+      voiceActivityAutoResumeRef.current = false
+      voiceActivitySilenceStartedAtRef.current = 0
       setLiveTranscriptText('')
       setLiveTranscriptSegments([])
 
@@ -1593,14 +2565,14 @@ function VoiceNoteEditor({
             await finalizeRealtimeRecording()
           } catch (error) {
             message.error(error?.message || '实时转写处理失败')
-            discardLiveRecordingCard()
             cleanupRealtimeRecording({ abort: false })
             resetRecordingSession()
           }
         })()
       }
 
-      recorder.start(250)
+      recorder.start(500)
+      void startVoiceActivityMonitor(stream)
       message.success(`已开始${getLanguageLabel(language)}实时转写`)
     } catch (error) {
       discardLiveRecordingCard()
@@ -1621,38 +2593,12 @@ function VoiceNoteEditor({
   }
 
   const handlePauseRecording = () => {
-    if (mediaRecorderRef.current?.state !== 'recording') {
-      return
-    }
-
-    accumulatedElapsedRef.current += Date.now() - recordingStartedAtRef.current
-    setRecordingElapsedMs(accumulatedElapsedRef.current)
-    stopElapsedTimer()
-    mediaRecorderRef.current.pause()
-    setRecordingState('paused')
-    recordingStateRef.current = 'paused'
-    sendRealtimePayload({ type: 'pause' })
-    updateLiveRecordingCard((card) => ({
-      ...card,
-      duration: '已暂停',
-    }))
+    voiceActivityAutoResumeRef.current = false
+    void pauseRealtimeRecording({ auto: false })
   }
 
-  const handleResumeRecording = () => {
-    if (mediaRecorderRef.current?.state !== 'paused') {
-      return
-    }
-
-    recordingStartedAtRef.current = Date.now()
-    mediaRecorderRef.current.resume()
-    setRecordingState('recording')
-    recordingStateRef.current = 'recording'
-    startElapsedTimer()
-    sendRealtimePayload({ type: 'resume', mimeType: realtimeMimeTypeRef.current })
-    updateLiveRecordingCard((card) => ({
-      ...card,
-      duration: '转写中',
-    }))
+  const handleResumeRecording = async () => {
+    await resumeRealtimeRecording({ auto: false })
   }
 
   const handleStopRecording = () => {
@@ -1957,7 +2903,11 @@ function VoiceNoteEditor({
                     {isUploading ? <span>正在整理语音卡片</span> : null}
                   </div>
                   <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.7, color: '#334155', minHeight: 24 }}>
-                    {liveTranscriptText || (isPaused ? '当前会话已暂停，等待继续录音。' : '正在识别语音内容...')}
+                    {liveTranscriptText || (isInterrupted
+                      ? '连接暂时中断，稍后可以继续录音。'
+                      : isPaused
+                        ? '当前会话已暂停，等待继续录音。'
+                        : '正在识别语音内容...')}
                   </div>
                 </div>
               ) : null}

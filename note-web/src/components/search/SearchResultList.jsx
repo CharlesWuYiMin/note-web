@@ -17,6 +17,10 @@ function hasVoiceRecords(note) {
     return true
   }
 
+  if (Array.isArray(note.voiceRealtimeSessions) && note.voiceRealtimeSessions.length > 0) {
+    return true
+  }
+
   if (Number(note.voiceNumber) > 0) {
     return true
   }

@@ -16,6 +16,13 @@ const locationMock = { pathname: '/cloudnote/recent/note-1' }
 const paramsMock = { id: 'note-1' }
 
 const noteState = {
+  notes: [{
+    id: 'note-1',
+    title: '测试笔记',
+    type: 'text',
+    isStarred: false,
+    content: '正文',
+  }],
   currentNote: {
     id: 'note-1',
     title: '测试笔记',
@@ -28,7 +35,7 @@ const noteState = {
 
 vi.mock('@/hooks/useNote', () => ({
   default: () => ({
-    notes: [],
+    notes: noteState.notes,
     currentNote: noteState.currentNote,
     starredNotes: [],
     isLoading: noteState.isLoading,
@@ -80,6 +87,7 @@ describe('EditorWorkspace', () => {
       isStarred: false,
       content: '正文',
     }
+    noteState.notes = [noteState.currentNote]
     paramsMock.id = 'note-1'
     locationMock.pathname = '/cloudnote/recent/note-1'
     locationMock.state = undefined
@@ -161,6 +169,7 @@ describe('EditorWorkspace', () => {
     paramsMock.id = undefined
     locationMock.pathname = '/cloudnote/recent'
     noteState.currentNote = null
+    noteState.notes = []
     noteState.isLoading = false
 
     render(<EditorWorkspace />)
@@ -169,6 +178,26 @@ describe('EditorWorkspace', () => {
     expect(screen.getByText('当前还没有可打开的笔记，创建一条新的内容后会显示在这里。')).toBeInTheDocument()
     expect(screen.queryByTestId('editor-factory')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '收藏' })).not.toBeInTheDocument()
+  })
+
+  it('shows the notebook empty hint instead of the editor when the notebook list is empty', () => {
+    paramsMock.id = 'note-1'
+    locationMock.pathname = '/cloudnote/notebooks/note-1'
+    noteState.currentNote = {
+      id: 'note-1',
+      title: '测试笔记',
+      type: 'text',
+      isStarred: false,
+      content: '正文',
+    }
+    noteState.notes = []
+    noteState.isLoading = false
+
+    render(<EditorWorkspace />)
+
+    expect(screen.getByText('笔记本')).toBeInTheDocument()
+    expect(screen.getByText('当前分类下还没有可打开的笔记。')).toBeInTheDocument()
+    expect(screen.queryByTestId('editor-factory')).not.toBeInTheDocument()
   })
 
   it('requests fullscreen when clicking the fullscreen button', async () => {

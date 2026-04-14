@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { mockPost } = vi.hoisted(() => ({
+const { mockPost, mockGet } = vi.hoisted(() => ({
   mockPost: vi.fn(),
+  mockGet: vi.fn(),
 }))
 
 vi.mock('@/utils/request', () => ({
   default: {
     post: mockPost,
+    get: mockGet,
   },
 }))
 
@@ -65,5 +67,20 @@ describe('voiceRealtimeService', () => {
     expect(parsed.searchParams.get('userId')).toBe('user-1')
     expect(parsed.searchParams.get('token')).toBe('token-1')
     expect(parsed.searchParams.get('mimeType')).toBe('audio/webm')
+  })
+
+  it('loads and updates realtime sessions through HTTP endpoints', async () => {
+    mockGet.mockResolvedValue({ sessionId: 'session-1' })
+    mockPost.mockResolvedValue({ ok: true })
+
+    await expect(voiceRealtimeService.getVoiceRealtimeSession('session-1')).resolves.toEqual({ sessionId: 'session-1' })
+    await expect(voiceRealtimeService.pauseVoiceRealtimeSession('session-1')).resolves.toEqual({ ok: true })
+    await expect(voiceRealtimeService.resumeVoiceRealtimeSession('session-1')).resolves.toEqual({ ok: true })
+    await expect(voiceRealtimeService.finishVoiceRealtimeSession('session-1')).resolves.toEqual({ ok: true })
+
+    expect(mockGet).toHaveBeenCalledWith('/voice-realtime/sessions/session-1')
+    expect(mockPost).toHaveBeenNthCalledWith(1, '/voice-realtime/sessions/session-1/pause')
+    expect(mockPost).toHaveBeenNthCalledWith(2, '/voice-realtime/sessions/session-1/resume')
+    expect(mockPost).toHaveBeenNthCalledWith(3, '/voice-realtime/sessions/session-1/finish')
   })
 })

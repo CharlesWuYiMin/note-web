@@ -38,8 +38,15 @@ class NoteService {
     return extractPayload(response)
   }
 
-  getNoteById(id) {
-    return request.get(`/notes/${id}`)
+  getNoteById(id, params = {}) {
+    const normalizedParams = {
+      withContent: true,
+      ...params,
+    }
+
+    return request.get(`/notes/${id}`, {
+      params: normalizedParams,
+    })
   }
 
   async createNote(data) {
@@ -49,10 +56,11 @@ class NoteService {
 
   async uploadVoiceFile(noteId, file) {
     const formData = new FormData()
-    formData.append('noteId', noteId)
     formData.append('file', file)
 
-    const response = await request.post('/voice-notes/upload', formData)
+    const response = await request.post('/voice-notes/upload', formData, {
+      params: { noteId },
+    })
     return extractPayload(response)
   }
 
