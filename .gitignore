@@ -1,0 +1,13 @@
+note-web/node_modules/
+note-web/dist/
+note-web/build/
+note-web/coverage/
+note-web/.vite/
+note-web/*.log
+note-web/.vite-dev*.log
+idaas-login/node_modules/
+idaas-login/dist/
+idaas-login/build/
+idaas-login/coverage/
+idaas-login/.vite/
+idaas-login/*.log

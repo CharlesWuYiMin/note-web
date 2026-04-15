@@ -1,0 +1,61 @@
+import useNoteStore from '@/store/useNoteStore'
+
+export function useNote() {
+  const {
+    notes,
+    currentNote,
+    starredNotes,
+    starredNotesPagination,
+    myShares,
+    deletedNotes,
+    isLoading,
+    isStarredNotesLoadingMore,
+    error,
+    fetchNotes,
+    loadNoteById,
+    fetchStarredNotes,
+    loadMoreStarredNotes,
+    fetchMyShares,
+    fetchDeletedNotes,
+    setCurrentNote,
+    createNote,
+    updateName,
+    updateContent,
+    deleteNote,
+    restoreNote,
+    permanentDeleteNote,
+    clearRecycleBin,
+    toggleStar,
+    clearError,
+  } = useNoteStore()
+
+  return {
+    notes,
+    currentNote,
+    starredNotes,
+    starredNotesPagination,
+    myShares,
+    deletedNotes,
+    isLoading,
+    isStarredNotesLoadingMore,
+    error,
+    fetchNotes,
+    loadNoteById,
+    fetchStarredNotes,
+    loadMoreStarredNotes,
+    fetchMyShares,
+    fetchDeletedNotes,
+    setCurrentNote,
+    createNote,
+    updateName,
+    updateContent,
+    deleteNote,
+    restoreNote,
+    permanentDeleteNote,
+    clearRecycleBin,
+    toggleStar,
+    clearError,
+  }
+}
+
+export default useNote
