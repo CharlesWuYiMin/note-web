@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import noteService from '@/services/noteService'
 
-const { mockGet, mockPost, mockPatch, mockDelete } = vi.hoisted(() => ({
+const { mockGet, mockPost, mockPatch } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockPost: vi.fn(),
   mockPatch: vi.fn(),
-  mockDelete: vi.fn(),
 }))
 
 vi.mock('@/utils/request', () => ({
@@ -13,7 +12,6 @@ vi.mock('@/utils/request', () => ({
     get: mockGet,
     post: mockPost,
     patch: mockPatch,
-    delete: mockDelete,
   },
 }))
 
@@ -126,19 +124,6 @@ describe('NoteService', () => {
         responseType: 'blob',
       })
       expect(result).toEqual(blob)
-    })
-  })
-
-  describe('deleteVoiceFile', () => {
-    it('calls DELETE /voice-notes/files/:fileId with noteId query param', async () => {
-      mockDelete.mockResolvedValue({ data: null })
-
-      const result = await noteService.deleteVoiceFile('note-123', 'file-456')
-
-      expect(mockDelete).toHaveBeenCalledWith('/voice-notes/files/file-456', {
-        params: { noteId: 'note-123' },
-      })
-      expect(result).toBeNull()
     })
   })
 

@@ -21,7 +21,7 @@ function Header({
   const { changeLanguage, isChinese } = useLanguage()
   const [profileOpen, setProfileOpen] = useState(false)
   const navigate = useNavigate()
-  const userName = user?.name || user?.nickname || '云笔记用户'
+  const userName = user?.name || user?.nickname || t('common.defaultUser', { defaultValue: '云笔记用户' })
   const userAvatar = user?.avatar || user?.avatarUrl || user?.picture || null
 
   return (
@@ -156,8 +156,8 @@ function Header({
                     value={isChinese ? 'zh' : 'en'}
                     onChange={(val) => changeLanguage(val === 'zh' ? 'zh-CN' : 'en-US')}
                     options={[
-                      { label: '中文', value: 'zh' },
-                      { label: 'EN', value: 'en' },
+                      { label: t('settings.languageOptionZh', { defaultValue: '中文' }), value: 'zh' },
+                      { label: t('settings.languageOptionEn', { defaultValue: 'EN' }), value: 'en' },
                     ]}
                   />
                 </div>
@@ -181,7 +181,7 @@ function Header({
                   onClick={logout}
                   style={{ textAlign: 'left', height: 40 }}
                 >
-                  {t('auth.logout', { defaultValue: '退出登录' })}
+                  {t('nav.logout', { defaultValue: '退出登录' })}
                 </Button>
               </div>
             </div>

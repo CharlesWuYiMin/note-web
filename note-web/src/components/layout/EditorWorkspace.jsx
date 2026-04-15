@@ -6,7 +6,6 @@ import { message } from 'antd'
 import {
   DeleteOutlined,
   ExpandOutlined,
-  HistoryOutlined,
   MoreOutlined,
   RollbackOutlined,
   ShareAltOutlined,
@@ -580,15 +579,7 @@ function EditorWorkspace() {
     setForcedVoiceEditorNoteId(noteId || null)
     setVoicePanelVisible(true)
     setVoiceAutoStartToken((token) => (typeof token === 'number' ? token + 1 : 1))
-    message.success('已开启语音转录')
-  }
-
-  const handleOpenHistoryPanel = () => {
-    if (!noteId) {
-      return
-    }
-
-    setHistoryPanelOpen(true)
+    message.success(t('voice.startedRealtime', { defaultValue: '已开启语音转录' }))
   }
 
   if (showSectionLoadingState) {
@@ -678,7 +669,9 @@ function EditorWorkspace() {
               {showVoiceTrigger ? (
                 <Button
                   type="text"
-                  aria-label={showVoiceEditor ? '语音记录' : '开启语音转录'}
+                  aria-label={showVoiceEditor
+                    ? t('voice.recordsTag', { defaultValue: '语音记录' })
+                    : t('voice.openTranscription', { defaultValue: '开启语音转录' })}
                   icon={<SoundOutlined style={{ fontSize: 9 }} />}
                   onClick={handleVoiceTriggerClick}
                   style={{
@@ -699,7 +692,7 @@ function EditorWorkspace() {
                     flexShrink: 0,
                   }}
                 >
-                  语音记录
+                  {t('voice.recordsTag', { defaultValue: '语音记录' })}
                 </Button>
               ) : null}
             </div>
@@ -720,13 +713,6 @@ function EditorWorkspace() {
               : t('note.fullscreen', { defaultValue: '全屏' })}
             icon={isFullscreen ? <CompressOutlined /> : <ExpandOutlined />}
             onClick={handleToggleFullscreen}
-          />
-          <ToolbarIconButton
-            title={t('history.versionHistory', { defaultValue: '历史版本' })}
-            icon={<HistoryOutlined />}
-            onClick={handleOpenHistoryPanel}
-            active={historyPanelOpen}
-            disabled={!noteId}
           />
           <ToolbarIconButton
             title={t('note.share', { defaultValue: '分享' })}
@@ -862,7 +848,7 @@ function EditorWorkspace() {
                   fontSize: 14,
                 }}
               >
-                正在加载笔记...
+                {t('note.loading', { defaultValue: '正在加载笔记...' })}
               </div>
             ) : null}
           </div>

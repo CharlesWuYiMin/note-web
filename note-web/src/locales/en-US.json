@@ -1,1 +1,283 @@
-{"common": {"appName": "Cloud Notes", "loading": "Loading...", "confirm": "Confirm", "cancel": "Cancel", "save": "Save", "delete": "Delete", "edit": "Edit", "create": "Create", "search": "Search", "back": "Back", "submit": "Submit", "close": "Close", "success": "Operation successful", "error": "Operation failed", "warning": "Warning", "info": "Info"}, "login": {"title": "Login to Cloud Notes", "username": "Username", "password": "Password", "loginBtn": "Login", "register": "Register Account", "forgotPassword": "Forgot Password?", "rememberMe": "Remember me"}, "notebook": {"title": "Notebook Management", "createNotebook": "Create Notebook", "editNotebook": "Edit Notebook", "deleteNotebook": "Delete Notebook", "notebookName": "Notebook Name", "description": "Description", "createTime": "Created Time", "updateTime": "Updated Time", "noteCount": "Notes Count", "empty": "No notebooks yet", "confirmDelete": "Are you sure you want to delete this notebook? This action cannot be undone.", "nameRequired": "Please enter a notebook name", "maxLength": "Notebook name cannot exceed 50 characters"}, "note": {"title": "My Notes", "recentNotes": "Recent Notes", "allNotes": "All Notes", "createNote": "New Note", "saveNote": "Save Note", "deleteNote": "Delete Note", "noteTitle": "Note Title", "noteContent": "Note Content", "lastEdit": "Last Edited", "empty": "No notes yet", "unsavedChanges": "You have unsaved changes. Are you sure you want to leave?", "confirmDelete": "Are you sure you want to delete this note? It can be recovered from the Recycle Bin.", "titleRequired": "Please enter a note title"}, "editor": {"bold": "Bold", "italic": "Italic", "underline": "Underline", "strikethrough": "Strikethrough", "heading1": "Heading 1", "heading2": "Heading 2", "heading3": "Heading 3", "unorderedList": "Unordered List", "orderedList": "Ordered List", "checkList": "Checklist", "quote": "Quote", "code": "Code Block", "link": "Link", "image": "Image", "table": "Table", "divider": "Divider", "undo": "Undo", "redo": "Redo"}, "share": {"title": "Share Note", "shareLink": "Share Link", "copyLink": "Copy Link", "generateLink": "Generate Link", "validityPeriod": "Validity Period", "oneDay": "1 Day", "sevenDays": "7 Days", "thirtyDays": "30 Days", "permanent": "Permanent", "permission": "Permission Settings", "canView": "Can View", "canEdit": "Can Edit", "cancelShare": "Cancel Share", "shareSuccess": "Shared successfully", "copySuccess": "Link copied to clipboard"}, "history": {"title": "History", "versionHistory": "Version History", "currentVersion": "Current Version", "restore": "Restore this version", "compare": "Compare differences", "versionTime": "Version Time", "versionAuthor": "Modified by", "noHistory": "No history available", "confirmRestore": "Are you sure you want to restore to this version? Current content will be overwritten.", "restoreSuccess": "Restored successfully"}, "recycleBin": {"title": "Recycle Bin", "empty": "Recycle bin is empty", "clearAll": "Empty Recycle Bin", "restore": "Restore", "permanentDelete": "Permanently Delete", "confirmClear": "Are you sure you want to empty the recycle bin? This action cannot be undone.", "confirmDelete": "Are you sure you want to permanently delete? This action cannot be undone.", "restoreSuccess": "Restored successfully", "clearSuccess": "Recycle bin emptied"}, "search": {"placeholder": "Search notes...", "resultCount": "Found {count} results", "noResult": "No results found", "searchIn": "Search in", "allNotes": "All Notes", "currentNotebook": "Current Notebook", "recentSearches": "Recent Searches", "clearHistory": "Clear History"}, "aiAssistant": {"title": "AI Assistant", "placeholder": "Enter your question...", "send": "Send", "generating": "Generating...", "features": {"summarize": "Summarize key points", "translate": "Translate text", "expand": "Expand content", "correct": "Correct errors", "format": "Format optimization"}}, "nav": {"home": "Home", "notes": "Notes", "notebooks": "Notebooks", "recent": "Recent", "shared": "Shared", "trash": "Trash", "settings": "Settings", "logout": "Logout"}}
+﻿{
+  "common": {
+    "appName": "Cloud Notes",
+    "brandName": "WeLink Cloud Notes",
+    "defaultUser": "Cloud Notes User",
+    "loading": "Loading...",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "back": "Back",
+    "submit": "Submit",
+    "close": "Close",
+    "success": "Operation successful",
+    "error": "Operation failed",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "login": {
+    "title": "Login to Cloud Notes",
+    "username": "Username",
+    "password": "Password",
+    "loginBtn": "Login",
+    "register": "Register Account",
+    "forgotPassword": "Forgot Password?",
+    "rememberMe": "Remember me"
+  },
+  "notebook": {
+    "title": "Notebook Management",
+    "createNotebook": "Create Notebook",
+    "editNotebook": "Edit Notebook",
+    "deleteNotebook": "Delete Notebook",
+    "notebookName": "Notebook Name",
+    "description": "Description",
+    "createTime": "Created Time",
+    "updateTime": "Updated Time",
+    "noteCount": "Notes Count",
+    "empty": "No notebooks yet",
+    "confirmDelete": "Are you sure you want to delete this notebook? This action cannot be undone.",
+    "confirmDeleteNamed": "Delete \"{{name}}\"? It can be restored from the recycle bin afterward.",
+    "nameRequired": "Please enter a notebook name",
+    "maxLength": "Notebook name cannot exceed 50 characters",
+    "newNotebookName": "New Notebook",
+    "deleteSuccess": "Deleted successfully",
+    "deleteError": "Delete failed. Please try again later.",
+    "collapse": "Collapse notebooks",
+    "expand": "Expand notebooks",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "moreActions": "More notebook actions: {{name}}",
+    "defaults": {
+      "myNotes": "My Notes",
+      "meetingNotes": "Meeting Notes"
+    }
+  },
+  "note": {
+    "title": "My Notes",
+    "recentNotes": "Recent Notes",
+    "allNotes": "All Notes",
+    "createNote": "New Note",
+    "saveNote": "Save Note",
+    "deleteNote": "Delete Note",
+    "noteTitle": "Note Title",
+    "noteContent": "Note Content",
+    "lastEdit": "Last Edited",
+    "empty": "No notes yet",
+    "unsavedChanges": "You have unsaved changes. Are you sure you want to leave?",
+    "confirmDelete": "Are you sure you want to delete this note? It can be recovered from the Recycle Bin.",
+    "titleRequired": "Please enter a note title",
+    "untitled": "Untitled Note",
+    "loading": "Loading note..."
+  },
+  "editor": {
+    "bold": "Bold",
+    "italic": "Italic",
+    "underline": "Underline",
+    "strikethrough": "Strikethrough",
+    "heading1": "Heading 1",
+    "heading2": "Heading 2",
+    "heading3": "Heading 3",
+    "unorderedList": "Unordered List",
+    "orderedList": "Ordered List",
+    "checkList": "Checklist",
+    "quote": "Quote",
+    "code": "Code Block",
+    "link": "Link",
+    "image": "Image",
+    "table": "Table",
+    "divider": "Divider",
+    "undo": "Undo",
+    "redo": "Redo"
+  },
+  "share": {
+    "title": "Share",
+    "shareLink": "Share Link",
+    "copyLink": "Copy Link",
+    "generateLink": "Generate Link",
+    "validityPeriod": "Validity Period",
+    "oneDay": "1 Day",
+    "sevenDays": "7 Days",
+    "thirtyDays": "30 Days",
+    "permanent": "Permanent",
+    "permission": "Permission Settings",
+    "canView": "Can View",
+    "canEdit": "Can Edit",
+    "cancelShare": "Cancel Share",
+    "shareSuccess": "Shared successfully",
+    "copySuccess": "Link copied to clipboard"
+  },
+  "history": {
+    "title": "History",
+    "versionHistory": "Version History",
+    "currentVersion": "Current Version",
+    "restore": "Restore this version",
+    "compare": "Compare differences",
+    "versionTime": "Version Time",
+    "versionAuthor": "Modified by",
+    "noHistory": "No history available",
+    "confirmRestore": "Are you sure you want to restore to this version? Current content will be overwritten.",
+    "restoreSuccess": "Restored successfully"
+  },
+  "recycleBin": {
+    "title": "Recycle Bin",
+    "empty": "Recycle bin is empty",
+    "clearAll": "Empty Recycle Bin",
+    "restore": "Restore",
+    "permanentDelete": "Permanently Delete",
+    "confirmClear": "Are you sure you want to empty the recycle bin? This action cannot be undone.",
+    "confirmDelete": "Are you sure you want to permanently delete? This action cannot be undone.",
+    "restoreSuccess": "Restored successfully",
+    "clearSuccess": "Recycle bin emptied"
+  },
+  "search": {
+    "placeholder": "Search notes...",
+    "resultCount": "Found {count} results",
+    "noResult": "No results found",
+    "searchIn": "Search in",
+    "allNotes": "All Notes",
+    "currentNotebook": "Current Notebook",
+    "recentSearches": "Recent Searches",
+    "clearHistory": "Clear History"
+  },
+  "aiAssistant": {
+    "title": "AI Assistant",
+    "placeholder": "Enter your question...",
+    "send": "Send",
+    "generating": "Generating...",
+    "features": {
+      "summarize": "Summarize key points",
+      "translate": "Translate text",
+      "expand": "Expand content",
+      "correct": "Correct errors",
+      "format": "Format optimization"
+    }
+  },
+  "ai": {
+    "title": "AI Assistant",
+    "guide": "AI Guide",
+    "basedOn": "Based on",
+    "slogan": "Let ideas flow naturally and creativity grow freely.",
+    "subSlogan": "Generate, polish, and summarize in one click to make writing easier.",
+    "restoringConversation": "Restoring previous conversation...",
+    "generating": "Generating...",
+    "inputPlaceholder": "Type your request and send. Current mode: {{mode}}",
+    "scene": {
+      "extraction": {
+        "title": "Insight Extraction",
+        "label": "Insights",
+        "description": "Extract key viewpoints and follow-up actions",
+        "defaultPrompt": "Please extract the key viewpoints, conclusions, and follow-up actions from the current voice note."
+      },
+      "summarize": {
+        "title": "Article Summary",
+        "label": "Summary",
+        "description": "Extract the core viewpoints and conclusions",
+        "defaultPrompt": "Please summarize the core viewpoints and conclusions of this note."
+      },
+      "rewrite": {
+        "title": "Polish Writing",
+        "label": "Polish",
+        "description": "Refine wording to sound more professional",
+        "defaultPrompt": "Please polish this note to make it sound more professional and natural."
+      },
+      "expand": {
+        "title": "Expand Content",
+        "label": "Expand",
+        "description": "Enrich details based on the current content",
+        "defaultPrompt": "Please continue expanding this note and add more details."
+      }
+    },
+    "error": {
+      "openNoteFirst": "Open a note before using AI Assistant.",
+      "promptRequired": "Enter an AI request first.",
+      "requestFailed": "AI request failed. Please try again later.",
+      "loadConversation": "Failed to load AI conversation."
+    }
+  },
+  "nav": {
+    "home": "Home",
+    "notes": "Notes",
+    "notebooks": "Notebooks",
+    "recent": "Recent",
+    "shared": "Shared",
+    "trash": "Trash",
+    "settings": "Settings",
+    "logout": "Log Out"
+  },
+  "settings": {
+    "language": "Language",
+    "languageOptionZh": "ZH",
+    "languageOptionEn": "EN",
+    "accountManagement": "Account Management"
+  },
+  "sidebar": {
+    "new": "New",
+    "recentNotes": "Recent Notes",
+    "starredNotes": "Starred Notes",
+    "myShares": "My Shares",
+    "recycleBin": "Recycle Bin",
+    "create": {
+      "textNote": "Text Note",
+      "voiceNote": "Voice Note",
+      "handwrittenNote": "Handwritten Note",
+      "outlineNote": "Outline Note",
+      "newTextNote": "New Text Note",
+      "newVoiceNote": "New Voice Note",
+      "newHandwrittenNote": "New Handwritten Note",
+      "newOutlineNote": "New Outline Note"
+    }
+  },
+  "voice": {
+    "recordsTag": "Voice Record",
+    "openTranscription": "Start Voice Transcription",
+    "startedRealtime": "Voice transcription started",
+    "realtimeStartedWithLanguage": "{{language}} live transcription started",
+    "transcriptContent": "Transcript",
+    "viewpointExtraction": "Insight Extraction",
+    "emptyCards": "No voice cards yet. Start recording to create one.",
+    "extracting": "Extracting insights...",
+    "extractionEmpty": "Click \"Insight Extraction\" and the extracted result will appear here.",
+    "extractionError": "Insight extraction failed. Please try again later.",
+    "livePreview": "Live Preview",
+    "liveRecognizing": "Recognizing live",
+    "liveRecognizingHint": "Audio is being streamed to the transcription engine in real time.",
+    "pauseRecording": "Pause recording",
+    "resumeRecording": "Resume recording",
+    "stopRecording": "Stop recording",
+    "justNow": "Just now",
+    "processing": "Processing",
+    "processingHint": "Finalizing the live session and refreshing voice cards.",
+    "ready": "Ready",
+    "readyHint": "Click the button in the lower right corner to start live transcription.",
+    "interrupted": "Connection interrupted",
+    "interruptedHint": "The connection was interrupted temporarily. Recording can continue after recovery.",
+    "pausedHint": "The current session is paused and waiting to resume recording.",
+    "realtimeTitle": "{{language}} Live Transcription",
+    "realtimeSessionLabel": "Live Session {{index}}",
+    "fileLabel": "Voice File {{index}}",
+    "cardFileLabel": "Voice Card {{index}}",
+    "cardLabel": "Card {{index}}",
+    "segment": "Segment",
+    "promptTitle": "Enable Voice Transcription?",
+    "promptConfirm": "Enable Voice Transcription",
+    "promptNoticeTitle": "Notes",
+    "promptNoticeBody": "Voice recording quality depends on the recording environment and audio hardware. For better transcription results, use wired earphones when recording.",
+    "language": {
+      "english": "English",
+      "zhHint": "Simplified Chinese",
+      "enHint": "English"
+    },
+    "status": {
+      "pending": "Pending",
+      "processing": "Transcribing",
+      "paused": "Paused",
+      "completed": "Transcribed",
+      "failed": "Failed",
+      "default": "Voice"
+    }
+  }
+}
