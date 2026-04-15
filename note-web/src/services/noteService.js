@@ -54,12 +54,16 @@ class NoteService {
     return extractPayload(response)
   }
 
-  async uploadVoiceFile(noteId, file) {
+  async uploadVoiceFile(noteId, file, options = {}) {
+    const { sessionId } = options
     const formData = new FormData()
     formData.append('file', file)
 
     const response = await request.post('/voice-notes/upload', formData, {
-      params: { noteId },
+      params: {
+        noteId,
+        ...(sessionId ? { sessionId } : {}),
+      },
     })
     return extractPayload(response)
   }

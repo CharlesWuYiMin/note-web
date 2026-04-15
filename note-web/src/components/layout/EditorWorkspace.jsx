@@ -1,11 +1,12 @@
 ﻿﻿import React, { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Button, Dropdown, Empty, Input, Modal, Popconfirm, Spin } from 'antd'
+import { Button, Dropdown, Empty, Input, Modal, Spin } from 'antd'
 import { message } from 'antd'
 import {
   DeleteOutlined,
   ExpandOutlined,
+  HistoryOutlined,
   MoreOutlined,
   RollbackOutlined,
   ShareAltOutlined,
@@ -16,6 +17,7 @@ import {
 import { CompressOutlined } from '@ant-design/icons'
 import UxIcon from '@/components/common/UxIcon'
 import EditorFactory from '@/components/editors/EditorFactory'
+import HistorySidebar from '@/components/history/HistorySidebar'
 import useNote from '@/hooks/useNote'
 import { useMemo } from 'react'
 import { useRef } from 'react'
@@ -193,6 +195,7 @@ function EditorWorkspace() {
     loadNoteById,
     myShares,
     deletedNotes,
+    fetchMyShares,
     toggleStar,
     updateName,
     updateContent,
@@ -208,6 +211,9 @@ function EditorWorkspace() {
   const [isRestorePending, setIsRestorePending] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [historyPanelOpen, setHistoryPanelOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deleteConfirmMode, setDeleteConfirmMode] = useState('delete')
   const [editorValue, setEditorValue] = useState('')
   const [voicePromptOpen, setVoicePromptOpen] = useState(false)
   const [voicePromptChoice, setVoicePromptChoice] = useState('zh-CN')
@@ -220,32 +226,36 @@ function EditorWorkspace() {
   const currentRouteNote = currentNote?.id === id ? currentNote : null
   const notePreview = useMemo(() => {
     const preview = routeNotePreview
-    if (preview?.id && preview.id === id) {
-      return preview
-    }
-
-    if (preview?.noteId && preview.noteId === id) {
-      return {
-        ...preview,
-        id,
-      }
-    }
-
     const collectionMatch = [currentNote, ...notes, ...starredNotes, ...deletedNotes].find((item) => item?.id === id)
       || myShares.find((item) => item?.noteId === id || item?.id === id)
 
-    if (!collectionMatch) {
+    const previewMatch = preview?.id === id
+      ? preview
+      : preview?.noteId === id
+        ? { ...preview, id }
+        : null
+
+    const resolvedNote = collectionMatch || previewMatch
+
+    if (!resolvedNote) {
       return preview
     }
 
-    if (collectionMatch?.noteId && !collectionMatch.id) {
+    const normalizedResolvedNote = resolvedNote?.noteId && !resolvedNote.id
+      ? {
+          ...resolvedNote,
+          id: resolvedNote.noteId,
+        }
+      : resolvedNote
+
+    if (currentRouteNote?.id === id) {
       return {
-        ...collectionMatch,
-        id: collectionMatch.noteId,
+        ...normalizedResolvedNote,
+        ...currentRouteNote,
       }
     }
 
-    return collectionMatch
+    return normalizedResolvedNote
   }, [currentNote, deletedNotes, id, myShares, notes, routeNotePreview, starredNotes])
   const noteForRender = notePreview || currentRouteNote || null
   const noteId = noteForRender?.id || id || null
@@ -323,6 +333,15 @@ function EditorWorkspace() {
 
     setVoicePromptChoice('zh-CN')
     setVoicePromptOpen(true)
+    navigate(location.pathname, { replace: true, state: null })
+  }, [location.pathname, location.state, navigate, noteId])
+
+  useEffect(() => {
+    if (!location.state?.openSharePanel || !noteId) {
+      return
+    }
+
+    setShareDialogOpen(true)
     navigate(location.pathname, { replace: true, state: null })
   }, [location.pathname, location.state, navigate, noteId])
 
@@ -424,7 +443,7 @@ function EditorWorkspace() {
 
   const handleDeleteNote = async () => {
     if (!noteId || isDeletePending) {
-      return
+      return false
     }
 
     setIsDeletePending(true)
@@ -432,8 +451,10 @@ function EditorWorkspace() {
       await deleteNote(noteId)
       message.success(t('note.deleteSuccess', { defaultValue: '笔记已移入回收站' }))
       navigate('/cloudnote/recyclebin')
+      return true
     } catch (error) {
       message.error(error?.message || t('note.deleteError', { defaultValue: '删除失败，请稍后重试' }))
+      return false
     } finally {
       setIsDeletePending(false)
     }
@@ -458,7 +479,7 @@ function EditorWorkspace() {
 
   const handlePermanentDeleteNote = async () => {
     if (!noteId || isDeletePending) {
-      return
+      return false
     }
 
     setIsDeletePending(true)
@@ -466,8 +487,10 @@ function EditorWorkspace() {
       await permanentDeleteNote(noteId)
       message.success(t('recycleBin.deleteSuccess', { defaultValue: '笔记已永久删除' }))
       navigate('/cloudnote/recyclebin')
+      return true
     } catch (error) {
       message.error(error?.message || t('recycleBin.deleteError', { defaultValue: '永久删除失败，请稍后重试' }))
+      return false
     } finally {
       setIsDeletePending(false)
     }
@@ -496,8 +519,46 @@ function EditorWorkspace() {
     { key: 'details', icon: <UxIcon name="info" size={16} color="rgba(16,34,58,0.72)" />, label: t('note.details', { defaultValue: '笔记详情' }) },
   ]
 
+  const handleMoreMenuClick = ({ key }) => {
+    if (key === 'history') {
+      setHistoryPanelOpen(true)
+      return
+    }
+
+    if (key === 'details') {
+      message.info(t('note.details', { defaultValue: '笔记详情' }))
+    }
+  }
+
   const handleToggleVoicePanel = () => {
     setVoicePanelVisible((value) => !value)
+  }
+
+  const openDeleteConfirm = (mode) => {
+    if (isDeletePending) {
+      return
+    }
+
+    setDeleteConfirmMode(mode)
+    setDeleteConfirmOpen(true)
+  }
+
+  const closeDeleteConfirm = () => {
+    if (isDeletePending) {
+      return
+    }
+
+    setDeleteConfirmOpen(false)
+  }
+
+  const handleConfirmDelete = async () => {
+    const ok = deleteConfirmMode === 'permanent'
+      ? await handlePermanentDeleteNote()
+      : await handleDeleteNote()
+
+    if (ok) {
+      setDeleteConfirmOpen(false)
+    }
   }
 
   const handleVoiceTriggerClick = () => {
@@ -520,6 +581,14 @@ function EditorWorkspace() {
     setVoicePanelVisible(true)
     setVoiceAutoStartToken((token) => (typeof token === 'number' ? token + 1 : 1))
     message.success('已开启语音转录')
+  }
+
+  const handleOpenHistoryPanel = () => {
+    if (!noteId) {
+      return
+    }
+
+    setHistoryPanelOpen(true)
   }
 
   if (showSectionLoadingState) {
@@ -653,6 +722,13 @@ function EditorWorkspace() {
             onClick={handleToggleFullscreen}
           />
           <ToolbarIconButton
+            title={t('history.versionHistory', { defaultValue: '历史版本' })}
+            icon={<HistoryOutlined />}
+            onClick={handleOpenHistoryPanel}
+            active={historyPanelOpen}
+            disabled={!noteId}
+          />
+          <ToolbarIconButton
             title={t('note.share', { defaultValue: '分享' })}
             icon={<ShareAltOutlined />}
             onClick={() => setShareDialogOpen(true)}
@@ -667,44 +743,26 @@ function EditorWorkspace() {
                 loading={isRestorePending}
                 disabled={!noteId}
               />
-              <Popconfirm
-                title={t('recycleBin.confirmDelete', { defaultValue: '确定要永久删除吗？删除后无法恢复。' })}
-                okText={t('common.delete', { defaultValue: '删除' })}
-                cancelText={t('common.cancel', { defaultValue: '取消' })}
-                onConfirm={handlePermanentDeleteNote}
-                disabled={!noteId}
-              >
-                <span>
-                  <ToolbarIconButton
-                    title={t('recycleBin.permanentDelete', { defaultValue: '永久删除' })}
-                    icon={<DeleteOutlined />}
-                    danger
-                    loading={isDeletePending}
-                    disabled={!noteId}
-                  />
-                </span>
-              </Popconfirm>
+              <ToolbarIconButton
+                title={t('recycleBin.permanentDelete', { defaultValue: '永久删除' })}
+                icon={<DeleteOutlined />}
+                danger
+                loading={isDeletePending}
+                disabled={!noteId || isDeletePending}
+                onClick={() => openDeleteConfirm('permanent')}
+              />
             </>
           ) : (
-            <Popconfirm
-              title={t('note.confirmDelete', { defaultValue: '确定要删除此笔记吗？删除后可在回收站恢复。' })}
-              okText={t('common.confirm', { defaultValue: '确认' })}
-              cancelText={t('common.cancel', { defaultValue: '取消' })}
-              onConfirm={handleDeleteNote}
-              disabled={!noteId}
-            >
-              <span>
-                <ToolbarIconButton
-                  title={t('note.delete', { defaultValue: '删除' })}
-                  icon={<DeleteOutlined />}
-                  danger
-                  loading={isDeletePending}
-                  disabled={!noteId}
-                />
-              </span>
-            </Popconfirm>
+            <ToolbarIconButton
+              title={t('note.delete', { defaultValue: '删除' })}
+              icon={<DeleteOutlined />}
+              danger
+              loading={isDeletePending}
+              disabled={!noteId || isDeletePending}
+              onClick={() => openDeleteConfirm('delete')}
+            />
           )}
-          <Dropdown menu={{ items: moreMenuItems }} trigger={['click']} placement="bottomRight">
+          <Dropdown menu={{ items: moreMenuItems, onClick: handleMoreMenuClick }} trigger={['click']} placement="bottomRight">
             <Button
               type="text"
               aria-label={t('note.more', { defaultValue: '更多' })}
@@ -727,20 +785,29 @@ function EditorWorkspace() {
           minHeight: 0,
           minWidth: 0,
           display: 'flex',
-          flexDirection: 'column',
+          flexDirection: 'row',
           position: 'relative',
         }}
       >
         <div
           style={{
             flex: 1,
-            minHeight: 0,
             minWidth: 0,
             display: 'flex',
             flexDirection: 'column',
+            position: 'relative',
           }}
         >
-        {noteForRender ? (
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {noteForRender ? (
               <EditorFactory
                 key={noteId || 'text-editor'}
                 type={useVoiceShell ? 'voice' : (noteForRender?.type || 'text')}
@@ -755,73 +822,89 @@ function EditorWorkspace() {
                 autoStartRecordingKey={useVoiceShell ? voiceAutoStartToken : null}
                 autoStartLanguage={useVoiceShell ? voicePromptChoice : null}
               />
-          ) : showEmptyState ? (
-            <div
-              style={{
-                flex: 1,
-                minHeight: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '48px 24px',
-              }}
-            >
+            ) : showEmptyState ? (
               <div
                 style={{
-                  width: '100%',
-                  maxWidth: 420,
-                  padding: '12px 20px',
-                  textAlign: 'center',
+                  flex: 1,
+                  minHeight: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '48px 24px',
                 }}
               >
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={null} />
-                <div style={{ marginTop: 8, fontSize: 18, fontWeight: 800, color: '#10223a' }}>
-                  {emptyState.title}
-                </div>
-                <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.8, color: 'rgba(16,34,58,0.58)' }}>
-                  {emptyState.description}
+                <div
+                  style={{
+                    width: '100%',
+                    maxWidth: 420,
+                    padding: '12px 20px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={null} />
+                  <div style={{ marginTop: 8, fontSize: 18, fontWeight: 800, color: '#10223a' }}>
+                    {emptyState.title}
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.8, color: 'rgba(16,34,58,0.58)' }}>
+                    {emptyState.description}
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : isTransitioningNote ? (
+            ) : isTransitioningNote ? (
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'rgba(100,116,139,0.72)',
+                  fontSize: 14,
+                }}
+              >
+                正在加载笔记...
+              </div>
+            ) : null}
+          </div>
+
+          {(isLoading || isTransitioningNote) && !noteForRender ? (
             <div
               style={{
-                flex: 1,
-                minHeight: 0,
+                position: 'absolute',
+                inset: 0,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: 'rgba(100,116,139,0.72)',
-                fontSize: 14,
+                zIndex: 3,
+                background: 'rgba(255,255,255,0.56)',
+                backdropFilter: 'blur(6px)',
               }}
             >
-              正在加载笔记...
+              <Spin />
             </div>
           ) : null}
         </div>
 
-        {(isLoading || isTransitioningNote) && !noteForRender ? (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 3,
-              background: 'rgba(255,255,255,0.56)',
-              backdropFilter: 'blur(6px)',
-            }}
-          >
-            <Spin />
-          </div>
-        ) : null}
+        <HistorySidebar
+          open={historyPanelOpen}
+          noteId={noteId}
+          onClose={() => setHistoryPanelOpen(false)}
+          onRestored={() => {
+            if (noteId) {
+              loadNoteById(noteId).catch(() => {})
+            }
+          }}
+        />
       </div>
 
       <SharePanelDialog
         open={shareDialogOpen}
         noteId={noteId}
-        onClose={() => setShareDialogOpen(false)}
+        onClose={() => {
+          setShareDialogOpen(false)
+          fetchMyShares().catch(() => {})
+        }}
+        onShareChanged={() => fetchMyShares().catch(() => {})}
       />
 
       <VoicePromptModal
@@ -836,11 +919,33 @@ function EditorWorkspace() {
           setVoicePromptChoice('zh-CN')
         }}
       />
+
+      <Modal
+        open={deleteConfirmOpen}
+        centered
+        title={deleteConfirmMode === 'permanent'
+          ? t('recycleBin.permanentDelete', { defaultValue: '永久删除' })
+          : t('note.delete', { defaultValue: '删除' })}
+        okText={deleteConfirmMode === 'permanent'
+          ? t('common.delete', { defaultValue: '删除' })
+          : t('common.confirm', { defaultValue: '确认' })}
+        cancelText={t('common.cancel', { defaultValue: '取消' })}
+        okButtonProps={{ danger: true, loading: isDeletePending }}
+        onOk={handleConfirmDelete}
+        onCancel={closeDeleteConfirm}
+        destroyOnHidden
+      >
+        <div style={{ color: '#475569', lineHeight: 1.7 }}>
+          {deleteConfirmMode === 'permanent'
+            ? t('recycleBin.confirmDelete', { defaultValue: '确定要永久删除吗？删除后无法恢复。' })
+            : t('note.confirmDelete', { defaultValue: '确定要删除此笔记吗？删除后可在回收站恢复。' })}
+        </div>
+      </Modal>
     </section>
   )
 }
 
-function ToolbarIconButton({ title, icon, onClick, danger = false, loading = false, disabled = false }) {
+function ToolbarIconButton({ title, icon, onClick, danger = false, loading = false, disabled = false, active = false }) {
   return (
     <Button
       type="text"
@@ -853,7 +958,8 @@ function ToolbarIconButton({ title, icon, onClick, danger = false, loading = fal
         width: 32,
         height: 32,
         borderRadius: 6,
-        color: danger ? '#ef4444' : '#64748b',
+        color: danger ? '#ef4444' : active ? '#2563eb' : '#64748b',
+        background: active ? 'rgba(37,99,235,0.08)' : 'transparent',
       }}
     />
   )

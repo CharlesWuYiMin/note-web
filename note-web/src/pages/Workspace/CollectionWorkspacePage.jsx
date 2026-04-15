@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo } from 'react'
+﻿import React, { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Empty, List, Popconfirm, Spin, Tag } from 'antd'
+import { Button, Empty, List, Spin, Tag } from 'antd'
 import {
   ClearOutlined,
   DeleteOutlined,
@@ -16,30 +16,31 @@ import {
 } from '@ant-design/icons'
 import useNotebook from '@/hooks/useNotebook'
 import useNote from '@/hooks/useNote'
+import { openCenteredConfirm } from '@/utils/centeredConfirm'
 
 const SECTION_CONFIG = {
   starred: {
-    title: '星标笔记',
-    lead: '重点内容与近期笔记使用同一套工作台，只是数据源切换为已星标笔记。',
-    label: '星标视图',
+    title: '鏄熸爣绗旇',
+    lead: '閲嶇偣鍐呭涓庤繎鏈熺瑪璁颁娇鐢ㄥ悓涓€濂楀伐浣滃彴锛屽彧鏄暟鎹簮鍒囨崲涓哄凡鏄熸爣绗旇銆?,
+    label: '鏄熸爣瑙嗗浘',
     accent: '#f59e0b',
   },
   shares: {
-    title: '我的分享',
-    lead: '这里保留和近期笔记一致的页面结构，展示的是你的分享记录与原笔记入口。',
-    label: '分享视图',
+    title: '鎴戠殑鍒嗕韩',
+    lead: '杩欓噷淇濈暀鍜岃繎鏈熺瑪璁颁竴鑷寸殑椤甸潰缁撴瀯锛屽睍绀虹殑鏄綘鐨勫垎浜褰曚笌鍘熺瑪璁板叆鍙ｃ€?,
+    label: '鍒嗕韩瑙嗗浘',
     accent: '#2563eb',
   },
   notebooks: {
-    title: '笔记本',
-    lead: '笔记本也进入同一套主页面，只是在正文区展示分类管理内容。',
-    label: '笔记本视图',
+    title: '绗旇鏈?,
+    lead: '绗旇鏈篃杩涘叆鍚屼竴濂椾富椤甸潰锛屽彧鏄湪姝ｆ枃鍖哄睍绀哄垎绫荤鐞嗗唴瀹广€?,
+    label: '绗旇鏈鍥?,
     accent: '#0f766e',
   },
   recyclebin: {
-    title: '回收站',
-    lead: '删除、恢复和彻底删除继续放在同一个工作台中处理，避免跳出当前页面语境。',
-    label: '回收站视图',
+    title: '鍥炴敹绔?,
+    lead: '鍒犻櫎銆佹仮澶嶅拰褰诲簳鍒犻櫎缁х画鏀惧湪鍚屼竴涓伐浣滃彴涓鐞嗭紝閬垮厤璺冲嚭褰撳墠椤甸潰璇銆?,
+    label: '鍥炴敹绔欒鍥?,
     accent: '#dc2626',
   },
 }
@@ -132,21 +133,26 @@ function CollectionWorkspacePage({ section }) {
                 {notebook.isDefault && <LockOutlined style={{ color: '#94a3b8', fontSize: 12 }} />}
               </div>
               <div style={{ marginTop: 6, color: 'rgba(16,34,58,0.56)', lineHeight: 1.7 }}>
-                {notebook.description || '当前笔记本暂无描述。'}
+                {notebook.description || '褰撳墠绗旇鏈殏鏃犳弿杩般€?}
               </div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 18 }}>
-            <Tag style={{ borderRadius: 999 }}>{notebook.noteCount || 0} 篇笔记</Tag>
+            <Tag style={{ borderRadius: 999 }}>{notebook.noteCount || 0} 绡囩瑪璁?/Tag>
             {!notebook.isDefault && (
-              <Popconfirm
-                title="确定删除这个笔记本吗？"
-                okText="删除"
-                cancelText="取消"
-                onConfirm={() => deleteNotebook(notebook.id)}
-              >
-                <Button type="text" danger icon={<DeleteOutlined />} />
-              </Popconfirm>
+                            <Button
+                type="text"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => openCenteredConfirm({
+                  title: '确定删除这个笔记本吗？',
+                  okText: '删除',
+                  cancelText: '取消',
+                  okButtonProps: { danger: true },
+                  icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
+                  onOk: () => deleteNotebook(notebook.id),
+                })}
+              />
             )}
           </div>
         </div>
@@ -160,12 +166,12 @@ function CollectionWorkspacePage({ section }) {
       renderItem={(item) => {
         const title =
           section === 'shares'
-            ? item.noteTitle || item.title || '未命名分享'
-            : item.title || item.name || '未命名内容'
+            ? item.noteTitle || item.title || '鏈懡鍚嶅垎浜?
+            : item.title || item.name || '鏈懡鍚嶅唴瀹?
         const summary =
           section === 'shares'
-            ? item.description || item.noteSummary || '分享记录可从这里打开原笔记。'
-            : item.content || item.description || '点击后进入对应内容。'
+            ? item.description || item.noteSummary || '鍒嗕韩璁板綍鍙粠杩欓噷鎵撳紑鍘熺瑪璁般€?
+            : item.content || item.description || '鐐瑰嚮鍚庤繘鍏ュ搴斿唴瀹广€?
         const dateValue =
           item.updatedAt || item.createdAt || item.deletedAt || null
 
@@ -217,7 +223,7 @@ function CollectionWorkspacePage({ section }) {
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     {item.notebookName && <Tag style={{ borderRadius: 999 }}>{item.notebookName}</Tag>}
-                    {item.shareCode && <Tag style={{ borderRadius: 999 }}>分享码 {item.shareCode}</Tag>}
+                    {item.shareCode && <Tag style={{ borderRadius: 999 }}>鍒嗕韩鐮?{item.shareCode}</Tag>}
                     {dateValue && (
                       <span style={{ fontSize: 12, color: 'rgba(16,34,58,0.44)' }}>
                         {new Date(dateValue).toLocaleDateString()}
@@ -248,11 +254,10 @@ function CollectionWorkspacePage({ section }) {
           <div className="workspace-editor__toolbar-actions">
             {section === 'notebooks' && (
               <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 12 }}>
-                新建笔记本
-              </Button>
+                鏂板缓绗旇鏈?              </Button>
             )}
             <Button icon={<ReloadOutlined />} onClick={refresh} style={{ borderRadius: 12 }}>
-              刷新
+              鍒锋柊
             </Button>
             {section === 'recyclebin' && (
               <Button
@@ -262,7 +267,7 @@ function CollectionWorkspacePage({ section }) {
                 onClick={clearRecycleBin}
                 style={{ borderRadius: 12 }}
               >
-                清空
+                娓呯┖
               </Button>
             )}
           </div>
@@ -275,11 +280,11 @@ function CollectionWorkspacePage({ section }) {
           >
             <div className="workspace-editor__meta-row">
               <div className="workspace-editor__meta-chip">
-                <span className="workspace-editor__meta-chip-label">当前区域</span>
+                <span className="workspace-editor__meta-chip-label">褰撳墠鍖哄煙</span>
                 <span className="workspace-editor__meta-chip-value">{config.label}</span>
               </div>
               <div className="workspace-editor__meta-chip">
-                <span className="workspace-editor__meta-chip-label">条目数量</span>
+                <span className="workspace-editor__meta-chip-label">鏉＄洰鏁伴噺</span>
                 <span className="workspace-editor__meta-chip-value">{items.length}</span>
               </div>
             </div>
@@ -292,7 +297,7 @@ function CollectionWorkspacePage({ section }) {
             <Spin spinning={isLoading}>
               {items.length === 0 && !isLoading ? (
                 <Empty
-                  description={`${config.title}暂无内容`}
+                  description={`${config.title}鏆傛棤鍐呭`}
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   style={{ padding: '64px 0' }}
                 />
@@ -334,7 +339,7 @@ function buildActions(section, item, navigate, handlers) {
           navigate(`/cloudnote/recent/${item.id}`)
         }}
       >
-        打开
+        鎵撳紑
       </Button>,
     ]
   }
@@ -342,7 +347,7 @@ function buildActions(section, item, navigate, handlers) {
   if (section === 'shares') {
     return [
       <Button key="share-code" type="text">
-        {item.shareCode || '分享码'}
+        {item.shareCode || '鍒嗕韩鐮?}
       </Button>,
       <Button
         key="open"
@@ -352,7 +357,7 @@ function buildActions(section, item, navigate, handlers) {
           if (item.noteId) navigate(`/cloudnote/recent/${item.noteId}`)
         }}
       >
-        打开
+        鎵撳紑
       </Button>,
     ]
   }
@@ -365,19 +370,24 @@ function buildActions(section, item, navigate, handlers) {
         icon={<RollbackOutlined />}
         onClick={() => handlers.restoreNote(item.id)}
       >
-        还原
+        杩樺師
       </Button>,
-      <Popconfirm
+            <Button
         key="delete"
-        title="确定永久删除吗？"
-        okText="删除"
-        cancelText="取消"
-        onConfirm={() => handlers.permanentDeleteNote(item.id)}
+        type="text"
+        danger
+        icon={<DeleteOutlined />}
+        onClick={() => openCenteredConfirm({
+          title: '确定永久删除吗？',
+          okText: '删除',
+          cancelText: '取消',
+          okButtonProps: { danger: true },
+          icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
+          onOk: () => handlers.permanentDeleteNote(item.id),
+        })}
       >
-        <Button type="text" danger icon={<DeleteOutlined />}>
-          永久删除
-        </Button>
-      </Popconfirm>,
+        永久删除
+      </Button>,
     ]
   }
 
@@ -385,3 +395,4 @@ function buildActions(section, item, navigate, handlers) {
 }
 
 export default CollectionWorkspacePage
+

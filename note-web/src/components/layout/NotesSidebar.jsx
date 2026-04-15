@@ -5,7 +5,9 @@ import {
   CheckOutlined,
   ClockCircleOutlined,
   FilterOutlined,
+  ShareAltOutlined,
   StarFilled,
+  StarOutlined,
   SortAscendingOutlined,
   UnorderedListOutlined,
   SoundOutlined,
@@ -105,6 +107,7 @@ function NotesSidebar({ visible = true }) {
     loadMoreStarredNotes,
     fetchMyShares,
     fetchDeletedNotes,
+    toggleStar,
     isLoading,
     isStarredNotesLoadingMore,
   } = useNote()
@@ -207,12 +210,26 @@ function NotesSidebar({ visible = true }) {
     fetchNotebooks()
   }, [visible, currentSection, notebooks.length, fetchNotebooks])
 
+  useEffect(() => {
+    if (!visible || !isSupportedRoute || currentSection === 'shares') {
+      return
+    }
+
+    fetchMyShares()
+  }, [currentSection, fetchMyShares, isSupportedRoute, visible])
+
   const notebookNameById = useMemo(() => notebooks.reduce((result, notebook) => {
     if (notebook?.id && notebook?.name) {
       result[notebook.id] = notebook.name
     }
     return result
   }, {}), [notebooks])
+
+  const sharedNoteIdSet = useMemo(() => new Set(
+    myShares
+      .map((item) => String(item?.noteId || item?.id || '').trim())
+      .filter(Boolean)
+  ), [myShares])
 
   const sourceNotes = useMemo(() => {
     if (currentSection === 'starred') {
@@ -827,30 +844,79 @@ function NotesSidebar({ visible = true }) {
                       </span>
                     ) : null}
                   </div>
-                  {hasVoiceRecords(note) ? (
-                    <span
-                      title="有语音记录"
-                      aria-label="有语音记录"
-                      style={{
-                        color: '#7cb7ff',
-                        fontSize: 16,
-                        lineHeight: 1,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        flexShrink: 0,
-                      }}
-                    >
-                      <SoundOutlined />
-                    </span>
-                  ) : null}
                   </div>
                 </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexShrink: 0 }}>
-                {note.isStarred ? (
-                  <span style={{ color: '#d97706', fontSize: 16, lineHeight: 1 }}>
-                    <StarFilled />
+                {hasVoiceRecords(note) ? (
+                  <span
+                    title="有语音记录"
+                    aria-label="有语音记录"
+                    style={{
+                      color: '#7cb7ff',
+                      fontSize: 16,
+                      lineHeight: 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <SoundOutlined />
                   </span>
                 ) : null}
+                <button
+                  type="button"
+                  title={sharedNoteIdSet.has(String(note.id)) ? '已分享，点击打开分享面板' : '分享'}
+                  aria-label={sharedNoteIdSet.has(String(note.id)) ? '已分享' : '分享'}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    if (batchMode) {
+                      return
+                    }
+                    navigate(getDetailPath(currentSection, note), {
+                      state: { note, openSharePanel: true },
+                    })
+                  }}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    padding: 0,
+                    color: sharedNoteIdSet.has(String(note.id)) ? '#2563eb' : 'rgba(100,116,139,0.58)',
+                    fontSize: 16,
+                    lineHeight: 1,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    flexShrink: 0,
+                    cursor: batchMode ? 'default' : 'pointer',
+                  }}
+                >
+                  <ShareAltOutlined />
+                </button>
+                <button
+                  type="button"
+                  title={note.isStarred ? '取消星标' : '星标'}
+                  aria-label={note.isStarred ? '取消星标' : '星标'}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    if (batchMode) {
+                      return
+                    }
+                    toggleStar(note)
+                  }}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    padding: 0,
+                    color: note.isStarred ? '#d97706' : 'rgba(100,116,139,0.58)',
+                    fontSize: 16,
+                    lineHeight: 1,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    flexShrink: 0,
+                    cursor: batchMode ? 'default' : 'pointer',
+                  }}
+                >
+                  {note.isStarred ? <StarFilled /> : <StarOutlined />}
+                </button>
               </div>
             </div>
           </button>

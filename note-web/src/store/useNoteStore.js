@@ -332,46 +332,52 @@ const useNoteStore = create((set, get) => ({
   },
 
   toggleStar: async (note) => {
+    const previousIsStarred = Boolean(note.isStarred)
+    const nextIsStarred = !previousIsStarred
+
+    const applyStarState = (state, starred) => ({
+      notes: state.notes.map((n) =>
+        n.id === note.id ? { ...n, isStarred: starred } : n
+      ),
+      starredNotes: starred
+        ? (
+          state.starredNotes.some((n) => n.id === note.id)
+            ? state.starredNotes.map((n) =>
+              n.id === note.id ? { ...n, isStarred: true } : n
+            )
+            : [{ ...note, isStarred: true }, ...state.starredNotes]
+        )
+        : state.starredNotes.filter((n) => n.id !== note.id),
+      starredNotesPagination: starred
+        ? {
+          ...state.starredNotesPagination,
+          total: state.starredNotes.some((n) => n.id === note.id)
+            ? state.starredNotesPagination.total
+            : state.starredNotesPagination.total + 1,
+        }
+        : {
+          ...state.starredNotesPagination,
+          total: Math.max(0, state.starredNotesPagination.total - 1),
+          hasMore:
+            state.starredNotesPagination.total - 1
+            > state.starredNotesPagination.page * state.starredNotesPagination.pageSize,
+        },
+      currentNote:
+        state.currentNote?.id === note.id
+          ? { ...state.currentNote, isStarred: starred }
+          : state.currentNote,
+    })
+
+    set((state) => applyStarState(state, nextIsStarred))
+
     try {
-      if (note.isStarred) {
+      if (previousIsStarred) {
         await noteService.unstarNote(note.id)
       } else {
         await noteService.starNote(note.id)
       }
-      const nextIsStarred = !note.isStarred
-      set((state) => ({
-        notes: state.notes.map((n) =>
-          n.id === note.id ? { ...n, isStarred: nextIsStarred } : n
-        ),
-        starredNotes: nextIsStarred
-          ? (
-            state.starredNotes.some((n) => n.id === note.id)
-              ? state.starredNotes.map((n) =>
-                n.id === note.id ? { ...n, isStarred: true } : n
-              )
-              : [{ ...note, isStarred: true }, ...state.starredNotes]
-          )
-          : state.starredNotes.filter((n) => n.id !== note.id),
-        starredNotesPagination: nextIsStarred
-          ? {
-            ...state.starredNotesPagination,
-            total: state.starredNotes.some((n) => n.id === note.id)
-              ? state.starredNotesPagination.total
-              : state.starredNotesPagination.total + 1,
-          }
-          : {
-            ...state.starredNotesPagination,
-            total: Math.max(0, state.starredNotesPagination.total - 1),
-            hasMore:
-              state.starredNotesPagination.total - 1
-              > state.starredNotesPagination.page * state.starredNotesPagination.pageSize,
-          },
-        currentNote:
-          state.currentNote?.id === note.id
-            ? { ...state.currentNote, isStarred: nextIsStarred }
-            : state.currentNote,
-      }))
     } catch (error) {
+      set((state) => applyStarState(state, previousIsStarred))
       set({ error: error.message })
       throw error
     }

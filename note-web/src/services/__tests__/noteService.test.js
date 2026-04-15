@@ -101,6 +101,18 @@ describe('NoteService', () => {
       })
       expect(result).toEqual({ fileId: 'file-1', url: '/v1/note/files/file-1' })
     })
+
+    it('includes sessionId when uploading a realtime archive file', async () => {
+      const file = new File(['voice-bytes'], 'voice.webm', { type: 'audio/webm' })
+      mockPost.mockResolvedValue({ data: { fileId: 'file-2', url: '/v1/note/files/file-2' } })
+
+      await noteService.uploadVoiceFile('note-123', file, { sessionId: 'session-123' })
+
+      const [, , config] = mockPost.mock.calls[0]
+      expect(config).toEqual({
+        params: { noteId: 'note-123', sessionId: 'session-123' },
+      })
+    })
   })
 
   describe('getVoiceFile', () => {

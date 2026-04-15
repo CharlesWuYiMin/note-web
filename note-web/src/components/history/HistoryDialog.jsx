@@ -61,6 +61,7 @@ const HistoryDialog = ({ open, noteId, onClose }) => {
         </Space>
       }
       open={open}
+      centered
       onCancel={onClose}
       footer={[
         <Button key="close" onClick={onClose} icon={<CloseOutlined />}>

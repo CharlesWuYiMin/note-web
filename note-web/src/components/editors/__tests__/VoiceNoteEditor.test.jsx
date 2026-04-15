@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+﻿import React, { useEffect } from 'react'
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import VoiceNoteEditor from '@/components/editors/VoiceNoteEditor'
@@ -54,7 +54,7 @@ describe('VoiceNoteEditor', () => {
     expect(pageEditorUnmountMock).not.toHaveBeenCalled()
   })
 
-  it('prefers the session card when restored segments exist on an unlinked voice session', () => {
+  it('renders incremental segment cards for restored voice history', () => {
     const note = {
       id: 'note-restore-1',
       title: 'restore',
@@ -72,8 +72,6 @@ describe('VoiceNoteEditor', () => {
           sessionId: 'session-restore-1',
           status: 'streaming',
           language: 'zh_CN',
-          partialTranscript: '.',
-          finalTranscript: '第一段最终文本\\n第二段最终文本',
           startedAt: '2026-04-14T16:51:35.000Z',
           updatedAt: '2026-04-14T16:53:25.000Z',
           cards: [
@@ -81,15 +79,22 @@ describe('VoiceNoteEditor', () => {
               id: 5,
               segmentIndex: 1,
               startOffsetMs: 0,
-              transcript: '第一张卡片',
+              transcript: '嗯。',
               createdAt: '2026-04-14T16:52:59.000Z',
             },
             {
               id: 6,
               segmentIndex: 2,
               startOffsetMs: 84355,
-              transcript: '第二张卡片',
+              transcript: '你好，开始我的语音转录功能了。',
               createdAt: '2026-04-14T16:53:02.000Z',
+            },
+            {
+              id: 7,
+              segmentIndex: 3,
+              startOffsetMs: 103355,
+              transcript: '第二段语音。',
+              createdAt: '2026-04-14T16:53:12.000Z',
             },
           ],
         },
@@ -106,43 +111,26 @@ describe('VoiceNoteEditor', () => {
       />
     )
 
-    expect(screen.getByText('第一张卡片')).toBeInTheDocument()
-    expect(screen.getByText('第二张卡片')).toBeInTheDocument()
+    expect(screen.queryByText('嗯。')).not.toBeInTheDocument()
+    expect(screen.getAllByText('你好，开始我的语音转录功能了。')).toHaveLength(1)
+    expect(screen.getByText('第二段语音。')).toBeInTheDocument()
     expect(screen.getByText('分段 01')).toBeInTheDocument()
     expect(screen.getByText('分段 02')).toBeInTheDocument()
   })
 
-  it.skip('renders aggregated voice detail sections from note voice data', () => {
+  it('does not show an append button', () => {
     const note = {
-      id: 'note-1',
-      title: '测试笔记',
+      id: 'note-append-1',
+      title: '追加测试',
       type: 'voice',
       voiceNote: [
         {
-          fileId: 'file-1',
-          sessionId: 'session-1',
-          audioUrl: '/files/file-1',
-          transcript: '文件正文',
-          transcriptStatus: 'completed',
-          language: 'zh_CN',
+          fileId: 'file-append-1',
+          audioUrl: '/files/file-append-1',
           createdAt: '2026-04-14T10:00:00.000Z',
         },
       ],
-      voiceRealtimeSessions: [
-        {
-          sessionId: 'session-1',
-          status: 'finished',
-          language: 'zh_CN',
-          audioMimeType: 'audio/webm',
-          finalTranscript: '整段最终正文',
-          startedAt: '2026-04-14T10:00:00.000Z',
-          finishedAt: '2026-04-14T10:05:00.000Z',
-          cards: [
-            { segmentIndex: 2, transcript: '第二张卡片', startTimeLabel: '00:05' },
-            { segmentIndex: 1, transcript: '第一张卡片', startTimeLabel: '00:00' },
-          ],
-        },
-      ],
+      voiceRealtimeSessions: [],
     }
 
     render(
@@ -155,13 +143,6 @@ describe('VoiceNoteEditor', () => {
       />
     )
 
-    expect(screen.getByText('详情聚合')).toBeInTheDocument()
-    expect(screen.getByText('文件')).toBeInTheDocument()
-    expect(screen.getByText('会话')).toBeInTheDocument()
-    expect(screen.getByText('cards')).toBeInTheDocument()
-    expect(screen.getByText('file-1')).toBeInTheDocument()
-    expect(screen.getByText('session-1')).toBeInTheDocument()
-    expect(screen.getByTitle('第一张卡片')).toBeInTheDocument()
-    expect(screen.getByTitle('第二张卡片')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /追加/ })).not.toBeInTheDocument()
   })
 })

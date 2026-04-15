@@ -10,7 +10,6 @@ import {
   message,
   Empty,
   Spin,
-  Popconfirm,
   Tag,
 } from 'antd'
 import {
@@ -27,6 +26,7 @@ import {
 } from '@ant-design/icons'
 import useNotebook from '@/hooks/useNotebook'
 import WorkspaceSectionLayout from '@/components/workspace/WorkspaceSectionLayout'
+import { openCenteredConfirm } from '@/utils/centeredConfirm'
 
 const { TextArea } = Input
 
@@ -108,16 +108,13 @@ export function NotebookCard({ notebook, onEdit, onDelete, isDefault }) {
         <div style={{ display: 'flex', gap: 4 }}>
           <Button type="text" size="small" icon={<EditOutlined />} onClick={() => onEdit(notebook)} />
           {!isDefault && (
-            <Popconfirm
-              title={t('notebook.delete')}
-              description={t('notebook.confirmDelete')}
-              onConfirm={() => onDelete(notebook.id)}
-              okText={t('common.confirm')}
-              cancelText={t('common.cancel')}
-              okButtonProps={{ danger: true }}
-            >
-              <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-            </Popconfirm>
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => onDelete(notebook.id)}
+            />
           )}
         </div>
       </div>
@@ -189,12 +186,23 @@ function NotebookManagePage() {
   }
 
   const handleDelete = async (id) => {
-    try {
-      await deleteNotebook(id)
-      message.success(t('common.success'))
-    } catch (err) {
-      message.error(err.message || t('common.error'))
-    }
+    openCenteredConfirm({
+      title: t('notebook.delete'),
+      content: t('notebook.confirmDelete'),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      okButtonProps: { danger: true },
+      icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
+      onOk: async () => {
+        try {
+          await deleteNotebook(id)
+          message.success(t('common.success'))
+        } catch (err) {
+          message.error(err.message || t('common.error'))
+          throw err
+        }
+      },
+    })
   }
 
   const handleModalOk = async () => {
@@ -247,6 +255,7 @@ function NotebookManagePage() {
       <Modal
         title={editingNotebook ? t('notebook.editNotebook') : t('notebook.createNotebook')}
         open={modalOpen}
+        centered
         onOk={handleModalOk}
         onCancel={() => setModalOpen(false)}
         okText={t('common.save')}

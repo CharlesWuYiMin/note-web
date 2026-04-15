@@ -26,7 +26,9 @@ describe('HistoryService', () => {
 
       const result = await historyService.getNoteHistory('note-123')
 
-      expect(mockGet).toHaveBeenCalledWith('/notes/note-123/history')
+      expect(mockGet).toHaveBeenCalledWith('/notes/note-123/history', {
+        params: {},
+      })
       expect(result).toEqual(mockHistory)
     })
 

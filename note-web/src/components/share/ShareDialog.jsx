@@ -62,6 +62,7 @@ const ShareDialog = ({ open, noteId, onClose }) => {
         </Space>
       }
       open={open}
+      centered
       onCancel={handleClose}
       footer={[
         <Button key="cancel" onClick={handleClose} icon={<CloseOutlined />}>

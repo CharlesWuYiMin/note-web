@@ -44,7 +44,7 @@ function getShareScope(share) {
   return share?.shareType === 'pointed' ? 'pointed' : 'all'
 }
 
-function SharePanelDialog({ open, noteId, onClose }) {
+function SharePanelDialog({ open, noteId, onClose, onShareChanged }) {
   const [loading, setLoading] = useState(false)
   const [copying, setCopying] = useState(false)
   const [enabled, setEnabled] = useState(false)
@@ -142,6 +142,7 @@ function SharePanelDialog({ open, noteId, onClose }) {
       setShareCode(result.shareCode || '')
       setShareUrl(toAbsoluteShareUrl(result.shareUrl || `/v1/note/shares/${result.shareCode}`))
       message.success('分享已开启')
+      onShareChanged?.()
       return true
     } catch (err) {
       setEnabled(Boolean(shareCode))
@@ -173,6 +174,7 @@ function SharePanelDialog({ open, noteId, onClose }) {
         setShareCode('')
         setShareUrl('')
         message.success('分享已关闭')
+        onShareChanged?.()
       } catch (err) {
         setError(err.message || '关闭分享失败')
         message.error('关闭分享失败')

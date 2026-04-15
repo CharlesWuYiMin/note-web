@@ -1,7 +1,7 @@
 ﻿﻿import React, { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Button, Empty, List, Popconfirm, Spin, Tag, Typography } from 'antd'
+import { Button, Empty, List, Spin, Tag, Typography } from 'antd'
 import {
   HistoryOutlined,
   StarOutlined,
@@ -15,6 +15,7 @@ import {
 } from '@ant-design/icons'
 import useNote from '@/hooks/useNote'
 import WorkspaceSectionLayout from '@/components/workspace/WorkspaceSectionLayout'
+import { openCenteredConfirm } from '@/utils/centeredConfirm'
 
 const { Text, Paragraph } = Typography
 
@@ -68,16 +69,21 @@ function RecycleBinPage() {
           <div style={{ fontSize: 13, color: 'rgba(16,34,58,0.54)', marginTop: 4 }}>删除、恢复和彻底删除都在同一套主页面框架中处理。</div>
         </div>
         {deletedNotes.length > 0 && (
-          <Popconfirm
-            title={t('recycleBin.confirmClear')}
-            onConfirm={clearRecycleBin}
-            okButtonProps={{ danger: true }}
-            icon={<DeleteOutlined style={{ color: '#ff4d4f' }} />}
+          <Button
+            danger
+            icon={<ClearOutlined />}
+            size="small"
+            onClick={() => openCenteredConfirm({
+              title: t('recycleBin.confirmClear'),
+              okText: t('common.delete'),
+              cancelText: t('common.cancel'),
+              okButtonProps: { danger: true },
+              icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
+              onOk: clearRecycleBin,
+            })}
           >
-            <Button danger icon={<ClearOutlined />} size="small">
-              {t('recycleBin.clearAll')}
-            </Button>
-          </Popconfirm>
+            {t('recycleBin.clearAll')}
+          </Button>
         )}
       </div>
 
@@ -109,18 +115,23 @@ function RecycleBinPage() {
                   >
                     {t('recycleBin.restore')}
                   </Button>,
-                  <Popconfirm
+                  <Button
                     key="delete"
-                    title={t('recycleBin.confirmDelete')}
-                    onConfirm={() => permanentDeleteNote(note.id)}
-                    okButtonProps={{ danger: true }}
-                    okText={t('common.delete')}
-                    cancelText={t('common.cancel')}
+                    type="text"
+                    size="small"
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => openCenteredConfirm({
+                      title: t('recycleBin.confirmDelete'),
+                      okText: t('common.delete'),
+                      cancelText: t('common.cancel'),
+                      okButtonProps: { danger: true },
+                      icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
+                      onOk: () => permanentDeleteNote(note.id),
+                    })}
                   >
-                    <Button type="text" size="small" danger icon={<DeleteOutlined />}>
-                      {t('recycleBin.permanentDelete')}
-                    </Button>
-                  </Popconfirm>,
+                    {t('recycleBin.permanentDelete')}
+                  </Button>,
                 ]}
               >
                 <List.Item.Meta

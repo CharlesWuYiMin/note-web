@@ -1,0 +1,1316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voice Realtime Test</title>
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --panel: #ffffff;
+      --text: #1c2434;
+      --sub: #55627a;
+      --line: #d9e0eb;
+      --ok: #007b55;
+      --warn: #a66500;
+      --err: #b00020;
+      --btn: #0b5fff;
+      --btn-text: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: linear-gradient(120deg, #eef3ff 0%, #f9fbff 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 24px auto;
+      padding: 0 16px 24px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 16px rgba(12, 37, 80, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+
+    p {
+      margin: 0 0 10px;
+      color: var(--sub);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 12px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      color: var(--sub);
+      margin-bottom: 4px;
+    }
+
+    .field input,
+    .field textarea {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 14px;
+      color: var(--text);
+      background: #fff;
+    }
+
+    .field textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      background: var(--btn);
+      color: var(--btn-text);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: #5b677d;
+    }
+
+    button.warn {
+      background: #cc7a00;
+    }
+
+    button.danger {
+      background: #b00020;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .status {
+      font-size: 13px;
+      color: var(--sub);
+    }
+
+    .status strong {
+      color: var(--text);
+    }
+
+    .pill {
+      display: inline-block;
+      min-width: 72px;
+      text-align: center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: #fff;
+      background: #7a869b;
+    }
+
+    .pill.ok { background: var(--ok); }
+    .pill.warn { background: var(--warn); }
+    .pill.err { background: var(--err); }
+
+    .mono {
+      font-family: Consolas, Menlo, Monaco, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      background: #0f1727;
+      color: #d6e0f5;
+      border-radius: 8px;
+      border: 1px solid #1e2a44;
+      padding: 10px;
+      max-height: 260px;
+      overflow: auto;
+    }
+
+    @media (max-width: 760px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Voice Realtime Test Page</h1>
+    <p>Use this page to create a realtime session and test websocket transcription end-to-end. Append recording means same note, new realtime session.</p>
+  </div>
+
+  <div class="card">
+    <div class="grid">
+      <div class="field">
+        <label for="baseUrl">Base HTTP URL</label>
+        <input id="baseUrl" type="text" value="">
+      </div>
+      <div class="field">
+        <label for="noteId">Note ID</label>
+        <input id="noteId" type="text" placeholder="note-xxx">
+      </div>
+      <div class="field">
+        <label for="noteTitle">Note Title</label>
+        <input id="noteTitle" type="text" value="Voice Realtime Test Note">
+      </div>
+      <div class="field">
+        <label for="appId">App ID</label>
+        <input id="appId" type="text" placeholder="app-test-001">
+      </div>
+      <div class="field">
+        <label for="userId">User ID</label>
+        <input id="userId" type="text" placeholder="user-test-001">
+      </div>
+      <div class="field">
+        <label for="token">Token</label>
+        <input id="token" type="text" placeholder="token">
+      </div>
+      <div class="field">
+        <label for="loginCode">Login Code</label>
+        <input id="loginCode" type="text" placeholder="auth code">
+      </div>
+      <div class="field">
+        <label for="authType">Auth Type</label>
+        <input id="authType" type="text" value="internal">
+      </div>
+      <div class="field">
+        <label for="redirectUri">Redirect URI</label>
+        <input id="redirectUri" type="text" placeholder="current page url">
+      </div>
+      <div class="field">
+        <label for="language">Language</label>
+        <input id="language" type="text" value="zh_CN">
+      </div>
+      <div class="field">
+        <label for="mimeType">Preferred Mime Type</label>
+        <input id="mimeType" type="text" value="audio/webm">
+      </div>
+      <div class="field">
+        <label for="sessionId">Session ID</label>
+        <input id="sessionId" type="text" placeholder="auto filled after create">
+      </div>
+      <div class="field">
+        <label for="voiceFile">Voice File</label>
+        <input id="voiceFile" type="file" accept="audio/*">
+      </div>
+      <div class="field">
+        <label for="voiceFileId">Voice File ID</label>
+        <input id="voiceFileId" type="text" placeholder="auto filled after upload/detail">
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button id="btnLogin" class="warn">Login</button>
+      <button id="btnCreateNote" class="warn">Create Note</button>
+      <button id="btnUploadVoice" class="warn">Upload Voice File</button>
+      <button id="btnGetVoiceDetail" class="secondary">Get Voice Detail</button>
+      <button id="btnCreate">1) Create Session</button>
+      <button id="btnConnect">2) Connect WS</button>
+      <button id="btnAppend" class="warn">Append Note (New Session)</button>
+      <button id="btnStartMic">3) Start Mic</button>
+      <button id="btnStopMic" class="secondary">Stop Mic</button>
+      <button id="btnPause" class="warn">Pause</button>
+      <button id="btnResume">Resume</button>
+      <button id="btnFinish" class="danger">Finish</button>
+      <button id="btnDisconnect" class="secondary">Disconnect</button>
+      <button id="btnClearLog" class="secondary">Clear Log</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div class="status">WS: <span id="wsState" class="pill">DISCONNECTED</span></div>
+      <div class="status">Session Status: <strong id="sessionState">N/A</strong></div>
+    </div>
+    <div class="grid" style="margin-top:10px;">
+      <div class="field">
+        <label for="partialText">Partial Transcript</label>
+        <textarea id="partialText" readonly></textarea>
+      </div>
+      <div class="field">
+        <label for="finalText">Final Transcript</label>
+        <textarea id="finalText" readonly></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <strong>Event Log</strong>
+    </div>
+    <div id="log" class="mono"></div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const el = {
+      baseUrl: document.getElementById("baseUrl"),
+      noteId: document.getElementById("noteId"),
+      noteTitle: document.getElementById("noteTitle"),
+      appId: document.getElementById("appId"),
+      userId: document.getElementById("userId"),
+      token: document.getElementById("token"),
+      loginCode: document.getElementById("loginCode"),
+      authType: document.getElementById("authType"),
+      redirectUri: document.getElementById("redirectUri"),
+      language: document.getElementById("language"),
+      mimeType: document.getElementById("mimeType"),
+      sessionId: document.getElementById("sessionId"),
+      voiceFile: document.getElementById("voiceFile"),
+      voiceFileId: document.getElementById("voiceFileId"),
+      partialText: document.getElementById("partialText"),
+      finalText: document.getElementById("finalText"),
+      wsState: document.getElementById("wsState"),
+      sessionState: document.getElementById("sessionState"),
+      log: document.getElementById("log"),
+      btnCreate: document.getElementById("btnCreate"),
+      btnLogin: document.getElementById("btnLogin"),
+      btnCreateNote: document.getElementById("btnCreateNote"),
+      btnUploadVoice: document.getElementById("btnUploadVoice"),
+      btnGetVoiceDetail: document.getElementById("btnGetVoiceDetail"),
+      btnConnect: document.getElementById("btnConnect"),
+      btnAppend: document.getElementById("btnAppend"),
+      btnStartMic: document.getElementById("btnStartMic"),
+      btnStopMic: document.getElementById("btnStopMic"),
+      btnPause: document.getElementById("btnPause"),
+      btnResume: document.getElementById("btnResume"),
+      btnFinish: document.getElementById("btnFinish"),
+      btnDisconnect: document.getElementById("btnDisconnect"),
+      btnClearLog: document.getElementById("btnClearLog")
+    };
+
+    const state = {
+      ws: null,
+      mediaRecorder: null,
+      mediaStream: null,
+      currentSessionPath: null,
+      pendingRecorderRestart: null,
+      lastConfiguredMimeType: "",
+      recordedChunks: [],
+      recordedMimeType: "",
+      pendingAutoUploadAfterStop: false,
+      cachedAudioSessionId: "",
+      acceptingAudio: false,
+      audioChunkCount: 0,
+      wsMessageCount: 0,
+      controlCount: 0,
+      lastChunkBytes: 0,
+      lastChunkAt: ""
+    };
+
+    const RECORDER_TIMESLICE_MS = 1000;
+
+    const AUTH_STORAGE_KEY = "voiceRealtimeTestAuth";
+    const URL_AUTH_KEYS = ["appId", "userId", "token", "loginCode", "authType", "redirectUri", "noteId", "noteTitle", "language", "mimeType"];
+
+    el.baseUrl.value = window.location.origin;
+    el.redirectUri.value = window.location.href;
+
+    function readCookie(name) {
+      const prefix = encodeURIComponent(name) + "=";
+      const parts = document.cookie ? document.cookie.split("; ") : [];
+      for (const part of parts) {
+        if (part.startsWith(prefix)) {
+          return decodeURIComponent(part.substring(prefix.length));
+        }
+      }
+      return "";
+    }
+
+    function readQueryParam(name) {
+      const value = new URL(window.location.href).searchParams.get(name);
+      return value ? value.trim() : "";
+    }
+
+    function resolveValue(...candidates) {
+      for (const candidate of candidates) {
+        if (candidate !== undefined && candidate !== null && String(candidate).trim()) {
+          return String(candidate).trim();
+        }
+      }
+      return "";
+    }
+
+    function hydrateFromQueryParams() {
+      URL_AUTH_KEYS.forEach(function (key) {
+        const value = readQueryParam(key);
+        if (value && el[key]) {
+          el[key].value = value;
+        }
+      });
+    }
+
+    function sortByLatestTimestamp(items) {
+      return (Array.isArray(items) ? items.slice() : []).sort(function (left, right) {
+        const leftTime = Date.parse((left && (left.updatedAt || left.createdAt)) || "") || 0;
+        const rightTime = Date.parse((right && (right.updatedAt || right.createdAt)) || "") || 0;
+        return rightTime - leftTime;
+      });
+    }
+
+    function persistAuthFields() {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+        appId: (el.appId.value || "").trim(),
+        userId: (el.userId.value || "").trim(),
+        token: (el.token.value || "").trim()
+      }));
+    }
+
+    function restoreAuthFields() {
+      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (stored) {
+        try {
+          const data = JSON.parse(stored);
+          if (data && data.appId) {
+            el.appId.value = data.appId;
+          }
+          if (data && data.userId) {
+            el.userId.value = data.userId;
+          }
+          if (data && data.token) {
+            el.token.value = data.token;
+          }
+        } catch (error) {
+          log("Failed to restore cached auth fields: " + String(error));
+        }
+      }
+
+      const cookieAppId = readCookie("cloud_doc_appid");
+      const cookieUserId = readCookie("cloud_doc_userid");
+      const cookieToken = readCookie("cloud_doc_token");
+      if (cookieAppId) {
+        el.appId.value = cookieAppId;
+      }
+      if (cookieUserId) {
+        el.userId.value = cookieUserId;
+      }
+      if (cookieToken) {
+        el.token.value = cookieToken;
+      }
+    }
+
+    function now() {
+      return new Date().toLocaleTimeString();
+    }
+
+    function log(message, payload) {
+      const line = payload === undefined
+        ? "[" + now() + "] " + message
+        : "[" + now() + "] " + message + "\n" + JSON.stringify(payload, null, 2);
+      el.log.textContent += line + "\n\n";
+      el.log.scrollTop = el.log.scrollHeight;
+    }
+
+    function recorderState() {
+      return state.mediaRecorder ? state.mediaRecorder.state : "inactive";
+    }
+
+    function wsStateText() {
+      if (!state.ws) {
+        return "none";
+      }
+      switch (state.ws.readyState) {
+        case WebSocket.CONNECTING:
+          return "connecting";
+        case WebSocket.OPEN:
+          return "open";
+        case WebSocket.CLOSING:
+          return "closing";
+        default:
+          return "closed";
+      }
+    }
+
+    function snapshotState() {
+      return {
+        wsReadyState: wsStateText(),
+        recorderState: recorderState(),
+        acceptingAudio: state.acceptingAudio,
+        pendingAutoUploadAfterStop: state.pendingAutoUploadAfterStop,
+        audioChunkCount: state.audioChunkCount,
+        cachedAudioChunks: state.recordedChunks.length,
+        cachedAudioBytes: state.recordedChunks.reduce(function (total, chunk) {
+          return total + (chunk && chunk.size ? chunk.size : 0);
+        }, 0),
+        wsMessageCount: state.wsMessageCount,
+        controlCount: state.controlCount,
+        lastChunkBytes: state.lastChunkBytes,
+        lastChunkAt: state.lastChunkAt,
+        sessionId: (el.sessionId.value || "").trim(),
+        sessionState: (el.sessionState.textContent || "").trim(),
+        mimeType: (el.mimeType.value || "").trim(),
+        currentSessionPath: state.currentSessionPath || ""
+      };
+    }
+
+    function logEvent(message, payload) {
+      log(message, {
+        payload: payload === undefined ? null : payload,
+        state: snapshotState()
+      });
+    }
+
+    function setWsState(text, mode) {
+      el.wsState.textContent = text;
+      el.wsState.className = "pill " + (mode || "");
+    }
+
+    function syncMimeTypeAndConfig(mimeType, source) {
+      const normalizedMimeType = (mimeType || "").trim();
+      if (!normalizedMimeType) {
+        return;
+      }
+      el.mimeType.value = normalizedMimeType;
+      if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      if (state.lastConfiguredMimeType === normalizedMimeType) {
+        return;
+      }
+      sendWsControl("config");
+      logEvent("Updated WS mimeType from " + source, {
+        mimeType: normalizedMimeType,
+        source: source
+      });
+    }
+
+    function required(name, value) {
+      if (!value || !String(value).trim()) {
+        throw new Error(name + " is required");
+      }
+      return String(value).trim();
+    }
+
+    function authHeaders() {
+      return {
+        "Content-Type": "application/json",
+        "appId": required("appId", el.appId.value),
+        "userId": required("userId", el.userId.value),
+        "token": required("token", el.token.value)
+      };
+    }
+
+    async function readJson(response) {
+      const text = await response.text();
+      if (!text) {
+        return null;
+      }
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        return { raw: text };
+      }
+    }
+
+    function resetRecordedAudio(reason) {
+      state.recordedChunks = [];
+      state.recordedMimeType = "";
+      state.cachedAudioSessionId = (el.sessionId.value || "").trim();
+      state.pendingAutoUploadAfterStop = false;
+      el.voiceFileId.value = "";
+      logEvent("Reset recorded audio cache", {
+        reason: reason,
+        sessionId: state.cachedAudioSessionId || null
+      });
+    }
+
+    function resetStreamingRuntime(reason) {
+      state.pendingRecorderRestart = null;
+      state.lastConfiguredMimeType = "";
+      state.audioChunkCount = 0;
+      state.wsMessageCount = 0;
+      state.controlCount = 0;
+      state.lastChunkBytes = 0;
+      state.lastChunkAt = "";
+      el.partialText.value = "";
+      el.finalText.value = "";
+      logEvent("Reset streaming runtime state", {
+        reason: reason
+      });
+    }
+
+    function cacheRecordedChunk(blob, mimeType) {
+      if (!blob || blob.size <= 0) {
+        return;
+      }
+      state.recordedChunks.push(blob);
+      if (mimeType) {
+        state.recordedMimeType = mimeType;
+      }
+      if (!state.cachedAudioSessionId) {
+        state.cachedAudioSessionId = (el.sessionId.value || "").trim();
+      }
+    }
+
+    async function uploadVoicePayload(file, sourceLabel) {
+      const base = required("baseUrl", el.baseUrl.value);
+      const noteId = required("noteId", el.noteId.value);
+      const sessionId = (el.sessionId.value || "").trim();
+      const url = new URL("/v1/note/voice-notes/upload", base).toString();
+      const formData = new FormData();
+      formData.append("noteId", noteId);
+      if (sessionId) {
+        formData.append("sessionId", sessionId);
+      }
+      formData.append("file", file, file.name || "voice-upload.webm");
+
+      logEvent((sourceLabel || "Upload voice file") + " request -> " + url, {
+        noteId: noteId,
+        sessionId: sessionId || null,
+        fileName: file.name || null,
+        fileSize: file.size,
+        fileType: file.type || null
+      });
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "appId": required("appId", el.appId.value),
+          "userId": required("userId", el.userId.value),
+          "token": required("token", el.token.value)
+        },
+        body: formData
+      });
+      const data = await readJson(response);
+
+      if (!response.ok || !data || data.success === false) {
+        throw new Error((sourceLabel || "Upload voice file") + " failed: " + JSON.stringify(data));
+      }
+
+      const payload = data.data || {};
+      el.voiceFileId.value = payload.fileId || "";
+      logEvent((sourceLabel || "Upload voice file") + " success", payload);
+      return payload;
+    }
+
+    async function uploadCachedRecording() {
+      if (!state.recordedChunks.length) {
+        logEvent("Skipping auto upload because recorded audio cache is empty.");
+        return null;
+      }
+      const mimeType = (state.recordedMimeType || (el.mimeType.value || "").trim() || "audio/webm").trim();
+      const fileExtension = mimeType.indexOf("wav") >= 0
+        ? "wav"
+        : mimeType.indexOf("mp4") >= 0
+          ? "m4a"
+          : mimeType.indexOf("ogg") >= 0
+            ? "ogg"
+            : "webm";
+      const fileName = "voice-session-" + ((el.sessionId.value || "").trim() || "recording") + "." + fileExtension;
+      const blob = new Blob(state.recordedChunks, { type: mimeType });
+      const file = new File([blob], fileName, {
+        type: mimeType,
+        lastModified: Date.now()
+      });
+      return uploadVoicePayload(file, "Auto upload recorded voice");
+    }
+
+    async function login() {
+      const base = required("baseUrl", el.baseUrl.value);
+      const storedAuth = (() => {
+        try {
+          return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || "{}");
+        } catch (error) {
+          return {};
+        }
+      })();
+      const appId = resolveValue(
+        el.appId.value,
+        readCookie("cloud_doc_appid"),
+        storedAuth.appId,
+        readQueryParam("appId"),
+        "app-test-001"
+      );
+      const code = resolveValue(
+        el.loginCode.value,
+        readQueryParam("code"),
+        "code-test-001"
+      );
+      const authType = resolveValue(el.authType.value, readQueryParam("authType"), "internal");
+      const redirectUri = resolveValue(el.redirectUri.value, readQueryParam("redirectUri"), window.location.href);
+      const url = new URL("/v1/note/login", base).toString();
+
+      logEvent("Login request -> " + url, {
+        appId: appId,
+        code: code,
+        authType: authType,
+        redirectUri: redirectUri
+      });
+
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          appId,
+          code,
+          authType,
+          redirectUri
+        })
+      });
+
+      if (!response.ok && response.status !== 204) {
+        const data = await readJson(response);
+        throw new Error("Login failed: " + JSON.stringify(data));
+      }
+
+      el.appId.value = readCookie("cloud_doc_appid") || appId;
+      el.userId.value = readCookie("cloud_doc_userid") || el.userId.value;
+      el.token.value = readCookie("cloud_doc_token") || el.token.value;
+      persistAuthFields();
+      logEvent("Login success and auth triple was restored from cookies.");
+    }
+
+    function wsOriginFromHttp(httpBase) {
+      const u = new URL(httpBase);
+      u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+      u.pathname = "/";
+      u.search = "";
+      u.hash = "";
+      return u.toString();
+    }
+
+    function getPreferredMimeType() {
+      const input = (el.mimeType.value || "").trim();
+      const candidates = [];
+      if (input) {
+        candidates.push(input);
+      }
+      candidates.push("audio/webm;codecs=opus");
+      candidates.push("audio/webm");
+      candidates.push("audio/mp4");
+      for (const candidate of candidates) {
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported(candidate)) {
+          return candidate;
+        }
+      }
+      return "";
+    }
+
+    async function createSession() {
+      const base = required("baseUrl", el.baseUrl.value);
+      const noteId = required("noteId", el.noteId.value);
+      const language = (el.language.value || "").trim() || "zh_CN";
+      const url = new URL("/v1/note/voice-realtime/sessions", base).toString();
+
+      logEvent("Create session request -> " + url, {
+        noteId: noteId,
+        language: language
+      });
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ noteId, language })
+      });
+      const data = await readJson(response);
+
+      if (!response.ok || !data || data.success === false) {
+        throw new Error("Create session failed: " + JSON.stringify(data));
+      }
+
+      const payload = data.data || {};
+      el.sessionId.value = payload.sessionId || "";
+      state.currentSessionPath = payload.websocketPath || null;
+      el.sessionState.textContent = payload.status || "opened";
+      resetStreamingRuntime("session created");
+      resetRecordedAudio("session created");
+      logEvent("Create session success", payload);
+      return payload;
+    }
+
+    async function createNote() {
+      const base = required("baseUrl", el.baseUrl.value);
+      const title = (el.noteTitle.value || "").trim() || "Voice Realtime Test Note";
+      const url = new URL("/v1/note/notes", base).toString();
+
+      logEvent("Create note request -> " + url, {
+        title: title,
+        type: "text"
+      });
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          title,
+          type: "text",
+          content: ""
+        })
+      });
+      const data = await readJson(response);
+
+      if (!response.ok || !data || data.success === false) {
+        throw new Error("Create note failed: " + JSON.stringify(data));
+      }
+
+      const payload = data.data || {};
+      el.noteId.value = payload.id || "";
+      logEvent("Create note success", payload);
+      return payload;
+    }
+
+    async function uploadVoiceFile() {
+      const selectedFile = el.voiceFile.files && el.voiceFile.files[0];
+      if (!selectedFile) {
+        throw new Error("voice file is required");
+      }
+      return uploadVoicePayload(selectedFile, "Upload voice file");
+    }
+
+    async function getVoiceDetail() {
+      const base = required("baseUrl", el.baseUrl.value);
+      const noteId = required("noteId", el.noteId.value);
+      const url = new URL("/v1/note/notes/" + encodeURIComponent(noteId) + "?withContent=true", base).toString();
+
+      logEvent("Get voice detail request -> " + url, {
+        noteId: noteId,
+        withContent: true
+      });
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: authHeaders()
+      });
+      const data = await readJson(response);
+
+      if (!response.ok || !data) {
+        throw new Error("Get voice detail failed: " + JSON.stringify(data));
+      }
+
+      const latestVoiceFile = sortByLatestTimestamp(data.voiceNote)[0] || null;
+      const latestRealtimeSession = sortByLatestTimestamp(data.voiceRealtimeSessions)[0] || null;
+
+      if (latestVoiceFile && latestVoiceFile.fileId) {
+        el.voiceFileId.value = latestVoiceFile.fileId;
+      }
+      if (latestRealtimeSession && latestRealtimeSession.sessionId) {
+        if (!(el.sessionId.value || "").trim()) {
+          el.sessionId.value = latestRealtimeSession.sessionId;
+        }
+      }
+
+      logEvent("Get voice detail success", {
+        detail: data,
+        latestVoiceFileId: latestVoiceFile && latestVoiceFile.fileId ? latestVoiceFile.fileId : null,
+        latestSessionId: latestRealtimeSession && latestRealtimeSession.sessionId ? latestRealtimeSession.sessionId : null,
+        appendHint: "append uses the same noteId but creates a brand new realtime session instead of resuming the old sessionId"
+      });
+      return data;
+    }
+
+    function buildWsUrl() {
+      const base = required("baseUrl", el.baseUrl.value);
+      const appId = required("appId", el.appId.value);
+      const userId = required("userId", el.userId.value);
+      const token = required("token", el.token.value);
+      const sessionId = required("sessionId", el.sessionId.value);
+      const mimeType = (el.mimeType.value || "").trim();
+
+      const baseWsOrigin = wsOriginFromHttp(base);
+      const path = state.currentSessionPath || ("/v1/note/voice-realtime/ws?sessionId=" + encodeURIComponent(sessionId));
+      const wsUrl = new URL(path, baseWsOrigin);
+
+      wsUrl.searchParams.set("appId", appId);
+      wsUrl.searchParams.set("userId", userId);
+      wsUrl.searchParams.set("token", token);
+      wsUrl.searchParams.set("sessionId", sessionId);
+      if (mimeType) {
+        wsUrl.searchParams.set("mimeType", mimeType);
+      }
+      return wsUrl.toString();
+    }
+
+    function connectWs() {
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        logEvent("WS already connected.");
+        return;
+      }
+      state.lastConfiguredMimeType = "";
+
+      const wsUrl = buildWsUrl();
+      logEvent("Connecting WS -> " + wsUrl, {
+        wsUrl: wsUrl
+      });
+      const ws = new WebSocket(wsUrl);
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = function () {
+        setWsState("CONNECTED", "ok");
+        logEvent("WS connected.");
+      };
+
+      ws.onmessage = function (event) {
+        state.wsMessageCount += 1;
+        let payload;
+        try {
+          payload = JSON.parse(event.data);
+        } catch (error) {
+          logEvent("WS message (non-json): " + String(event.data), {
+            rawLength: String(event.data || "").length
+          });
+          return;
+        }
+
+        if (payload.status) {
+          el.sessionState.textContent = payload.status;
+        }
+        if (payload.transcript !== undefined && payload.transcript !== null) {
+          el.partialText.value = payload.transcript;
+        }
+        if (payload.finalTranscript !== undefined && payload.finalTranscript !== null) {
+          el.finalText.value = payload.finalTranscript;
+        }
+        logEvent("WS event: " + (payload.type || "unknown"), payload);
+          if (payload.type === "transcript.segment") {
+            logEvent("Segment committed while recorder keeps running", {
+              segmentIndex: payload.segmentIndex,
+              segmentTranscript: payload.segmentTranscript || null
+            });
+            logEvent("Recorder keeps running across segment boundary", {
+              segmentIndex: payload.segmentIndex,
+              recorderState: recorderState(),
+              acceptingAudio: state.acceptingAudio
+            });
+          }
+        };
+
+      ws.onerror = function (event) {
+        setWsState("ERROR", "err");
+        logEvent("WS error", {
+          type: event && event.type ? event.type : "error",
+          message: event && event.message ? event.message : "",
+          readyState: wsStateText()
+        });
+      };
+
+      ws.onclose = function (event) {
+        setWsState("DISCONNECTED", "");
+        if (state.ws === ws) {
+          state.ws = null;
+        }
+        state.pendingRecorderRestart = null;
+        state.lastConfiguredMimeType = "";
+        logEvent("WS closed code=" + event.code + ", reason=" + (event.reason || ""), {
+          code: event.code,
+          reason: event.reason || "",
+          wasClean: event.wasClean
+        });
+      };
+
+      state.ws = ws;
+      setWsState("CONNECTING", "warn");
+    }
+
+    function waitForWsOpen(timeoutMs) {
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        return Promise.resolve();
+      }
+      return new Promise(function (resolve, reject) {
+        const ws = state.ws;
+        if (!ws) {
+          reject(new Error("WS is not initialized"));
+          return;
+        }
+        let settled = false;
+        const timer = window.setTimeout(function () {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          reject(new Error("Timed out waiting for WS to open"));
+        }, timeoutMs || 5000);
+
+        function finish(error) {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          window.clearTimeout(timer);
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        }
+
+        ws.addEventListener("open", function () {
+          finish();
+        }, { once: true });
+        ws.addEventListener("close", function () {
+          finish(new Error("WS closed before opening"));
+        }, { once: true });
+        ws.addEventListener("error", function () {
+          finish(new Error("WS errored before opening"));
+        }, { once: true });
+      });
+    }
+
+    async function startMic() {
+      if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+        throw new Error("WS must be connected before starting microphone");
+      }
+      if (!window.MediaRecorder) {
+        throw new Error("MediaRecorder is not supported in this browser");
+      }
+      if (state.mediaRecorder && state.mediaRecorder.state !== "inactive") {
+        log("Microphone is already recording.");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      try {
+        attachRecorder(stream, "manual start");
+      } catch (error) {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        throw error;
+      }
+    }
+
+    function stopMic() {
+      state.acceptingAudio = false;
+      state.pendingRecorderRestart = null;
+      if (state.mediaRecorder && state.mediaRecorder.state !== "inactive") {
+        logEvent("Stopping microphone", {
+          recorderState: state.mediaRecorder.state,
+          audioChunkCount: state.audioChunkCount
+        });
+        state.mediaRecorder.stop();
+      } else {
+        logEvent("Microphone is not recording.");
+      }
+    }
+
+    function sendWsControl(type) {
+      if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+        throw new Error("WS is not connected");
+      }
+      const payload = { type: type };
+      if (type === "resume" || type === "config") {
+        payload.mimeType = (el.mimeType.value || "").trim() || "audio/webm";
+      }
+      state.ws.send(JSON.stringify(payload));
+      state.controlCount += 1;
+      if (type === "config" || type === "resume") {
+        state.lastConfiguredMimeType = payload.mimeType || "";
+      }
+      logEvent("Send WS control: " + type, payload);
+    }
+
+    function cleanupMediaStream(stopTracks) {
+      if (state.mediaStream && stopTracks) {
+        state.mediaStream.getTracks().forEach(function (track) { track.stop(); });
+        state.mediaStream = null;
+      }
+      state.mediaRecorder = null;
+      state.acceptingAudio = false;
+    }
+
+    function attachRecorder(stream, startReason) {
+      const requestedMimeType = getPreferredMimeType();
+      const recorder = requestedMimeType
+        ? new MediaRecorder(stream, { mimeType: requestedMimeType })
+        : new MediaRecorder(stream);
+
+      recorder.ondataavailable = async function (event) {
+        if (!event.data || event.data.size <= 0) {
+          if (state.pendingRecorderRestart && state.pendingRecorderRestart.awaitingFlushChunk && !state.pendingRecorderRestart.stopIssued) {
+            state.pendingRecorderRestart.awaitingFlushChunk = false;
+            state.pendingRecorderRestart.stopIssued = true;
+            state.acceptingAudio = false;
+            logEvent("No mic chunk was produced during restart flush, stopping recorder directly", {
+              reason: state.pendingRecorderRestart.reason
+            });
+            recorder.stop();
+          }
+          return;
+        }
+        const chunkMimeType = (event.data.type || recorder.mimeType || requestedMimeType || "").trim();
+        cacheRecordedChunk(event.data, chunkMimeType);
+        if (chunkMimeType && chunkMimeType !== (el.mimeType.value || "").trim()) {
+          syncMimeTypeAndConfig(chunkMimeType, "audio chunk");
+        }
+        if (!state.acceptingAudio) {
+          logEvent("Dropping mic chunk because acceptingAudio=false", {
+            bytes: event.data.size,
+            mimeType: chunkMimeType || "default"
+          });
+          return;
+        }
+        if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+          logEvent("Dropping mic chunk because WS is not open", {
+            bytes: event.data.size,
+            mimeType: chunkMimeType || "default"
+          });
+          return;
+        }
+        const buffer = await event.data.arrayBuffer();
+        if (!state.acceptingAudio || !state.ws || state.ws.readyState !== WebSocket.OPEN) {
+          logEvent("Dropping mic chunk after arrayBuffer because state changed", {
+            bytes: buffer.byteLength,
+            mimeType: chunkMimeType || "default"
+          });
+          return;
+        }
+        state.audioChunkCount += 1;
+        state.lastChunkBytes = buffer.byteLength;
+        state.lastChunkAt = now();
+        logEvent("Mic chunk ready", {
+          chunkIndex: state.audioChunkCount,
+          bytes: buffer.byteLength,
+          mimeType: chunkMimeType || "default"
+        });
+        state.ws.send(buffer);
+        if (state.pendingRecorderRestart && state.pendingRecorderRestart.awaitingFlushChunk && !state.pendingRecorderRestart.stopIssued) {
+          state.pendingRecorderRestart.awaitingFlushChunk = false;
+          state.pendingRecorderRestart.stopIssued = true;
+          state.acceptingAudio = false;
+          logEvent("Recorder flush chunk sent, stopping recorder for restart", {
+            reason: state.pendingRecorderRestart.reason,
+            bytes: buffer.byteLength
+          });
+          recorder.stop();
+        }
+      };
+
+      recorder.onstop = function () {
+        const restartPlan = state.pendingRecorderRestart;
+        if (restartPlan) {
+          const streamToReuse = restartPlan.stream;
+          const reason = restartPlan.reason;
+          state.pendingRecorderRestart = null;
+          state.mediaRecorder = null;
+          state.acceptingAudio = false;
+          logEvent("Microphone recorder stopped for restart", {
+            reason: reason,
+            audioChunkCount: state.audioChunkCount
+          });
+          try {
+            attachRecorder(streamToReuse, "restart:" + reason);
+          } catch (error) {
+            cleanupMediaStream(true);
+            log("Recorder restart failed: " + (error && error.message ? error.message : String(error)));
+          }
+          return;
+        }
+        const shouldAutoUpload = state.pendingAutoUploadAfterStop;
+        state.pendingAutoUploadAfterStop = false;
+        cleanupMediaStream(true);
+        log("Microphone stopped.");
+        if (shouldAutoUpload) {
+          uploadCachedRecording().catch(function (error) {
+            log("Auto upload recorded voice failed: " + (error && error.message ? error.message : String(error)));
+          });
+        }
+      };
+
+      state.mediaStream = stream;
+      state.mediaRecorder = recorder;
+      state.acceptingAudio = true;
+      recorder.start(RECORDER_TIMESLICE_MS);
+      const effectiveMimeType = recorder.mimeType || requestedMimeType || "default";
+      syncMimeTypeAndConfig(effectiveMimeType, startReason || "recorder start");
+      logEvent("Microphone started. Chunk interval=" + RECORDER_TIMESLICE_MS + "ms, mimeType=" + effectiveMimeType, {
+        requestedMimeType: requestedMimeType || "",
+        effectiveMimeType: effectiveMimeType,
+        startReason: startReason || "manual",
+        tracks: stream.getTracks().map(function (track) {
+          return {
+            kind: track.kind,
+            enabled: track.enabled,
+            muted: track.muted,
+            readyState: track.readyState
+          };
+        })
+      });
+    }
+
+    function restartMicRecorder(reason) {
+      if (!state.mediaRecorder || state.mediaRecorder.state === "inactive" || !state.mediaStream) {
+        logEvent("Recorder restart skipped", {
+          reason: reason,
+          recorderState: recorderState(),
+          hasMediaStream: !!state.mediaStream
+        });
+        return;
+      }
+      if (state.pendingRecorderRestart) {
+        logEvent("Recorder restart already pending", {
+          reason: reason,
+          pendingReason: state.pendingRecorderRestart.reason
+        });
+        return;
+      }
+      state.pendingRecorderRestart = {
+        reason: reason,
+        stream: state.mediaStream,
+        awaitingFlushChunk: true,
+        stopIssued: false
+      };
+      logEvent("Restarting microphone recorder", {
+        reason: reason,
+        recorderState: state.mediaRecorder.state,
+        audioChunkCount: state.audioChunkCount
+      });
+      try {
+        state.mediaRecorder.requestData();
+      } catch (error) {
+        state.acceptingAudio = false;
+        state.pendingRecorderRestart.awaitingFlushChunk = false;
+        state.pendingRecorderRestart.stopIssued = true;
+        logEvent("Recorder requestData failed, stopping recorder immediately", {
+          reason: reason,
+          message: error && error.message ? error.message : String(error)
+        });
+        state.mediaRecorder.stop();
+      }
+    }
+
+    function disconnectWs() {
+      stopMic();
+      state.pendingAutoUploadAfterStop = false;
+      if (state.ws) {
+        logEvent("Disconnecting WS", {
+          readyState: wsStateText()
+        });
+        state.ws.close(1000, "manual disconnect");
+      }
+      state.ws = null;
+      state.pendingRecorderRestart = null;
+      state.lastConfiguredMimeType = "";
+      setWsState("DISCONNECTED", "");
+    }
+
+    async function runSafe(action, title) {
+      try {
+        await action();
+      } catch (error) {
+        log(title + " failed: " + (error && error.message ? error.message : String(error)));
+      }
+    }
+
+    el.btnCreate.addEventListener("click", function () {
+      runSafe(createSession, "Create session");
+    });
+    el.btnLogin.addEventListener("click", function () {
+      runSafe(login, "Login");
+    });
+    el.btnCreateNote.addEventListener("click", function () {
+      runSafe(createNote, "Create note");
+    });
+    el.btnUploadVoice.addEventListener("click", function () {
+      runSafe(uploadVoiceFile, "Upload voice file");
+    });
+    el.btnGetVoiceDetail.addEventListener("click", function () {
+      runSafe(getVoiceDetail, "Get voice detail");
+    });
+    el.btnConnect.addEventListener("click", function () {
+      runSafe(connectWs, "Connect WS");
+    });
+    el.btnAppend.addEventListener("click", function () {
+      runSafe(async function () {
+        if (state.mediaRecorder && state.mediaRecorder.state !== "inactive") {
+          stopMic();
+        }
+        if (state.ws && state.ws.readyState !== WebSocket.CLOSED) {
+          disconnectWs();
+        }
+        const session = await createSession();
+        logEvent("Append note created a brand new realtime session under the same note", {
+          noteId: session.noteId,
+          sessionId: session.sessionId,
+          appendMode: "same noteId, new sessionId, cards should be aggregated by noteId instead of reusing the previous realtime session"
+        });
+        connectWs();
+        await waitForWsOpen(5000);
+        await startMic();
+      }, "Append note with new session");
+    });
+    el.btnStartMic.addEventListener("click", function () {
+      runSafe(startMic, "Start microphone");
+    });
+    el.btnStopMic.addEventListener("click", function () {
+      runSafe(stopMic, "Stop microphone");
+    });
+    el.btnPause.addEventListener("click", function () {
+      runSafe(async function () {
+        stopMic();
+        sendWsControl("pause");
+      }, "Pause");
+    });
+    el.btnResume.addEventListener("click", function () {
+      runSafe(async function () {
+        sendWsControl("resume");
+        await startMic();
+      }, "Resume");
+    });
+    el.btnFinish.addEventListener("click", function () {
+      runSafe(async function () {
+        const shouldUploadAfterStop = !!(state.mediaRecorder && state.mediaRecorder.state !== "inactive");
+        state.pendingAutoUploadAfterStop = shouldUploadAfterStop;
+        stopMic();
+        if (!shouldUploadAfterStop) {
+          state.pendingAutoUploadAfterStop = false;
+          await uploadCachedRecording();
+        }
+        if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+          sendWsControl("finish");
+        } else {
+          logEvent("Skipping WS finish because WS is not connected.");
+        }
+      }, "Finish");
+    });
+    el.btnDisconnect.addEventListener("click", function () {
+      runSafe(disconnectWs, "Disconnect");
+    });
+    el.btnClearLog.addEventListener("click", function () {
+      el.log.textContent = "";
+      logEvent("Log cleared.");
+    });
+
+    [el.appId, el.userId, el.token].forEach(function (input) {
+      input.addEventListener("change", persistAuthFields);
+      input.addEventListener("blur", persistAuthFields);
+    });
+
+    hydrateFromQueryParams();
+    restoreAuthFields();
+    logEvent("Page ready. Fill auth fields and noteId, then click Create Session.");
+  })();
+</script>
+</body>
+</html>
