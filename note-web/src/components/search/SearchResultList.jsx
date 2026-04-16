@@ -5,6 +5,7 @@ import {
   FileTextOutlined,
 } from '@ant-design/icons'
 import { SoundOutlined } from '@ant-design/icons'
+import SearchHighlightText from '@/components/search/SearchHighlightText'
 
 const { Paragraph, Text } = Typography
 
@@ -123,7 +124,11 @@ function SearchResultList({ results, query, onResultClick, recentSearches, onRec
                   <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
                       <Text strong style={{ fontSize: 15, color: '#10223a', lineHeight: 1.15, minWidth: 0 }}>
-                        {item.title || '未命名笔记'}
+                        <SearchHighlightText
+                          as="span"
+                          text={item.highlightTitle || item.title || '未命名笔记'}
+                          keyword={query}
+                        />
                       </Text>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                         {hasVoiceRecords(item) ? (
@@ -149,7 +154,7 @@ function SearchResultList({ results, query, onResultClick, recentSearches, onRec
                       </div>
                     </div>
 
-                    {item.highlight || item.content ? (
+                    {item.context ? (
                       <Paragraph
                         ellipsis={{ rows: 2 }}
                         style={{
@@ -158,7 +163,11 @@ function SearchResultList({ results, query, onResultClick, recentSearches, onRec
                           lineHeight: 1.45,
                         }}
                       >
-                        {item.highlight || item.content}
+                        <SearchHighlightText
+                          as="span"
+                          text={item.context}
+                          keyword={query}
+                        />
                       </Paragraph>
                     ) : null}
 

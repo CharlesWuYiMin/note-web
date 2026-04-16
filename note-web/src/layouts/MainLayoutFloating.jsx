@@ -6,7 +6,7 @@ import AIPanel from '@/components/layout/AIPanel'
 import Header from '@/components/layout/Header'
 import NotesSidebar from '@/components/layout/NotesSidebar'
 import SidebarWorkspaceNav from '@/components/layout/SidebarWorkspaceNav'
-import NoteSearchPanel from '@/components/search/NoteSearchPanelFinal'
+import NoteSearchPanel from '@/components/search/NoteSearchPanelWorkspace'
 import { getSearchContext } from '@/utils/searchContext'
 
 const { Content } = Layout

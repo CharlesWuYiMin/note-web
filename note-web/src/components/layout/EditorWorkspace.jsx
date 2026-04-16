@@ -71,63 +71,63 @@ function getWorkspaceSectionItems(pathname, { notes, starredNotes, myShares, del
   return notes
 }
 
-function getWorkspaceEmptyState(pathname, hasRouteId) {
+function getWorkspaceEmptyState(pathname, hasRouteId, t) {
   if (pathname.startsWith('/cloudnote/shares')) {
     return hasRouteId
       ? {
-          title: '未找到分享对应的笔记',
-          description: '这条分享记录已经不存在或暂时无法访问。',
+          title: t('workspace.empty.shares.missingTitle', { defaultValue: '未找到分享对应的笔记' }),
+          description: t('workspace.empty.shares.missingDescription', { defaultValue: '这条分享记录已经不存在或暂时无法访问。' }),
         }
       : {
-          title: '我的分享',
-          description: '当前还没有分享记录，创建分享后会显示在这里。',
+          title: t('workspace.empty.shares.title', { defaultValue: '我的分享' }),
+          description: t('workspace.empty.shares.description', { defaultValue: '当前还没有分享记录，创建分享后会显示在这里。' }),
         }
   }
 
   if (pathname.startsWith('/cloudnote/starred') || pathname.startsWith('/cloudnote/star')) {
     return hasRouteId
       ? {
-          title: '未找到这条星标笔记',
-          description: '这条星标内容可能已被删除，或者暂时无法加载。',
+          title: t('workspace.empty.starred.missingTitle', { defaultValue: '未找到这条星标笔记' }),
+          description: t('workspace.empty.starred.missingDescription', { defaultValue: '这条星标内容可能已被删除，或者暂时无法加载。' }),
         }
       : {
-          title: '星标笔记',
-          description: '当前还没有星标笔记，收藏重要内容后会显示在这里。',
+          title: t('workspace.empty.starred.title', { defaultValue: '星标笔记' }),
+          description: t('workspace.empty.starred.description', { defaultValue: '当前还没有星标笔记，收藏重要内容后会显示在这里。' }),
         }
   }
 
   if (pathname.startsWith('/cloudnote/recyclebin')) {
     return hasRouteId
       ? {
-          title: '未找到回收站记录',
-          description: '这条删除记录可能已被清理，或者暂时无法访问。',
+          title: t('workspace.empty.recycleBin.missingTitle', { defaultValue: '未找到回收站记录' }),
+          description: t('workspace.empty.recycleBin.missingDescription', { defaultValue: '这条删除记录可能已被清理，或者暂时无法访问。' }),
         }
       : {
-          title: '回收站',
-          description: '当前回收站里还没有内容。',
+          title: t('workspace.empty.recycleBin.title', { defaultValue: '回收站' }),
+          description: t('workspace.empty.recycleBin.description', { defaultValue: '当前回收站里还没有内容。' }),
         }
   }
 
   if (pathname.startsWith('/cloudnote/notebooks')) {
     return hasRouteId
       ? {
-          title: '未找到这条笔记记录',
-          description: '这条笔记可能已被删除，或者暂时无法加载。',
+          title: t('workspace.empty.notebooks.missingTitle', { defaultValue: '未找到这条笔记记录' }),
+          description: t('workspace.empty.notebooks.missingDescription', { defaultValue: '这条笔记可能已被删除，或者暂时无法加载。' }),
         }
       : {
-          title: '笔记本',
-          description: '当前分类下还没有可打开的笔记。',
+          title: t('workspace.empty.notebooks.title', { defaultValue: '笔记本' }),
+          description: t('workspace.empty.notebooks.description', { defaultValue: '当前分类下还没有可打开的笔记。' }),
         }
   }
 
   return hasRouteId
     ? {
-        title: '未找到对应笔记',
-        description: '这条笔记可能已不存在，或者暂时无法访问。',
+        title: t('workspace.empty.recent.missingTitle', { defaultValue: '未找到对应笔记' }),
+        description: t('workspace.empty.recent.missingDescription', { defaultValue: '这条笔记可能已不存在，或者暂时无法访问。' }),
       }
     : {
-        title: '近期笔记',
-        description: '当前还没有可打开的笔记，创建一条新的内容后会显示在这里。',
+        title: t('workspace.empty.recent.title', { defaultValue: '近期笔记' }),
+        description: t('workspace.empty.recent.description', { defaultValue: '当前还没有可打开的笔记，创建一条新的内容后会显示在这里。' }),
       }
 }
 
@@ -275,9 +275,10 @@ function EditorWorkspace() {
     [deletedNotes, location.pathname, myShares, notes, starredNotes]
   )
   const hasSectionItems = sectionItems.length > 0
-  const sectionEmptyState = getWorkspaceEmptyState(location.pathname, false)
-  const emptyState = getWorkspaceEmptyState(location.pathname, Boolean(id))
-  const displayTitle = noteForRender?.title || (id ? '未命名笔记' : emptyState.title)
+  const sectionEmptyState = getWorkspaceEmptyState(location.pathname, false, t)
+  const emptyState = getWorkspaceEmptyState(location.pathname, Boolean(id), t)
+  const untitledLabel = t('note.untitled', { defaultValue: '未命名笔记' })
+  const displayTitle = noteForRender?.title || (id ? untitledLabel : emptyState.title)
   const isTransitioningNote = Boolean(id) && !noteForRender && !error
   const showEmptyState = !noteForRender && !isLoading && Boolean(error)
   const showSectionEmptyState = !isLoading && !hasSectionItems
@@ -290,7 +291,7 @@ function EditorWorkspace() {
     setForcedVoiceEditorNoteId(null)
     setVoiceAutoStartToken(null)
     setVoicePanelVisible(true)
-    setTitle(notePreview?.title || (id ? '未命名笔记' : emptyState.title))
+    setTitle(notePreview?.title || (id ? untitledLabel : emptyState.title))
     setIsTitleEditing(false)
 
     if (!id) {
@@ -298,7 +299,7 @@ function EditorWorkspace() {
     }
 
     loadNoteById(id).catch(() => {})
-  }, [emptyState.title, id, loadNoteById])
+  }, [emptyState.title, id, loadNoteById, notePreview?.title, untitledLabel])
 
   useEffect(() => {
     if (noteForRender?.title) {
@@ -311,9 +312,9 @@ function EditorWorkspace() {
       return
     }
 
-    setTitle('未命名笔记')
+    setTitle(untitledLabel)
     setIsTitleEditing(false)
-  }, [noteForRender?.id, noteForRender?.title])
+  }, [noteForRender?.id, noteForRender?.title, untitledLabel])
 
   useEffect(() => {
     if (!noteForRender) {

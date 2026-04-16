@@ -55,6 +55,26 @@ const BATCH_ACTION_LABELS = {
   recyclebin: ['恢复', '彻底删除'],
 }
 
+function getSectionEmptyLabel(section, t) {
+  const keyMap = {
+    recent: 'notesSidebar.empty.recent',
+    starred: 'notesSidebar.empty.starred',
+    shares: 'notesSidebar.empty.shares',
+    notebooks: 'notesSidebar.empty.notebooks',
+    recyclebin: 'notesSidebar.empty.recycleBin',
+  }
+
+  const defaultMap = {
+    recent: '暂无近期笔记',
+    starred: '暂无星标笔记',
+    shares: '暂无分享记录',
+    notebooks: '暂无笔记',
+    recyclebin: '回收站为空',
+  }
+
+  return t(keyMap[section] || keyMap.recent, { defaultValue: defaultMap[section] || defaultMap.recent })
+}
+
 function getErrorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback
 }
@@ -502,7 +522,7 @@ function NotesSidebar({ visible = true }) {
 
   return (
     <aside
-      aria-label="近期笔记侧栏"
+      aria-label={t('notesSidebar.ariaLabel', { defaultValue: '笔记列表侧栏' })}
       className="notes-sidebar"
       style={{
         width,
@@ -551,11 +571,18 @@ function NotesSidebar({ visible = true }) {
                 color: '#111827',
               }}
             >
-              {sortedNotes.length}篇笔记
+              {t('notesSidebar.noteCount', {
+                count: sortedNotes.length,
+                defaultValue: '{{count}}篇笔记',
+              })}
             </div>
             {currentSection === 'starred' && starredTotalCount > starredLoadedCount ? (
               <div style={{ fontSize: 12, color: 'rgba(100,116,139,0.82)', marginLeft: 8 }}>
-                已加载 {starredLoadedCount}/{starredTotalCount}
+                {t('notesSidebar.loadedProgress', {
+                  loaded: starredLoadedCount,
+                  total: starredTotalCount,
+                  defaultValue: '已加载 {{loaded}}/{{total}}',
+                })}
               </div>
             ) : null}
           </div>
@@ -576,11 +603,11 @@ function NotesSidebar({ visible = true }) {
           />
 
           <div ref={menuRef} style={{ position: 'relative' }}>
-            <Button
-              type="text"
-              size="small"
-              aria-label="打开近期笔记排序菜单"
-              icon={<FilterOutlined />}
+          <Button
+            type="text"
+            size="small"
+            aria-label={t('notesSidebar.openSortMenu', { defaultValue: '打开排序菜单' })}
+            icon={<FilterOutlined />}
               onClick={() => {
                 setBatchMode(false)
                 setSelectedNoteIds([])
@@ -816,7 +843,7 @@ function NotesSidebar({ visible = true }) {
                     textOverflow: 'ellipsis',
                   }}
                 >
-                  {note.title || '未命名笔记'}
+                  {note.title || t('note.untitled', { defaultValue: '未命名笔记' })}
                 </div>
                 <div
                   style={{
@@ -929,7 +956,7 @@ function NotesSidebar({ visible = true }) {
 
         {!isLoading && sortedNotes.length === 0 ? (
           <div style={{ padding: '24px 12px', color: 'rgba(16,34,58,0.56)', fontSize: 13 }}>
-            {currentSection === 'starred' ? '暂无星标笔记' : '暂无近期笔记'}
+            {getSectionEmptyLabel(currentSection, t)}
           </div>
         ) : null}
 
@@ -948,7 +975,7 @@ function NotesSidebar({ visible = true }) {
       </div>
 
       <Modal
-        title="移动到笔记本"
+        title={t('notesSidebar.moveDialog.title', { defaultValue: '移动到笔记本' })}
         open={moveDialogOpen}
         destroyOnHidden
         onCancel={() => {
@@ -956,17 +983,20 @@ function NotesSidebar({ visible = true }) {
           setTargetNotebookId(null)
         }}
         onOk={handleConfirmMove}
-        okText="移动"
-        cancelText="取消"
+        okText={t('notesSidebar.moveDialog.confirm', { defaultValue: '移动' })}
+        cancelText={t('common.cancel', { defaultValue: '取消' })}
         confirmLoading={isBatchSubmitting}
         okButtonProps={{ disabled: !targetNotebookId }}
       >
         <div style={{ color: 'rgba(16,34,58,0.7)', marginBottom: 12 }}>
-          已选择 {selectedNoteIds.length} 篇笔记
+          {t('notesSidebar.moveDialog.selectedCount', {
+            count: selectedNoteIds.length,
+            defaultValue: '已选择 {{count}} 篇笔记',
+          })}
         </div>
         <Select
           style={{ width: '100%' }}
-          placeholder="请选择目标笔记本"
+          placeholder={t('notesSidebar.moveDialog.placeholder', { defaultValue: '请选择目标笔记本' })}
           value={targetNotebookId}
           onChange={setTargetNotebookId}
           options={moveNotebookOptions.filter((item) => (

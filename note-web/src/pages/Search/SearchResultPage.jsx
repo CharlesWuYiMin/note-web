@@ -66,6 +66,8 @@ const SearchResultPage = () => {
   const performSearch = async (searchQuery, currentPage) => {
     try {
       setLoading(true)
+      const nextRecentSearches = searchService.rememberRecentSearch?.(searchQuery)
+      setRecentSearches(Array.isArray(nextRecentSearches) ? nextRecentSearches.slice(0, 5) : [])
       const data = await searchService.searchNotes(searchQuery, { status, page: currentPage, pageSize })
       const nextResults = normalizeSearchResponse(data)
       setResults(nextResults.items)

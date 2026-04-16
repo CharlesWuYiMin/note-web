@@ -2647,7 +2647,7 @@ function VoiceNoteEditor({
     try {
       const response = await aiService.extraction(
         note.id,
-        '请基于当前语音笔记提取关键观点、结论和待跟进事项。',
+        t('voice.extractionPrompt', { defaultValue: '请基于当前语音笔记提取关键观点、结论和待跟进事项。' }),
         {
           signal: controller.signal,
           onDelta: (deltaText) => {

@@ -225,10 +225,63 @@
       "voiceNote": "Voice Note",
       "handwrittenNote": "Handwritten Note",
       "outlineNote": "Outline Note",
-      "newTextNote": "New Text Note",
-      "newVoiceNote": "New Voice Note",
-      "newHandwrittenNote": "New Handwritten Note",
-      "newOutlineNote": "New Outline Note"
+      "newTextNote": "Text Note",
+      "newVoiceNote": "Voice Note",
+      "newHandwrittenNote": "Handwriting",
+      "newOutlineNote": "Outline"
+    }
+  },
+  "notesSidebar": {
+    "ariaLabel": "Notes list sidebar",
+    "noteCount": "{{count}} notes",
+    "loadedProgress": "Loaded {{loaded}}/{{total}}",
+    "openSortMenu": "Open sort menu",
+    "empty": {
+      "recent": "No recent notes yet",
+      "starred": "No starred notes yet",
+      "shares": "No shares yet",
+      "notebooks": "No notes yet",
+      "recycleBin": "Recycle bin is empty"
+    },
+    "moveDialog": {
+      "title": "Move to Notebook",
+      "confirm": "Move",
+      "selectedCount": "{{count}} notes selected",
+      "placeholder": "Select a target notebook"
+    }
+  },
+  "workspace": {
+    "empty": {
+      "recent": {
+        "title": "Recent Notes",
+        "description": "There are no notes to open yet. Create one and it will appear here.",
+        "missingTitle": "Note not found",
+        "missingDescription": "This note may no longer exist or is temporarily unavailable."
+      },
+      "starred": {
+        "title": "Starred Notes",
+        "description": "You have no starred notes yet. Star important content and it will appear here.",
+        "missingTitle": "Starred note not found",
+        "missingDescription": "This starred note may have been deleted or is temporarily unavailable."
+      },
+      "shares": {
+        "title": "My Shares",
+        "description": "You have no share records yet. They will appear here after you create one.",
+        "missingTitle": "Shared note not found",
+        "missingDescription": "This share record no longer exists or is temporarily unavailable."
+      },
+      "notebooks": {
+        "title": "Notebooks",
+        "description": "There are no openable notes in this category yet.",
+        "missingTitle": "Note record not found",
+        "missingDescription": "This note may have been deleted or is temporarily unavailable."
+      },
+      "recycleBin": {
+        "title": "Recycle Bin",
+        "description": "The recycle bin is empty.",
+        "missingTitle": "Recycle bin item not found",
+        "missingDescription": "This deleted item may have been cleared or is temporarily unavailable."
+      }
     }
   },
   "voice": {
@@ -238,6 +291,7 @@
     "realtimeStartedWithLanguage": "{{language}} live transcription started",
     "transcriptContent": "Transcript",
     "viewpointExtraction": "Insight Extraction",
+    "extractionPrompt": "Please extract the key viewpoints, conclusions, and follow-up actions from the current voice note.",
     "emptyCards": "No voice cards yet. Start recording to create one.",
     "extracting": "Extracting insights...",
     "extractionEmpty": "Click \"Insight Extraction\" and the extracted result will appear here.",

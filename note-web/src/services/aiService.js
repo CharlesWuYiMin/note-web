@@ -38,9 +38,11 @@ function getCookie(name) {
 }
 
 function getRequestLanguageHeader() {
-  const currentLanguage = localStorage.getItem('language') || document?.documentElement?.lang || 'zh-CN'
+  const currentLanguage = String(
+    localStorage.getItem('language') || document?.documentElement?.lang || 'zh-CN'
+  ).trim().toLowerCase()
 
-  if (currentLanguage === 'en-US') {
+  if (currentLanguage.startsWith('en')) {
     return 'en_US'
   }
 
