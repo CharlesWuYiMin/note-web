@@ -269,6 +269,10 @@ function resolveLiveTranscriptCardIndex(cards = [], currentCard = null, segmentI
   return hintedIndex || nextIndex
 }
 
+function getActiveLiveTranscriptCard(cards = []) {
+  return Array.isArray(cards) ? cards.find((card) => card?.active) || null : null
+}
+
 const VOICE_REALTIME_DEBUG_ENABLED =
   import.meta.env.DEV || (typeof window !== 'undefined' && window.localStorage?.getItem('voiceRealtimeDebug') === '1')
 
@@ -802,7 +806,6 @@ function VoiceNoteEditor({
   const [volumePopoverOpen, setVolumePopoverOpen] = useState(false)
   const [isPlaybackControlsCompact, setIsPlaybackControlsCompact] = useState(false)
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
-  const [liveTranscriptText, setLiveTranscriptText] = useState('')
   const [liveTranscriptSegments, setLiveTranscriptSegments] = useState([])
   const [voiceContentView, setVoiceContentView] = useState('transcript')
   const [extractionText, setExtractionText] = useState('')
@@ -848,9 +851,6 @@ function VoiceNoteEditor({
   const recordingStateRef = useRef('idle')
   const playbackStateRef = useRef('idle')
   const recordingsRef = useRef(recordings)
-  const liveTranscriptTextRef = useRef('')
-  const liveTranscriptCommittedTextRef = useRef('')
-  const liveTranscriptCommittedSegmentIndexRef = useRef(0)
   const liveTranscriptSegmentsRef = useRef([])
   const transcriptSourceKeyRef = useRef('01')
   const sourceRecordingKeyRef = useRef('01')
@@ -865,6 +865,7 @@ function VoiceNoteEditor({
   const visibleTranscripts = isLiveRealtimeSelected
     ? liveTranscriptSegments
     : (transcriptGroups[selectedRecording] || transcriptGroups[transcriptSourceKeyRef.current] || [])
+  const renderedTranscripts = visibleTranscripts.filter((item) => Boolean(item?.active || String(item?.text || '').trim()))
   const selectedRecordingData = recordings.find((item) => item.key === selectedRecording) || null
   const isRecording = recordingState === 'recording'
   const isUploading = recordingState === 'uploading'
@@ -875,10 +876,6 @@ function VoiceNoteEditor({
   useEffect(() => {
     recordingsRef.current = recordings
   }, [recordings])
-
-  useEffect(() => {
-    liveTranscriptTextRef.current = liveTranscriptText
-  }, [liveTranscriptText])
 
   useEffect(() => {
     liveTranscriptSegmentsRef.current = liveTranscriptSegments
@@ -915,9 +912,6 @@ function VoiceNoteEditor({
 
   const seedLiveTranscriptCards = () => {
     setLiveTranscriptSegments([createLiveTranscriptCardEntry(1, '', true)])
-    setLiveTranscriptText('')
-    liveTranscriptCommittedTextRef.current = ''
-    liveTranscriptCommittedSegmentIndexRef.current = 0
     voiceRealtimeLog('seed-live-cards', { segmentCount: 1 })
   }
 
@@ -926,79 +920,103 @@ function VoiceNoteEditor({
     if (!normalizedText) {
       return
     }
-    setLiveTranscriptText(normalizedText)
-    voiceRealtimeLog('update-live-transcript', {
-      segmentIndex,
-      text: truncateText(normalizedText, 80),
-      committedText: truncateText(liveTranscriptCommittedTextRef.current, 80),
+    const hintedIndex = Number.isFinite(segmentIndex) && segmentIndex > 0 ? segmentIndex : null
+
+    setLiveTranscriptSegments((current) => {
+      const next = Array.isArray(current) ? [...current] : []
+      const currentCard = getActiveLiveTranscriptCard(next) || next[next.length - 1] || null
+      const activeIndex = resolveLiveTranscriptCardIndex(next, currentCard, hintedIndex)
+      const activeLabel = String(activeIndex).padStart(2, '0')
+
+      if (currentCard && currentCard.active) {
+        const currentPosition = next.findIndex((item) => item?.active)
+        next[currentPosition] = {
+          ...currentCard,
+          segmentIndex: activeIndex,
+          avatar: `C${activeLabel}`,
+          name: `卡片 ${activeLabel}`,
+          text: normalizedText,
+          active: true,
+        }
+      } else {
+        next.push(createLiveTranscriptCardEntry(activeIndex, normalizedText, true))
+      }
+
+      voiceRealtimeLog('update-live-card', {
+        segmentIndex: activeIndex,
+        text: truncateText(normalizedText, 80),
+        cardCount: next.length,
+      })
+      return next
     })
   }
 
   const commitLiveTranscriptCard = (text, segmentIndex = null, advance = true) => {
     const normalizedText = normalizeTranscriptText(text)
-    const committedText = normalizeTranscriptText(liveTranscriptCommittedTextRef.current)
-    const finalText = normalizedText
-
-    if (!finalText) {
+    if (!normalizedText) {
       return
     }
+    const hintedIndex = Number.isFinite(segmentIndex) && segmentIndex > 0 ? segmentIndex : null
 
-    const hintedIndex = Number.isFinite(segmentIndex) && segmentIndex > 0 ? segmentIndex : 0
-    const committedSegmentIndex = Number(liveTranscriptCommittedSegmentIndexRef.current || 0)
-
-    if (hintedIndex > 0 && hintedIndex <= committedSegmentIndex) {
-      if (!committedText || finalText === committedText) {
-        voiceRealtimeLog('skip-duplicate-segment', {
-          segmentIndex: hintedIndex,
-          text: truncateText(finalText, 80),
-        })
-        return
-      }
-    }
-
-    if (!liveTranscriptSegmentsRef.current.some((item) => !item?.active && String(item?.text || '').trim()) && isLikelyNoiseTranscript(finalText)) {
+    if (!liveTranscriptSegmentsRef.current.some((item) => !item?.active && String(item?.text || '').trim()) && isLikelyNoiseTranscript(normalizedText)) {
       voiceRealtimeLog('skip-noise-segment', {
         segmentIndex,
-        text: truncateText(finalText, 80),
+        text: truncateText(normalizedText, 80),
       })
       return
     }
 
     setLiveTranscriptSegments((current) => {
       const next = [...current]
-      const currentCard = next[next.length - 1] || null
+      const currentCard = getActiveLiveTranscriptCard(next) || next[next.length - 1] || null
+      const committedIndex = resolveLiveTranscriptCardIndex(next, currentCard, hintedIndex)
+      const committedLabel = String(committedIndex).padStart(2, '0')
+      const existingIndex = next.findIndex((item) => Number(item?.segmentIndex || 0) === committedIndex)
 
-      const committedIndex = resolveLiveTranscriptCardIndex(next, currentCard, segmentIndex)
-      if (currentCard && currentCard.active) {
-        next[next.length - 1] = {
+      if (existingIndex >= 0) {
+        next[existingIndex] = {
+          ...next[existingIndex],
+          segmentIndex: committedIndex,
+          avatar: `C${committedLabel}`,
+          name: `卡片 ${committedLabel}`,
+          text: normalizedText,
+          active: false,
+        }
+      } else if (currentCard && currentCard.active) {
+        const currentPosition = next.findIndex((item) => item?.active)
+        next[currentPosition] = {
           ...currentCard,
           segmentIndex: committedIndex,
-          avatar: `C${String(committedIndex).padStart(2, '0')}`,
-          name: `卡片 ${String(committedIndex).padStart(2, '0')}`,
-          text: finalText,
+          avatar: `C${committedLabel}`,
+          name: `卡片 ${committedLabel}`,
+          text: normalizedText,
           active: false,
         }
       } else {
-        next.push(createLiveTranscriptCardEntry(committedIndex, finalText, false))
+        next.push(createLiveTranscriptCardEntry(committedIndex, normalizedText, false))
       }
+
+      for (let index = 0; index < next.length; index += 1) {
+        if (index !== next.findIndex((item) => item?.active)) {
+          next[index] = {
+            ...next[index],
+            active: false,
+          }
+        }
+      }
+
       if (advance) {
         next.push(createLiveTranscriptCardEntry(committedIndex + 1, '', true))
       }
       voiceRealtimeLog('commit-live-transcript', {
         segmentIndex: committedIndex,
-        text: truncateText(finalText, 80),
+        text: truncateText(normalizedText, 80),
         advance,
         hadActiveCard: Boolean(currentCard?.active),
         nextCount: next.length,
       })
       return next
     })
-
-    liveTranscriptCommittedTextRef.current = finalText
-    liveTranscriptCommittedSegmentIndexRef.current = Number.isFinite(hintedIndex) && hintedIndex > 0
-      ? hintedIndex
-      : committedSegmentIndex
-    setLiveTranscriptText('')
   }
 
   useEffect(() => {
@@ -1182,10 +1200,7 @@ function VoiceNoteEditor({
     setRecordingPulseTick(0)
     setRecordingState('idle')
     recordingStateRef.current = 'idle'
-    setLiveTranscriptText('')
     setLiveTranscriptSegments([])
-    liveTranscriptCommittedTextRef.current = ''
-    liveTranscriptCommittedSegmentIndexRef.current = 0
     voiceActivitySilenceNotifiedRef.current = false
     setStopConfirmOpen(false)
   }
@@ -1699,10 +1714,7 @@ function VoiceNoteEditor({
     realtimeClosingRef.current = false
     realtimeAudioChunksRef.current = []
     stopVoiceActivityMonitor()
-    setLiveTranscriptText('')
     setLiveTranscriptSegments([])
-    liveTranscriptCommittedTextRef.current = ''
-    liveTranscriptCommittedSegmentIndexRef.current = 0
     voiceActivitySilenceNotifiedRef.current = false
     setStopConfirmOpen(false)
   }
@@ -2215,7 +2227,7 @@ function VoiceNoteEditor({
           durationMs: Number.isFinite(uploadedVoice.duration) ? uploadedVoice.duration * 1000 : card.durationMs,
           status: 'completed',
           transcriptStatus: 'completed',
-          transcript: liveTranscriptSegmentsRef.current.map((item) => item.text).filter(Boolean).join('\n') || liveTranscriptTextRef.current || card.transcript,
+          transcript: liveTranscriptSegmentsRef.current.map((item) => item.text).filter(Boolean).join('\n') || card.transcript,
           sessionId: sessionId || card.sessionId,
         }))
       }
@@ -2279,6 +2291,9 @@ function VoiceNoteEditor({
         if (Number.isFinite(payload?.segmentSilenceMs)) {
           realtimeSessionRef.current.segmentSilenceMs = payload.segmentSilenceMs
         }
+        if (!getActiveLiveTranscriptCard(liveTranscriptSegmentsRef.current)) {
+          seedLiveTranscriptCards()
+        }
         break
       case 'transcript.partial':
         updateLiveTranscriptCards(payload.transcript || '', payload?.segmentIndex)
@@ -2291,26 +2306,12 @@ function VoiceNoteEditor({
         }))
         break
       case 'transcript.segment': {
-        const segmentText = String(
-          payload.segmentTranscript
-          || liveTranscriptTextRef.current
-          || liveTranscriptSegmentsRef.current.at(-1)?.text
-          || '',
-        ).trim()
-        commitLiveTranscriptCard(segmentText, payload?.segmentIndex)
+        commitLiveTranscriptCard(payload?.segmentTranscript || '', payload?.segmentIndex)
         break
       }
       case 'session.paused':
         voiceActivityAutoResumeRef.current = false
-        {
-          const pausedSegmentText = String(
-            payload.segmentTranscript
-            || liveTranscriptTextRef.current
-            || liveTranscriptSegmentsRef.current.at(-1)?.text
-            || '',
-          ).trim()
-          commitLiveTranscriptCard(pausedSegmentText, payload?.segmentIndex, false)
-        }
+        commitLiveTranscriptCard(payload?.segmentTranscript || '', payload?.segmentIndex, false)
         updateLiveRecordingCard((card) => ({
           ...card,
           duration: '转写中',
@@ -2340,15 +2341,7 @@ function VoiceNoteEditor({
       case 'session.finished':
         realtimeFinishedRef.current = true
         voiceActivityAutoResumeRef.current = false
-        {
-          const finishedSegmentText = String(
-            payload.segmentTranscript
-            || liveTranscriptTextRef.current
-            || liveTranscriptSegmentsRef.current.at(-1)?.text
-            || '',
-          ).trim()
-          commitLiveTranscriptCard(finishedSegmentText, payload?.segmentIndex, false)
-        }
+        commitLiveTranscriptCard(payload?.segmentTranscript || '', payload?.segmentIndex, false)
         clearRealtimeReconnectTimer()
         resolveRealtimeFinish()
         break
@@ -2742,7 +2735,6 @@ function VoiceNoteEditor({
       voiceActivityAutoResumeRef.current = false
       voiceActivitySilenceStartedAtRef.current = 0
       voiceActivitySilenceNotifiedRef.current = false
-      setLiveTranscriptText('')
       setLiveTranscriptSegments([])
       voiceRealtimeLog('start-recording-session', {
         noteId: note.id,
@@ -3193,27 +3185,9 @@ function VoiceNoteEditor({
                     </div>
                   ) : null}
                 </div>
-              ) : visibleTranscripts.length > 0 ? (
+              ) : renderedTranscripts.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto', minHeight: 0, flex: 1 }}>
-                  {recordingState !== 'idle' && liveTranscriptText ? (
-                    <div
-                      style={{
-                        padding: '12px 14px',
-                        borderRadius: 16,
-                        border: '1px dashed rgba(47,111,255,0.22)',
-                        background: 'rgba(47,111,255,0.04)',
-                        color: '#475569',
-                        fontSize: 13,
-                        lineHeight: 1.7,
-                      }}
-                    >
-                      <div style={{ marginBottom: 6, fontSize: 11, fontWeight: 800, color: 'var(--primary)' }}>
-                        {t('voice.livePreview', { defaultValue: '实时预览' })}
-                      </div>
-                      <div>{liveTranscriptText}</div>
-                    </div>
-                  ) : null}
-                  {visibleTranscripts.map((item, index) => (
+                  {renderedTranscripts.map((item, index) => (
                     <TranscriptItem key={`${item.name}-${item.time}-${index}`} {...item} />
                   ))}
                 </div>
