@@ -75,13 +75,6 @@ class NoteService {
     return extractPayload(response)
   }
 
-  async deleteVoiceFile(noteId, fileId) {
-    const response = await request.delete(`/voice-notes/files/${fileId}`, {
-      params: { noteId },
-    })
-    return extractPayload(response)
-  }
-
   updateName(id, name) {
     return request.patch(`/name/${id}`, { name })
   }

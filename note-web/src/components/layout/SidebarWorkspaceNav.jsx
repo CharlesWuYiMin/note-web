@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { Button, Input, Tooltip, message } from 'antd'
 import {
   ApartmentOutlined,
@@ -26,16 +27,19 @@ import {
 import useNote from '@/hooks/useNote'
 import useNotebook from '@/hooks/useNotebook'
 import useNotebookStore from '@/store/useNotebookStore'
+import { getLocalizedNotebookName } from '@/utils/notebookLocalization'
 
 const COLLAPSED_TILE_SIZE = 56
 
-const NOTE_CREATE_OPTIONS = [
-  { key: 'text', label: '文本笔记', type: 'text', icon: <FileTextOutlined />, color: '#1677ff', bg: 'linear-gradient(180deg, #eef6ff, #d8ebff)' },
-  { key: 'voice', label: '语音笔记', type: 'voice', icon: <AudioOutlined />, color: '#6d28d9', bg: 'linear-gradient(180deg, #f3edff, #e5dbff)' },
-  { key: 'handwritten', label: '手写笔记', type: 'handwritten', icon: <HighlightOutlined />, color: '#ea580c', bg: 'linear-gradient(180deg, #fff1eb, #ffe1d6)' },
-  { key: 'outline', label: '大纲笔记', type: 'outline', icon: <ApartmentOutlined />, color: '#0891b2', bg: 'linear-gradient(180deg, #e6fbff, #d4f4fb)' },
-  { key: 'notebook', label: '笔记本', icon: <BookOutlined />, color: '#ca8a04', bg: 'linear-gradient(180deg, #fff7da, #ffefb0)' },
-]
+function getNoteCreateOptions(t) {
+  return [
+    { key: 'text', label: t('sidebar.create.textNote', { defaultValue: '文本笔记' }), type: 'text', icon: <FileTextOutlined />, color: '#1677ff', bg: 'linear-gradient(180deg, #eef6ff, #d8ebff)' },
+    { key: 'voice', label: t('sidebar.create.voiceNote', { defaultValue: '语音笔记' }), type: 'voice', icon: <AudioOutlined />, color: '#6d28d9', bg: 'linear-gradient(180deg, #f3edff, #e5dbff)' },
+    { key: 'handwritten', label: t('sidebar.create.handwrittenNote', { defaultValue: '手写笔记' }), type: 'handwritten', icon: <HighlightOutlined />, color: '#ea580c', bg: 'linear-gradient(180deg, #fff1eb, #ffe1d6)' },
+    { key: 'outline', label: t('sidebar.create.outlineNote', { defaultValue: '大纲笔记' }), type: 'outline', icon: <ApartmentOutlined />, color: '#0891b2', bg: 'linear-gradient(180deg, #e6fbff, #d4f4fb)' },
+    { key: 'notebook', label: t('nav.notebooks', { defaultValue: '笔记本' }), icon: <BookOutlined />, color: '#ca8a04', bg: 'linear-gradient(180deg, #fff7da, #ffefb0)' },
+  ]
+}
 
 function navItemStyle({ collapsed, isActive }) {
   return {
@@ -58,7 +62,7 @@ function navItemStyle({ collapsed, isActive }) {
   }
 }
 
-function NewCreatePanel({ onCreate }) {
+function NewCreatePanel({ onCreate, options }) {
   return (
     <div
       style={{
@@ -70,7 +74,7 @@ function NewCreatePanel({ onCreate }) {
       }}
     >
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
-        {NOTE_CREATE_OPTIONS.map((option) => (
+        {options.map((option) => (
           <button
             key={option.key}
             type="button"
@@ -247,6 +251,7 @@ function NotebookActionMenuPanel({ items, onAction }) {
 }
 
 function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
+  const { t } = useTranslation()
   const { createNote } = useNote()
   const {
     notebooks,
@@ -266,12 +271,13 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
   const [activeNotebookMenuId, setActiveNotebookMenuId] = useState(null)
   const [activeNotebookMenuPosition, setActiveNotebookMenuPosition] = useState(null)
   const createCloseTimerRef = useRef(null)
+  const createOptions = useMemo(() => getNoteCreateOptions(t), [t])
 
   const navItems = [
-    { key: 'recent', icon: <HistoryOutlined />, label: '近期笔记', path: '/cloudnote/recent' },
-    { key: 'starred', icon: <StarOutlined />, label: '星标笔记', path: '/cloudnote/starred' },
-    { key: 'shares', icon: <ShareAltOutlined />, label: '我的分享', path: '/cloudnote/shares' },
-    { key: 'recyclebin', icon: <DeleteOutlined />, label: '回收站', path: '/cloudnote/recyclebin' },
+    { key: 'recent', icon: <HistoryOutlined />, label: t('sidebar.recentNotes', { defaultValue: '近期笔记' }), path: '/cloudnote/recent' },
+    { key: 'starred', icon: <StarOutlined />, label: t('sidebar.starredNotes', { defaultValue: '星标笔记' }), path: '/cloudnote/starred' },
+    { key: 'shares', icon: <ShareAltOutlined />, label: t('sidebar.myShares', { defaultValue: '我的分享' }), path: '/cloudnote/shares' },
+    { key: 'recyclebin', icon: <DeleteOutlined />, label: t('sidebar.recycleBin', { defaultValue: '回收站' }), path: '/cloudnote/recyclebin' },
   ]
 
   useEffect(() => {
@@ -373,10 +379,11 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
     event?.stopPropagation()
     closeCreatePanel()
     await ensureNotebooksLoaded()
-    const newNotebook = await createNotebook({ name: '新建笔记本' })
+    const defaultNotebookName = t('notebook.newNotebookName', { defaultValue: '新建笔记本' })
+    const newNotebook = await createNotebook({ name: defaultNotebookName })
     setCurrentNotebook(newNotebook)
     setEditingNotebookId(newNotebook.id)
-    setEditingName(newNotebook.name || '新建笔记本')
+    setEditingName(newNotebook.name || defaultNotebookName)
     setNotebooksExpanded(true)
     onNavigate?.('/cloudnote/notebooks')
   }
@@ -395,7 +402,7 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
     }
 
     const note = await createNote({
-      title: '未命名笔记',
+      title: t('note.untitled', { defaultValue: '未命名笔记' }),
       type: option.key === 'voice' ? 'text' : option.type,
       notebookId,
     })
@@ -504,12 +511,15 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
         moveNotebook?.(notebook.id, 'down')
         return
       case 'delete':
-        if (window.confirm(`确定要删除“${notebook.name}”吗？删除后可在回收站中恢复。`)) {
+        if (window.confirm(t('notebook.confirmDeleteNamed', {
+          defaultValue: `确定要删除“${notebook.name}”吗？删除后可在回收站中恢复。`,
+          name: notebook.name,
+        }))) {
           try {
             await deleteNotebook?.(notebook.id)
-            message.success('删除成功')
+            message.success(t('notebook.deleteSuccess', { defaultValue: '删除成功' }))
           } catch (error) {
-            message.error(error?.message || '删除失败，请稍后重试')
+            message.error(error?.message || t('notebook.deleteError', { defaultValue: '删除失败，请稍后重试' }))
           }
         }
         return
@@ -555,7 +565,7 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
         {!collapsed ? (
           <div style={{ minWidth: 0, textAlign: 'left' }}>
             <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1677ff', margin: 0, lineHeight: 1, letterSpacing: '-0.01em' }}>
-              WeLink 云笔记
+              {t('common.brandName', { defaultValue: 'WeLink 云笔记' })}
             </h2>
           </div>
         ) : (
@@ -614,7 +624,7 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
             boxShadow: '0 10px 24px rgba(0,97,164,0.24)',
           }}
         >
-          {!collapsed && '新建'}
+          {!collapsed && t('sidebar.new', { defaultValue: '新建' })}
         </Button>
 
         {createOpen ? (
@@ -632,7 +642,7 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
               paddingTop: 2,
             }}
           >
-            <NewCreatePanel onCreate={handleCreateOption} />
+            <NewCreatePanel onCreate={handleCreateOption} options={createOptions} />
           </div>
         ) : null}
       </div>
@@ -664,7 +674,7 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
         })}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <Tooltip title={collapsed ? '笔记本' : ''} placement="right">
+          <Tooltip title={collapsed ? t('nav.notebooks', { defaultValue: '笔记本' }) : ''} placement="right">
             <div
               onClick={handleNotebookToggle}
               style={navItemStyle({ collapsed, isActive: notebookSectionActive })}
@@ -674,9 +684,9 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
               </span>
               {!collapsed && (
                 <>
-                  <span style={{ flex: 1, fontSize: 18, lineHeight: 1.3 }}>笔记本</span>
+                  <span style={{ flex: 1, fontSize: 18, lineHeight: 1.3 }}>{t('nav.notebooks', { defaultValue: '笔记本' })}</span>
                 <Button
-                  aria-label="新建笔记本"
+                  aria-label={t('notebook.createNotebook', { defaultValue: '新建笔记本' })}
                   type="text"
                   size="small"
                   icon={<PlusOutlined />}
@@ -692,7 +702,9 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
                   }}
                 />
                   <Button
-                    aria-label={notebooksExpanded ? '收起笔记本' : '展开笔记本'}
+                    aria-label={notebooksExpanded
+                      ? t('notebook.collapse', { defaultValue: '收起笔记本' })
+                      : t('notebook.expand', { defaultValue: '展开笔记本' })}
                     type="text"
                     size="small"
                     icon={notebooksExpanded ? <DownOutlined /> : <RightOutlined />}
@@ -733,28 +745,28 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
                 const isFirstMovableNotebook = movableIndex === 0
                 const isLastMovableNotebook = movableIndex === movableNotebooks.length - 1
                 const notebookMenuItems = [
-                  { key: 'create-text', label: '新建文本笔记', icon: <FileTextOutlined />, tone: 'blue', variant: 'create' },
-                  { key: 'create-outline', label: '新建大纲笔记', icon: <ApartmentOutlined />, tone: 'cyan', variant: 'create' },
-                  { key: 'create-handwritten', label: '新建手写笔记', icon: <HighlightOutlined />, tone: 'orange', variant: 'create' },
-                  { key: 'create-voice', label: '新建语音笔记', icon: <AudioOutlined />, tone: 'purple', variant: 'create' },
+                  { key: 'create-text', label: t('sidebar.create.newTextNote', { defaultValue: '新建文本笔记' }), icon: <FileTextOutlined />, tone: 'blue', variant: 'create' },
+                  { key: 'create-outline', label: t('sidebar.create.newOutlineNote', { defaultValue: '新建大纲笔记' }), icon: <ApartmentOutlined />, tone: 'cyan', variant: 'create' },
+                  { key: 'create-handwritten', label: t('sidebar.create.newHandwrittenNote', { defaultValue: '新建手写笔记' }), icon: <HighlightOutlined />, tone: 'orange', variant: 'create' },
+                  { key: 'create-voice', label: t('sidebar.create.newVoiceNote', { defaultValue: '新建语音笔记' }), icon: <AudioOutlined />, tone: 'purple', variant: 'create' },
                   { key: 'divider-1', type: 'divider' },
-                  { key: 'rename', label: '重命名', icon: <EditOutlined />, tone: 'gray', disabled: isDefaultNotebook },
+                  { key: 'rename', label: t('common.edit', { defaultValue: '重命名' }), icon: <EditOutlined />, tone: 'gray', disabled: isDefaultNotebook },
                   {
                     key: 'move-up',
-                    label: '向上移动',
+                    label: t('notebook.moveUp', { defaultValue: '向上移动' }),
                     icon: <ArrowUpOutlined />,
                     tone: 'gray',
                     disabled: isDefaultNotebook || isFirstMovableNotebook,
                   },
                   {
                     key: 'move-down',
-                    label: '向下移动',
+                    label: t('notebook.moveDown', { defaultValue: '向下移动' }),
                     icon: <ArrowDownOutlined />,
                     tone: 'gray',
                     disabled: isDefaultNotebook || isLastMovableNotebook,
                   },
                   { key: 'divider-2', type: 'divider' },
-                  { key: 'delete', label: '删除', icon: <DeleteOutlined />, tone: 'red', danger: true, disabled: isDefaultNotebook },
+                  { key: 'delete', label: t('common.delete', { defaultValue: '删除' }), icon: <DeleteOutlined />, tone: 'red', danger: true, disabled: isDefaultNotebook },
                 ]
 
                 return (
@@ -812,12 +824,15 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
                             lineHeight: 1.25,
                           }}
                         >
-                          {notebook.name}
+                          {getLocalizedNotebookName(notebook, t)}
                         </span>
                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }} data-notebook-menu-root="true">
                           <Button
                             type="text"
-                            aria-label={`笔记本更多操作：${notebook.name}`}
+                            aria-label={t('notebook.moreActions', {
+                              defaultValue: `笔记本更多操作：${getLocalizedNotebookName(notebook, t)}`,
+                              name: getLocalizedNotebookName(notebook, t),
+                            })}
                             icon={<MoreOutlined style={{ fontSize: 16 }} />}
                             onClick={(event) => {
                               event.stopPropagation()

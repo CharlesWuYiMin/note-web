@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { getAppConfig } from './config'
+import { handleUnauthorizedResponse } from './authNavigation'
 
 const { api } = getAppConfig()
 
@@ -34,7 +35,7 @@ request.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      window.location.href = '/login'
+      handleUnauthorizedResponse()
     }
     return Promise.reject(error)
   }

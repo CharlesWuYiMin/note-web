@@ -1,81 +1,221 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 import aiService from '@/services/aiService'
 
-const mockPost = vi.fn()
+vi.mock('@/utils/config', () => ({
+  getAppConfig: () => ({
+    api: {
+      baseUrl: '/v1/note',
+    },
+  }),
+}))
 
-vi.mock('@/utils/request', () => ({
-  default: {
-    post: mockPost,
-  },
+const handleUnauthorizedResponse = vi.fn()
+
+vi.mock('@/utils/authNavigation', () => ({
+  handleUnauthorizedResponse,
 }))
 
 describe('AIService', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     vi.clearAllMocks()
   })
 
   describe('chat', () => {
-    it('should call POST /ai/chat with message and context', async () => {
-      const mockResponse = {
-        reply: '这是AI的回复',
-        usage: { tokens: 150 },
-      }
-      mockPost.mockResolvedValue(mockResponse)
+    it('uses the streaming endpoint with AiChatRequest payload', async () => {
+      const chunks = [
+        new TextEncoder().encode('event: start\ndata: {"status":"streaming"}\n\n'),
+        new TextEncoder().encode('event: delta\ndata: {"text":"这是 AI 的回答"}\n\n'),
+        new TextEncoder().encode('event: done\ndata: {"result":"这是 AI 的回答","conversationId":"conversation-1"}\n\n'),
+      ]
+      const read = vi.fn()
+        .mockResolvedValueOnce({ value: chunks[0], done: false })
+        .mockResolvedValueOnce({ value: chunks[1], done: false })
+        .mockResolvedValueOnce({ value: chunks[2], done: false })
+        .mockResolvedValueOnce({ value: undefined, done: true })
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        body: {
+          getReader: () => ({ read }),
+        },
+      })
 
       const result = await aiService.chat({
-        message: '请帮我总结这段文字',
         noteId: 'note-123',
-        content: '要总结的内容...',
+        scene: 'summarize',
+        user_prompt: '请帮我总结',
       })
 
-      expect(mockPost).toHaveBeenCalledWith('/ai/chat', {
-        message: '请帮我总结这段文字',
-        noteId: 'note-123',
-        content: '要总结的内容...',
-      })
-      expect(result.reply).toBe('这是AI的回复')
-    })
-
-    it('should handle streaming response', async () => {
-      const mockStreamResponse = {
-        stream: true,
-        chunks: ['这是', 'AI', '的回复'],
-      }
-      mockPost.mockResolvedValue(mockStreamResponse)
-
-      const result = await aiService.chat({ message: '测试' }, { stream: true })
-
-      expect(result.stream).toBe(true)
+      expect(global.fetch).toHaveBeenCalledWith('/v1/note/ai/chat', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          noteId: 'note-123',
+          scene: 'summarize',
+          user_prompt: '请帮我总结',
+        }),
+      }))
+      expect(result.reply).toBe('这是 AI 的回答')
+      expect(result.result).toBe('这是 AI 的回答')
     })
   })
 
   describe('summarize', () => {
-    it('should call AI chat with summarize prompt', async () => {
-      mockPost.mockResolvedValue({ reply: '摘要内容' })
+    it('sends summarize scene through the streaming endpoint', async () => {
+      const chunks = [
+        new TextEncoder().encode('event: delta\ndata: {"text":"摘要内容"}\n\n'),
+        new TextEncoder().encode('event: done\ndata: {"result":"摘要内容"}\n\n'),
+      ]
+      const read = vi.fn()
+        .mockResolvedValueOnce({ value: chunks[0], done: false })
+        .mockResolvedValueOnce({ value: chunks[1], done: false })
+        .mockResolvedValueOnce({ value: undefined, done: true })
 
-      const result = await aiService.summarize('note-123', '长文本内容...')
-
-      expect(mockPost).toHaveBeenCalledWith('/ai/chat', {
-        message: expect.stringContaining('summarize'),
-        noteId: 'note-123',
-        content: '长文本内容...',
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        body: {
+          getReader: () => ({ read }),
+        },
       })
+
+      const result = await aiService.summarize('note-123', '请总结重点')
+
+      expect(global.fetch).toHaveBeenCalledWith('/v1/note/ai/chat', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          noteId: 'note-123',
+          scene: 'summarize',
+          user_prompt: '请总结重点',
+        }),
+      }))
       expect(result.reply).toBe('摘要内容')
     })
   })
 
-  describe('translate', () => {
-    it('should call AI chat with translate prompt and target language', async () => {
-      mockPost.mockResolvedValue({ reply: 'Translated text' })
+  describe('streamChat', () => {
+    it('parses SSE delta and done events', async () => {
+      const chunks = [
+        new TextEncoder().encode('event: delta\ndata: {"text":"这是"}\n\n'),
+        new TextEncoder().encode('event: delta\ndata: {"text":"流式"}\n\n'),
+        new TextEncoder().encode('event: done\ndata: {"result":"这是流式","conversationId":"conv-1"}\n\n'),
+      ]
+      const read = vi.fn()
+        .mockResolvedValueOnce({ value: chunks[0], done: false })
+        .mockResolvedValueOnce({ value: chunks[1], done: false })
+        .mockResolvedValueOnce({ value: chunks[2], done: false })
+        .mockResolvedValueOnce({ value: undefined, done: true })
 
-      const result = await aiService.translate('note-123', 'Hello world', 'zh')
-
-      expect(mockPost).toHaveBeenCalledWith('/ai/chat', {
-        message: expect.stringContaining('translate'),
-        targetLanguage: 'zh',
-        noteId: 'note-123',
-        content: 'Hello world',
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        body: {
+          getReader: () => ({ read }),
+        },
       })
+
+      const onDelta = vi.fn()
+      const onDone = vi.fn()
+      const result = await aiService.streamChat({
+        noteId: 'note-123',
+        scene: 'rewrite',
+        user_prompt: '请润色',
+      }, {
+        onDelta,
+        onDone,
+      })
+
+      expect(global.fetch).toHaveBeenCalledWith('/v1/note/ai/chat', expect.objectContaining({
+        method: 'POST',
+      }))
+      expect(onDelta).toHaveBeenCalledTimes(2)
+      expect(onDone).toHaveBeenCalledWith({
+        result: '这是流式',
+        conversationId: 'conv-1',
+      })
+      expect(result.reply).toBe('这是流式')
+    })
+
+    it('falls back to accumulated delta text when done event is missing', async () => {
+      const chunks = [
+        new TextEncoder().encode('event: delta\ndata: {"text":"片段一"}\n\n'),
+        new TextEncoder().encode('event: delta\ndata: {"text":"片段二"}\n\n'),
+      ]
+      const read = vi.fn()
+        .mockResolvedValueOnce({ value: chunks[0], done: false })
+        .mockResolvedValueOnce({ value: chunks[1], done: false })
+        .mockResolvedValueOnce({ value: undefined, done: true })
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        body: {
+          getReader: () => ({ read }),
+        },
+      })
+
+      const result = await aiService.streamChat({
+        noteId: 'note-123',
+        scene: 'expand',
+        user_prompt: '请扩写',
+      })
+
+      expect(result.result).toBe('片段一片段二')
+      expect(result.reply).toBe('片段一片段二')
+    })
+
+    it('redirects user to login when streaming request returns 401', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+      })
+
+      await expect(aiService.streamChat({
+        noteId: 'note-123',
+        scene: 'expand',
+        user_prompt: '请扩写',
+      })).rejects.toThrow('登录已失效，请重新登录')
+
+      expect(handleUnauthorizedResponse).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('getConversation', () => {
+    it('loads ai conversation by note id', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            conversationId: 'conv-1',
+            noteId: 'note-123',
+            messages: [
+              {
+                messageId: 'msg-1',
+                role: 'user',
+                content: '请帮我总结',
+              },
+            ],
+          },
+        }),
+      })
+
+      const result = await aiService.getConversation('note-123')
+
+      expect(global.fetch).toHaveBeenCalledWith('/v1/note/ai/conversations/note-123', expect.objectContaining({
+        method: 'GET',
+      }))
+      expect(result.conversationId).toBe('conv-1')
+      expect(result.noteId).toBe('note-123')
+      expect(result.messages).toHaveLength(1)
+    })
+
+    it('redirects user to login when conversation request returns 401', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+      })
+
+      await expect(aiService.getConversation('note-123')).rejects.toThrow('登录已失效，请重新登录')
+
+      expect(handleUnauthorizedResponse).toHaveBeenCalledTimes(1)
     })
   })
 })

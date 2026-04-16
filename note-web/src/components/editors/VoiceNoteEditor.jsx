@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button, Dropdown, Modal, Popover, Slider, message } from 'antd'
 import {
   CloseOutlined,
@@ -11,7 +12,9 @@ import {
 } from '@ant-design/icons'
 import PageEditor from '@/components/editors/PageEditor'
 import VoicePromptModal from '@/components/voice/VoicePromptModal'
+import i18n from '@/i18n'
 import authService from '@/services/authService'
+import aiService from '@/services/aiService'
 import noteService from '@/services/noteService'
 import voiceRealtimeService from '@/services/voiceRealtimeService'
 
@@ -63,10 +66,20 @@ function MicIcon({ size = 18, color = 'currentColor' }) {
   )
 }
 
-const LANGUAGE_OPTIONS = [
-  { value: 'zh-CN', label: '中文', hint: '简体中文' },
-  { value: 'en-US', label: '英文', hint: 'English' },
-]
+function getLanguageOptions() {
+  return [
+    {
+      value: 'zh-CN',
+      label: i18n.t('settings.languageOptionZh', { defaultValue: '中文' }),
+      hint: i18n.t('voice.language.zhHint', { defaultValue: '简体中文' }),
+    },
+    {
+      value: 'en-US',
+      label: i18n.t('voice.language.english', { defaultValue: '英文' }),
+      hint: i18n.t('voice.language.enHint', { defaultValue: 'English' }),
+    },
+  ]
+}
 
 function formatElapsed(ms = 0) {
   const safeMs = Math.max(0, Math.floor(ms))
@@ -94,14 +107,15 @@ function getLanguageLabel(language) {
   const normalized = String(language || '').replace(/_/g, '-').toLowerCase()
 
   if (normalized.startsWith('en-')) {
-    return '英文'
+    return i18n.t('voice.language.english', { defaultValue: '英文' })
   }
 
   if (normalized.startsWith('zh-')) {
-    return '中文'
+    return i18n.t('settings.languageOptionZh', { defaultValue: '中文' })
   }
 
-  return LANGUAGE_OPTIONS.find((option) => option.value === language)?.label || '中文'
+  return getLanguageOptions().find((option) => option.value === language)?.label
+    || i18n.t('settings.languageOptionZh', { defaultValue: '中文' })
 }
 
 function buildInitialRecordings() {
@@ -114,12 +128,12 @@ function buildInitialTranscriptGroups() {
 
 function formatVoiceCardTime(value) {
   if (!value) {
-    return '刚刚'
+    return i18n.t('voice.justNow', { defaultValue: '刚刚' })
   }
 
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
-    return '刚刚'
+    return i18n.t('voice.justNow', { defaultValue: '刚刚' })
   }
 
   const year = date.getFullYear()
@@ -175,14 +189,14 @@ function isLikelyNoiseTranscript(value = '') {
 
 function getTranscriptStatusLabel(status) {
   const statusMap = {
-    pending: '待转写',
-    processing: '转写中',
-    paused: '已暂停',
-    completed: '已转写',
-    failed: '转写失败',
+    pending: i18n.t('voice.status.pending', { defaultValue: '待转写' }),
+    processing: i18n.t('voice.status.processing', { defaultValue: '转写中' }),
+    paused: i18n.t('voice.status.paused', { defaultValue: '已暂停' }),
+    completed: i18n.t('voice.status.completed', { defaultValue: '已转写' }),
+    failed: i18n.t('voice.status.failed', { defaultValue: '转写失败' }),
   }
 
-  return statusMap[status] || '语音'
+  return statusMap[status] || i18n.t('voice.status.default', { defaultValue: '语音' })
 }
 
 function normalizeRealtimeLanguage(language) {
@@ -193,10 +207,10 @@ function createLiveRecordingCard({ key, language, title = '', sessionId = null }
   return {
     code: `RECORDING ${key}`,
     key,
-    title: title || `${getLanguageLabel(language)}实时转写`,
-    duration: '转写中',
+    title: title || i18n.t('voice.realtimeTitle', { defaultValue: '{{language}}实时转写', language: getLanguageLabel(language) }),
+    duration: i18n.t('voice.status.processing', { defaultValue: '转写中' }),
     durationMs: 0,
-    time: '刚刚',
+    time: i18n.t('voice.justNow', { defaultValue: '刚刚' }),
     language,
     status: 'processing',
     fileId: null,
@@ -210,11 +224,11 @@ function createLiveRecordingCard({ key, language, title = '', sessionId = null }
   }
 }
 
-function createTranscriptEntry({ avatar = 'REC', name = 'Recording', time = '刚刚', text = '', active = false }) {
+function createTranscriptEntry({ avatar = 'REC', name = 'Recording', time, text = '', active = false }) {
   return {
     avatar,
     name,
-    time,
+    time: time || i18n.t('voice.justNow', { defaultValue: '刚刚' }),
     text,
     active,
   }
@@ -227,8 +241,8 @@ function createLiveTranscriptCardEntry(segmentIndex = 1, text = '', active = fal
   return {
     ...createTranscriptEntry({
       avatar: `C${label}`,
-      name: `卡片 ${label}`,
-      time: '刚刚',
+      name: i18n.t('voice.cardLabel', { defaultValue: '卡片 {{index}}', index: label }),
+      time: i18n.t('voice.justNow', { defaultValue: '刚刚' }),
       text,
       active,
     }),
@@ -282,29 +296,29 @@ function getNextRecordingKey(recordings = []) {
 function getRealtimeStatusMeta(recordingState) {
   const statusMap = {
     recording: {
-      label: '实时识别中',
+      label: i18n.t('voice.liveRecognizing', { defaultValue: '实时识别中' }),
       tone: 'active',
-      hint: '音频正在实时送达转写引擎',
+      hint: i18n.t('voice.liveRecognizingHint', { defaultValue: '音频正在实时送达转写引擎' }),
     },
     paused: {
-      label: '已暂停',
+      label: i18n.t('voice.status.paused', { defaultValue: '已暂停' }),
       tone: 'paused',
-      hint: '当前会话已暂停，等待继续录音',
+      hint: i18n.t('voice.pausedHint', { defaultValue: '当前会话已暂停，等待继续录音' }),
     },
     interrupted: {
-      label: '连接中断',
+      label: i18n.t('voice.interrupted', { defaultValue: '连接中断' }),
       tone: 'interrupted',
-      hint: '连接暂时中断，恢复后可继续录音',
+      hint: i18n.t('voice.interruptedHint', { defaultValue: '连接暂时中断，恢复后可继续录音' }),
     },
     uploading: {
-      label: '处理中',
+      label: i18n.t('voice.processing', { defaultValue: '处理中' }),
       tone: 'processing',
-      hint: '正在完成实时会话并刷新语音卡片',
+      hint: i18n.t('voice.processingHint', { defaultValue: '正在完成实时会话并刷新语音卡片' }),
     },
     idle: {
-      label: '待开始',
+      label: i18n.t('voice.ready', { defaultValue: '待开始' }),
       tone: 'idle',
-      hint: '点击右下角按钮开始实时转写',
+      hint: i18n.t('voice.readyHint', { defaultValue: '点击右下角按钮开始实时转写' }),
     },
   }
 
@@ -400,7 +414,7 @@ function getSessionSummaryStatus(session = {}) {
   return session?.status || 'processing'
 }
 
-function normalizeTranscriptCards(cards = [], fallbackName = '分段') {
+function normalizeTranscriptCards(cards = [], fallbackName = i18n.t('voice.segment', { defaultValue: '分段' })) {
   const sortedCards = cards
     .filter(Boolean)
     .sort((left, right) => (
@@ -468,7 +482,9 @@ function buildVoiceStateFromNote(note = {}) {
     recordings.push({
       code: `FILE ${key}`,
       key,
-      title: session?.sessionId ? `语音文件 ${key}` : `语音卡片 ${key}`,
+      title: session?.sessionId
+        ? i18n.t('voice.fileLabel', { defaultValue: '语音文件 {{index}}', index: key })
+        : i18n.t('voice.cardFileLabel', { defaultValue: '语音卡片 {{index}}', index: key }),
       duration: getTranscriptStatusLabel(transcriptStatus),
       durationMs: Number.isFinite(voice?.durationMs) ? voice.durationMs : Number(session?.durationMs) || 0,
       time: formatVoiceCardTime(voice?.createdAt || voice?.updatedAt || session?.finishedAt || session?.startedAt),
@@ -507,7 +523,7 @@ function buildVoiceStateFromNote(note = {}) {
     recordings.push({
       code: `SESSION ${key}`,
       key,
-      title: `实时会话 ${key}`,
+      title: i18n.t('voice.realtimeSessionLabel', { defaultValue: '实时会话 {{index}}', index: key }),
       duration: getTranscriptStatusLabel(getSessionSummaryStatus(session)),
       durationMs: Number(session?.receivedBytes) || 0,
       time: formatVoiceCardTime(session?.startedAt || session?.finishedAt || session?.updatedAt),
@@ -546,7 +562,7 @@ function buildVoiceStateFromNote(note = {}) {
   }
 }
 
-function RecordingCard({ active, code, title, duration, time, language, onClick, onDelete }) {
+function RecordingCard({ active, code, title, duration, time, language, onClick }) {
   const metaParts = [duration, time, language ? getLanguageLabel(language) : ''].filter(Boolean)
 
   return (
@@ -583,50 +599,6 @@ function RecordingCard({ active, code, title, duration, time, language, onClick,
       <div style={{ marginTop: 10, fontSize: 11, color: active ? 'rgba(2,86,210,0.58)' : '#94a3b8', paddingRight: 22 }}>
         {metaParts.join(' - ')}
       </div>
-      {onDelete ? (
-        <button
-          type="button"
-          tabIndex={-1}
-          onPointerDown={(event) => {
-            event.stopPropagation()
-          }}
-          onMouseDown={(event) => {
-            event.stopPropagation()
-          }}
-          onClick={(event) => {
-            event.stopPropagation()
-            event.preventDefault()
-            onDelete()
-          }}
-          aria-label="删除语音卡片"
-          style={{
-            position: 'absolute',
-            top: 10,
-            right: 10,
-            width: 24,
-            height: 24,
-            borderRadius: '50%',
-            border: 'none',
-            background: 'rgba(255,255,255,0.82)',
-            color: '#94a3b8',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 6px 14px rgba(15,23,42,0.08)',
-            zIndex: 2,
-            pointerEvents: 'auto',
-          }}
-        >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
-            <path d="M4 7h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            <path d="M10 11v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            <path d="M14 11v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-            <path d="M9 7V4h6v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-      ) : null}
     </div>
   )
 }
@@ -706,14 +678,16 @@ function RecorderSecondaryButton({ title, onClick, disabled = false, children })
 }
 
 function RecordingWaveStrip({ active = false, paused = false, tick = 0 }) {
-  const baseHeights = [10, 16, 24, 14, 20, 10, 18, 12, 16, 10, 14, 18, 12, 16, 10, 14]
+  const wavePattern = [10, 16, 24, 14, 20, 10, 18, 12, 16, 10, 14, 18]
+  const baseHeights = Array.from({ length: 28 }, (_, index) => wavePattern[index % wavePattern.length])
 
   return (
     <div
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 4,
+        justifyContent: 'space-between',
+        gap: 6,
         height: 28,
         width: '100%',
         minWidth: 0,
@@ -729,7 +703,8 @@ function RecordingWaveStrip({ active = false, paused = false, tick = 0 }) {
           <span
             key={index}
             style={{
-              width: 3,
+              width: 4,
+              minWidth: 4,
               height: animatedHeight,
               borderRadius: 999,
               background: active && !paused
@@ -808,6 +783,7 @@ function VoiceNoteEditor({
   autoStartLanguage = 'zh-CN',
   ...editorProps
 }) {
+  const { t, i18n: i18nInstance } = useTranslation()
   const [selectedRecording, setSelectedRecording] = useState(null)
   const [localVoicePanelVisible, setLocalVoicePanelVisible] = useState(true)
   const [recordings, setRecordings] = useState(buildInitialRecordings)
@@ -825,12 +801,13 @@ function VoiceNoteEditor({
   const [playbackRate, setPlaybackRate] = useState(1)
   const [volumePopoverOpen, setVolumePopoverOpen] = useState(false)
   const [isPlaybackControlsCompact, setIsPlaybackControlsCompact] = useState(false)
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-  const [deleteConfirmLoading, setDeleteConfirmLoading] = useState(false)
-  const [pendingDeleteCard, setPendingDeleteCard] = useState(null)
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
   const [liveTranscriptText, setLiveTranscriptText] = useState('')
   const [liveTranscriptSegments, setLiveTranscriptSegments] = useState([])
+  const [voiceContentView, setVoiceContentView] = useState('transcript')
+  const [extractionText, setExtractionText] = useState('')
+  const [extractionError, setExtractionError] = useState('')
+  const [isExtracting, setIsExtracting] = useState(false)
 
   const mediaRecorderRef = useRef(null)
   const mediaStreamRef = useRef(null)
@@ -880,6 +857,7 @@ function VoiceNoteEditor({
   const playbackControlsRef = useRef(null)
   const autoStartRecordingInFlightRef = useRef(null)
   const autoStartRecordingTimerRef = useRef(null)
+  const extractionAbortRef = useRef(null)
 
   const voicePanelVisible = typeof controlledVisible === 'boolean' ? controlledVisible : localVoicePanelVisible
   const liveRecordingKey = realtimeDraftKeyRef.current
@@ -1118,6 +1096,12 @@ function VoiceNoteEditor({
       (Array.isArray(note?.voiceNote) && note.voiceNote.length > 0)
       || (Array.isArray(note?.voiceRealtimeSessions) && note.voiceRealtimeSessions.length > 0)
     )
+    extractionAbortRef.current?.abort()
+    extractionAbortRef.current = null
+    setVoiceContentView('transcript')
+    setExtractionText('')
+    setExtractionError('')
+    setIsExtracting(false)
     clearRealtimeSession()
     clearLocalPreviewUrls()
 
@@ -1142,10 +1126,12 @@ function VoiceNoteEditor({
     transcriptSourceKeyRef.current = nextState.sourceKey
     sourceRecordingKeyRef.current = nextState.sourceKey
     stopPlayback()
-  }, [note?.id, note?.voiceNote, note?.voiceRealtimeSessions])
+  }, [i18nInstance.language, note?.id, note?.voiceNote, note?.voiceRealtimeSessions])
 
   useEffect(() => {
     return () => {
+      extractionAbortRef.current?.abort()
+
       if (elapsedTimerRef.current) {
         window.clearInterval(elapsedTimerRef.current)
       }
@@ -2298,7 +2284,10 @@ function VoiceNoteEditor({
         updateLiveTranscriptCards(payload.transcript || '', payload?.segmentIndex)
         updateLiveRecordingCard((card) => ({
           ...card,
-          title: `${getLanguageLabel(pendingLanguage)}实时转写`,
+          title: t('voice.realtimeTitle', {
+            defaultValue: '{{language}}实时转写',
+            language: getLanguageLabel(pendingLanguage),
+          }),
         }))
         break
       case 'transcript.segment': {
@@ -2641,77 +2630,58 @@ function VoiceNoteEditor({
     }
   }
 
-  const handleDeleteRecordingCard = (card) => {
-    if (!note?.id || !card?.fileId) {
-      message.warning('当前语音卡片缺少 fileId，暂时无法删除')
+  const handleExtractViewpoints = async () => {
+    if (!note?.id) {
+      message.error('缺少笔记 ID，无法提取观点')
       return
     }
 
-    setPendingDeleteCard(card)
-    setDeleteConfirmOpen(true)
-  }
+    extractionAbortRef.current?.abort()
+    const controller = new AbortController()
+    extractionAbortRef.current = controller
 
-  const confirmDeleteRecordingCard = async () => {
-    const card = pendingDeleteCard
-    if (!note?.id || !card?.fileId) {
-      setDeleteConfirmOpen(false)
-      setPendingDeleteCard(null)
-      return
-    }
-
-    setDeleteConfirmLoading(true)
+    setExtractionText('')
+    setExtractionError('')
+    setIsExtracting(true)
 
     try {
-      await noteService.deleteVoiceFile(note.id, card.fileId)
-
-      const refreshedNote = await onNoteRefresh?.()
-
-      if (refreshedNote) {
-        const nextState = buildVoiceStateFromNote(refreshedNote)
-        setRecordings(nextState.recordings)
-        setTranscriptGroups(nextState.transcriptGroups)
-        setSelectedRecording((current) => (
-          current && nextState.recordings.some((item) => item.key === current)
-            ? current
-            : nextState.selectedKey
-        ))
-        transcriptSourceKeyRef.current = nextState.sourceKey
-        sourceRecordingKeyRef.current = nextState.sourceKey
-      } else {
-        setRecordings((current) => {
-          const remaining = current.filter((item) => item.fileId !== card.fileId)
-          if (remaining.length > 0) {
-            const nextSelected = remaining.find((item) => item.key === selectedRecording)
-              ? selectedRecording
-              : remaining[0].key
-            setSelectedRecording(nextSelected)
-          } else {
-            setSelectedRecording(null)
-          }
-          return remaining
-        })
-
-        if (selectedRecording === card.key || playbackStateRef.current !== 'idle') {
-          stopPlayback()
+      const response = await aiService.extraction(
+        note.id,
+        '请基于当前语音笔记提取关键观点、结论和待跟进事项。',
+        {
+          signal: controller.signal,
+          onDelta: (deltaText) => {
+            setExtractionText((current) => `${current}${deltaText}`)
+          },
         }
+      )
 
-        setTranscriptGroups((current) => {
-          const nextGroups = { ...current }
-          if (card.key) {
-            delete nextGroups[card.key]
-          }
-          return nextGroups
-        })
+      setExtractionText(response?.result || '')
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return
       }
 
-      message.success('语音卡片已删除')
-      setDeleteConfirmOpen(false)
-      setPendingDeleteCard(null)
-    } catch (error) {
-      message.error(error?.message || '删除语音卡片失败')
+      const errorMessage = error?.message || t('voice.extractionError', { defaultValue: '观点提取失败，请稍后重试' })
+      setExtractionError(errorMessage)
+      message.error(errorMessage)
     } finally {
-      setDeleteConfirmLoading(false)
+      if (extractionAbortRef.current === controller) {
+        extractionAbortRef.current = null
+      }
+      setIsExtracting(false)
     }
+  }
+
+  const handleShowExtraction = () => {
+    setVoiceContentView('extraction')
+    if (!isExtracting && (!extractionText.trim() || extractionError)) {
+      void handleExtractViewpoints()
+    }
+  }
+
+  const handleShowTranscript = () => {
+    setVoiceContentView('transcript')
   }
 
   useEffect(() => {
@@ -2834,7 +2804,10 @@ function VoiceNoteEditor({
         preferredMimeType,
         websocketPath: resolvedSession.websocketPath,
       })
-      message.success(`已开始${getLanguageLabel(language)}实时转写`)
+      message.success(t('voice.realtimeStartedWithLanguage', {
+        defaultValue: '已开始{{language}}实时转写',
+        language: getLanguageLabel(language),
+      }))
       return true
     } catch (error) {
       voiceRealtimeLog('start-recording-failed', {
@@ -2933,28 +2906,6 @@ function VoiceNoteEditor({
         background: 'linear-gradient(180deg, rgba(247,249,251,0.92), rgba(255,255,255,0.98))',
       }}
     >
-      <Modal
-        open={deleteConfirmOpen}
-        title="删除语音卡片"
-        centered
-        okText="删除"
-        cancelText="取消"
-        okButtonProps={{ danger: true, loading: deleteConfirmLoading }}
-        onOk={confirmDeleteRecordingCard}
-        onCancel={() => {
-          if (deleteConfirmLoading) {
-            return
-          }
-          setDeleteConfirmOpen(false)
-          setPendingDeleteCard(null)
-        }}
-        destroyOnHidden
-      >
-        <div style={{ color: '#475569', lineHeight: 1.7 }}>
-          确认删除这条语音素材吗？删除后将同步清理服务端归档。
-        </div>
-      </Modal>
-
       <Modal
         open={stopConfirmOpen}
         title="停止录制"
@@ -3097,21 +3048,39 @@ function VoiceNoteEditor({
               <span style={{ color: 'var(--primary)', display: 'inline-flex', alignItems: 'center' }}>
                 <VoicePulse />
               </span>
-              <div style={{ fontSize: 15, fontWeight: 800, color: '#475569', whiteSpace: 'nowrap' }}>转写内容</div>
               <button
                 type="button"
+                onClick={handleShowTranscript}
                 style={{
                   border: 'none',
                   background: 'transparent',
-                  color: '#475569',
+                  color: voiceContentView === 'transcript' ? '#1e3a8a' : '#475569',
                   fontSize: 15,
                   fontWeight: 800,
                   cursor: 'pointer',
                   padding: 0,
                   whiteSpace: 'nowrap',
+                  position: 'relative',
                 }}
               >
-                观点提取
+                {t('voice.transcriptContent', { defaultValue: '转写内容' })}
+              </button>
+              <button
+                type="button"
+                onClick={handleShowExtraction}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: voiceContentView === 'extraction' ? '#1e3a8a' : '#475569',
+                  fontSize: 15,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  padding: 0,
+                  whiteSpace: 'nowrap',
+                  position: 'relative',
+                }}
+              >
+                {t('voice.viewpointExtraction', { defaultValue: '观点提取' })}
               </button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
@@ -3146,7 +3115,6 @@ function VoiceNoteEditor({
                   active={selectedRecording === key}
                   {...recording}
                   onClick={() => handleSelectRecording(key)}
-                  onDelete={recording.fileId ? () => handleDeleteRecordingCard({ key, ...recording }) : null}
                 />
               ))
             ) : (
@@ -3163,7 +3131,7 @@ function VoiceNoteEditor({
                   background: 'linear-gradient(180deg, rgba(248,250,252,0.7), rgba(255,255,255,0.2))',
                 }}
               >
-                暂无语音卡片，开始录音后会在这里生成
+                {t('voice.emptyCards', { defaultValue: '暂无语音卡片，开始录音后会在这里生成' })}
               </div>
             )}
           </div>
@@ -3188,7 +3156,44 @@ function VoiceNoteEditor({
                 overflow: 'hidden',
               }}
             >
-              {visibleTranscripts.length > 0 ? (
+              {voiceContentView === 'extraction' ? (
+                <div
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    borderRadius: 24,
+                    background: 'linear-gradient(180deg, rgba(237,246,255,0.95), rgba(248,252,255,0.98))',
+                    border: '1px solid rgba(147,197,253,0.58)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.72)',
+                    padding: '18px 18px 20px',
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#2563eb', marginBottom: 10 }}>
+                    {t('voice.viewpointExtraction', { defaultValue: '观点提取' })}
+                  </div>
+                  {isExtracting ? (
+                    <div style={{ color: '#475569', fontSize: 14, lineHeight: 1.8 }}>
+                      {t('voice.extracting', { defaultValue: '正在提取观点...' })}
+                    </div>
+                  ) : null}
+                  {!isExtracting && extractionError ? (
+                    <div style={{ color: '#b91c1c', fontSize: 14, lineHeight: 1.8 }}>
+                      {extractionError}
+                    </div>
+                  ) : null}
+                  {!isExtracting && !extractionError && extractionText ? (
+                    <div style={{ color: '#334155', fontSize: 14, lineHeight: 1.9, whiteSpace: 'pre-wrap' }}>
+                      {extractionText}
+                    </div>
+                  ) : null}
+                  {!isExtracting && !extractionError && !extractionText ? (
+                    <div style={{ color: '#64748b', fontSize: 14, lineHeight: 1.8 }}>
+                      {t('voice.extractionEmpty', { defaultValue: '点击“观点提取”后，这里会显示提炼结果。' })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : visibleTranscripts.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto', minHeight: 0, flex: 1 }}>
                   {recordingState !== 'idle' && liveTranscriptText ? (
                     <div
@@ -3202,7 +3207,9 @@ function VoiceNoteEditor({
                         lineHeight: 1.7,
                       }}
                     >
-                      <div style={{ marginBottom: 6, fontSize: 11, fontWeight: 800, color: 'var(--primary)' }}>实时预览</div>
+                      <div style={{ marginBottom: 6, fontSize: 11, fontWeight: 800, color: 'var(--primary)' }}>
+                        {t('voice.livePreview', { defaultValue: '实时预览' })}
+                      </div>
                       <div>{liveTranscriptText}</div>
                     </div>
                   ) : null}
@@ -3236,7 +3243,7 @@ function VoiceNoteEditor({
                       padding: '24px',
                     }}
                   >
-                    暂无语音卡片，开始录音后会在这里生成
+                    {t('voice.emptyCards', { defaultValue: '暂无语音卡片，开始录音后会在这里生成' })}
                   </div>
                 </div>
               )}
@@ -3409,7 +3416,9 @@ function VoiceNoteEditor({
                   }}
                 >
                   <RecorderButton
-                    title={isRecording ? '暂停录制' : '恢复录制'}
+                    title={isRecording
+                      ? t('voice.pauseRecording', { defaultValue: '暂停录制' })
+                      : t('voice.resumeRecording', { defaultValue: '恢复录制' })}
                     onClick={isRecording ? handlePauseRecording : handleResumeRecording}
                     active={isRecording}
                     disabled={isUploading}
@@ -3437,7 +3446,11 @@ function VoiceNoteEditor({
                         }}
                       >
                         <MicIcon size={14} color="currentColor" />
-                        <span>{isRecording ? '实时识别中' : '已暂停'}</span>
+                        <span>
+                          {isRecording
+                            ? t('voice.liveRecognizing', { defaultValue: '实时识别中' })
+                            : t('voice.status.paused', { defaultValue: '已暂停' })}
+                        </span>
                       </div>
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8', flexShrink: 0 }}>
                         {getLanguageLabel(pendingLanguage)}
@@ -3457,7 +3470,7 @@ function VoiceNoteEditor({
                   </div>
 
                   <RecorderButton
-                    title="终止录制"
+                    title={t('voice.stopRecording', { defaultValue: '终止录制' })}
                     onClick={handleRequestStopRecording}
                     danger
                     disabled={isUploading}

@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button, Checkbox, Modal, Select, message } from 'antd'
 import {
   CalendarOutlined,
@@ -17,6 +18,7 @@ import useNote from '@/hooks/useNote'
 import useNotebook from '@/hooks/useNotebook'
 import noteService from '@/services/noteService'
 import shareService from '@/services/shareService'
+import { getLocalizedNotebookName } from '@/utils/notebookLocalization'
 import {
   DEFAULT_RECENT_NOTE_SORT,
   RECENT_NOTE_SORT_FIELDS,
@@ -57,17 +59,18 @@ function getErrorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback
 }
 
-function resolveNotebookName(note, notebookNameById, fallbackNotebookName = '') {
+function resolveNotebookName(note, notebookMapById, fallbackNotebookName = '', t) {
   const candidates = [
-    note?.notebookName,
-    note?.notebook?.name,
-    note?.notebookTitle,
-    note?.notebook_title,
-    note?.folderName,
-    note?.folder_name,
-    notebookNameById[note?.notebookId],
-    notebookNameById[note?.notebook_id],
-    fallbackNotebookName,
+    note?.notebook ? getLocalizedNotebookName(note.notebook, t) : '',
+    getLocalizedNotebookName(note?.notebookName, t),
+    getLocalizedNotebookName(note?.notebook?.name, t),
+    getLocalizedNotebookName(note?.notebookTitle, t),
+    getLocalizedNotebookName(note?.notebook_title, t),
+    getLocalizedNotebookName(note?.folderName, t),
+    getLocalizedNotebookName(note?.folder_name, t),
+    notebookMapById[note?.notebookId] ? getLocalizedNotebookName(notebookMapById[note.notebookId], t) : '',
+    notebookMapById[note?.notebook_id] ? getLocalizedNotebookName(notebookMapById[note.notebook_id], t) : '',
+    getLocalizedNotebookName(fallbackNotebookName, t),
   ]
 
   return candidates.find((value) => typeof value === 'string' && value.trim()) || ''
@@ -94,6 +97,7 @@ function hasVoiceRecords(note) {
 }
 
 function NotesSidebar({ visible = true }) {
+  const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
   const {
@@ -218,9 +222,9 @@ function NotesSidebar({ visible = true }) {
     fetchMyShares()
   }, [currentSection, fetchMyShares, isSupportedRoute, visible])
 
-  const notebookNameById = useMemo(() => notebooks.reduce((result, notebook) => {
+  const notebookMapById = useMemo(() => notebooks.reduce((result, notebook) => {
     if (notebook?.id && notebook?.name) {
-      result[notebook.id] = notebook.name
+      result[notebook.id] = notebook
     }
     return result
   }, {}), [notebooks])
@@ -235,7 +239,7 @@ function NotesSidebar({ visible = true }) {
     if (currentSection === 'starred') {
       return starredNotes.map((item) => ({
         ...item,
-        notebookName: resolveNotebookName(item, notebookNameById),
+        notebookName: resolveNotebookName(item, notebookMapById, '', t),
       }))
     }
 
@@ -244,7 +248,7 @@ function NotesSidebar({ visible = true }) {
         ...item,
         id: item.noteId || item.id,
         title: item.noteTitle || item.title,
-        notebookName: item.notebookName || item.shareCode || '分享',
+        notebookName: getLocalizedNotebookName(item.notebookName, t) || item.shareCode || t('share.title', { defaultValue: '分享' }),
         updatedAt: item.updatedAt || item.createdAt,
       }))
     }
@@ -252,7 +256,7 @@ function NotesSidebar({ visible = true }) {
     if (currentSection === 'recyclebin') {
       return deletedNotes.map((item) => ({
         ...item,
-        notebookName: resolveNotebookName(item, notebookNameById),
+        notebookName: resolveNotebookName(item, notebookMapById, '', t),
       }))
     }
 
@@ -260,11 +264,12 @@ function NotesSidebar({ visible = true }) {
       ...item,
       notebookName: resolveNotebookName(
         item,
-        notebookNameById,
-        currentSection === 'notebooks' ? currentNotebook?.name : ''
+        notebookMapById,
+        currentSection === 'notebooks' ? currentNotebook?.name : '',
+        t
       ),
     }))
-  }, [currentSection, starredNotes, myShares, deletedNotes, notes, notebookNameById, currentNotebook?.name])
+  }, [currentSection, starredNotes, myShares, deletedNotes, notes, notebookMapById, currentNotebook?.name, t])
 
   const sortedNotes = useMemo(() => sortRecentNotes(sourceNotes, sort), [sourceNotes, sort])
   const starredLoadedCount = starredNotes.length
@@ -489,7 +494,7 @@ function NotesSidebar({ visible = true }) {
   const moveNotebookOptions = notebooks
     .filter((item) => item?.id)
     .map((item) => ({
-      label: item.name,
+      label: getLocalizedNotebookName(item, t),
       value: item.id,
     }))
 

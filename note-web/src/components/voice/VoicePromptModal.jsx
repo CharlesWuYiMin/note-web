@@ -1,20 +1,24 @@
 ﻿import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button, Modal } from 'antd'
-
-const LANGUAGE_OPTIONS = [
-  { key: 'zh-CN', label: '中文' },
-  { key: 'en-US', label: '英文' },
-]
 
 function VoicePromptModal({
   open,
-  title = '是否开启语音转录',
-  confirmText = '开启语音转录',
+  title,
+  confirmText,
   selectedLanguage,
   onSelectLanguage,
   onConfirm,
   onCancel,
 }) {
+  const { t } = useTranslation()
+  const resolvedTitle = title || t('voice.promptTitle', { defaultValue: '是否开启语音转录' })
+  const resolvedConfirmText = confirmText || t('voice.promptConfirm', { defaultValue: '开启语音转录' })
+  const languageOptions = [
+    { key: 'zh-CN', label: t('settings.languageOptionZh', { defaultValue: '中文' }) },
+    { key: 'en-US', label: t('voice.language.english', { defaultValue: '英文' }) },
+  ]
+
   return (
     <>
       <style>{`\
@@ -75,11 +79,11 @@ function VoicePromptModal({
       >
         <div style={{ padding: '18px 18px 16px' }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: '#111827', marginBottom: 12, letterSpacing: '-0.01em' }}>
-            {title}
+            {resolvedTitle}
           </div>
 
           <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-            {LANGUAGE_OPTIONS.map((option) => {
+            {languageOptions.map((option) => {
               const selected = selectedLanguage === option.key
 
               return (
@@ -113,9 +117,11 @@ function VoicePromptModal({
           </div>
 
           <div style={{ borderRadius: 16, background: 'rgba(248,250,252,0.96)', padding: '14px 16px 12px', marginBottom: 14 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 8 }}>注意事项</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
+              {t('voice.promptNoticeTitle', { defaultValue: '注意事项' })}
+            </div>
             <div style={{ fontSize: 14, lineHeight: 1.7, color: '#334155' }}>
-              语音记录功能受录音环境与拾音设备影响较大。为保证转写效果，建议使用有线耳机进行录制。
+              {t('voice.promptNoticeBody', { defaultValue: '语音记录功能受录音环境与拾音设备影响较大。为保证转写效果，建议使用有线耳机进行录制。' })}
             </div>
           </div>
 
@@ -134,7 +140,7 @@ function VoicePromptModal({
               boxShadow: '0 12px 22px rgba(2,86,210,0.20)',
             }}
           >
-            {confirmText}
+            {resolvedConfirmText}
           </Button>
         </div>
       </Modal>

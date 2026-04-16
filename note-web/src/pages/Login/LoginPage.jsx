@@ -1,44 +1,50 @@
-import React, { useEffect, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { Card, Button, Spin, Alert } from 'antd'
+﻿import React, { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Alert, Button, Card, Spin } from 'antd'
 import { LoginOutlined, MobileOutlined } from '@ant-design/icons'
 import authService from '@/services/authService'
 import useAuthStore from '@/store/useAuthStore'
+import { consumePostLoginRedirect } from '@/utils/authNavigation'
 
 function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { login: storeLogin, isAuthenticated, isLoading, error, clearError } = useAuthStore()
   const [isProcessing, setIsProcessing] = useState(false)
+  const loginReason = new URLSearchParams(location.search).get('reason')
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      const from = location.state?.from || '/cloudnote/recent'
-      navigate(from, { replace: true })
-      return
-    }
-    
-    handleAuthCallback()
-  }, [isAuthenticated, navigate, location])
+  const resolveAfterLoginPath = () => (
+    location.state?.from
+    || consumePostLoginRedirect()
+    || '/cloudnote/recent'
+  )
 
   const handleAuthCallback = async () => {
     try {
       setIsProcessing(true)
       clearError()
-      
+
       const authData = authService.detectAuthFromUrl()
       if (authData) {
         await storeLogin(authData)
         authService.clearUrlAuthParams()
-        const from = location.state?.from || '/cloudnote/recent'
-        navigate(from, { replace: true })
+        navigate(resolveAfterLoginPath(), { replace: true })
       }
-    } catch (err) {
-      console.error('Auth callback error:', err)
+    } catch (authError) {
+      console.error('Auth callback error:', authError)
     } finally {
       setIsProcessing(false)
     }
   }
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate(resolveAfterLoginPath(), { replace: true })
+      return
+    }
+
+    void handleAuthCallback()
+  }, [isAuthenticated, navigate, location.key])
 
   const handleIdaasLogin = () => {
     authService.redirectToIdaas()
@@ -49,21 +55,32 @@ function LoginPage() {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'var(--surface)',
-      padding: 24,
-    }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--surface)',
+        padding: 24,
+      }}
+    >
       <Card
-        style={{ width: '100%', maxWidth: 448, borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.08)' }}
+        style={{
+          width: '100%',
+          maxWidth: 448,
+          borderRadius: 16,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
+        }}
         styles={{ body: { padding: 32 } }}
       >
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--primary)', marginBottom: 8 }}>云笔记</h1>
-          <p style={{ fontSize: 14, color: '#bfbfbf' }}>智能协作，高效记录</p>
+          <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--primary)', marginBottom: 8 }}>
+            云笔记
+          </h1>
+          <p style={{ fontSize: 14, color: '#8c8c8c' }}>
+            智能协作，高效记录
+          </p>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -103,25 +120,43 @@ function LoginPage() {
           </Button>
         </div>
 
-        {error && (
-          <Alert message={error} type="error" showIcon closable onClose={clearError} style={{ marginTop: 16 }} />
-        )}
+        {error ? (
+          <Alert
+            message={error}
+            type="error"
+            showIcon
+            closable
+            onClose={clearError}
+            style={{ marginTop: 16 }}
+          />
+        ) : null}
 
-        {(isLoading || isProcessing) && (
+        {!error && loginReason === 'expired' ? (
+          <Alert
+            message="当前登录已失效，请重新登录"
+            type="warning"
+            showIcon
+            style={{ marginTop: 16 }}
+          />
+        ) : null}
+
+        {(isLoading || isProcessing) ? (
           <div style={{ textAlign: 'center', paddingTop: 16 }}>
-            <Spin tip="正在处理..." />
+            <Spin tip="正在处理登录..." />
           </div>
-        )}
+        ) : null}
       </Card>
 
-      <p style={{
-        position: 'fixed',
-        bottom: 24,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        fontSize: 12,
-        color: '#bfbfbf',
-      }}>
+      <p
+        style={{
+          position: 'fixed',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          fontSize: 12,
+          color: '#bfbfbf',
+        }}
+      >
         登录即表示您同意我们的服务条款和隐私政策
       </p>
     </div>
