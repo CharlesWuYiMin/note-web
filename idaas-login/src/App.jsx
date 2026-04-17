@@ -1,4 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+
+function resolveRedirectUri(searchParams) {
+  return searchParams.get('redirectUri') || searchParams.get('redirect_uri') || ''
+}
+
+function resolveState(searchParams) {
+  return searchParams.get('state') || ''
+}
 
 function App() {
   const [username, setUsername] = useState('')
@@ -6,66 +14,64 @@ function App() {
   const [error, setError] = useState('')
   const [redirecting, setRedirecting] = useState(false)
   const [redirectUri, setRedirectUri] = useState('')
+  const [oauthState, setOauthState] = useState('')
 
-  // 从 URL 中获取 redirectUri 参数（注意：参数名是 redirectUri，不是 redirect_uri）
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
-    // 支持 redirectUri 或 redirect_uri 两种参数名
-    const uri = urlParams.get('redirectUri') || urlParams.get('redirect_uri')
+    const uri = resolveRedirectUri(urlParams)
+    const state = resolveState(urlParams)
+
     if (uri) {
       setRedirectUri(uri)
       console.log('IDaaS Login: Received redirectUri:', uri)
     } else {
       console.warn('IDaaS Login: No redirectUri found in URL')
     }
+
+    if (state) {
+      setOauthState(state)
+      console.log('IDaaS Login: Received state:', state)
+    }
   }, [])
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
+  const handleSubmit = (event) => {
+    event.preventDefault()
     setError('')
 
-    // 验证用户名和密码
     if (!username || !password) {
       setError('请输入用户名和密码')
       return
     }
 
-    // 检查 redirectUri 是否存在
     if (!redirectUri) {
       setError('缺少重定向地址，请重新访问应用')
       console.error('IDaaS Login: redirectUri is empty')
       return
     }
 
-    // 模拟登录成功（不校验密码，任何密码都通过）
     setRedirecting(true)
 
-    // 直接使用用户名作为 code
     const code = username
-
-    console.log('IDaaS Login: Generated code for user', username, ':', code)
-    console.log('IDaaS Login: Redirecting to:', redirectUri)
-
-    // 构建重定向 URL
     let redirectUrl
+
     try {
       redirectUrl = new URL(redirectUri)
-    } catch (e) {
-      // 如果 redirectUri 不是完整 URL，则使用当前 origin
+    } catch {
       redirectUrl = new URL(redirectUri, window.location.origin)
     }
-    
-    redirectUrl.searchParams.append('code', code)
-    redirectUrl.searchParams.append('type', 'weDocsIDaas')
+
+    redirectUrl.searchParams.set('code', code)
+    redirectUrl.searchParams.set('type', 'weDocsIDaas')
+    if (oauthState) {
+      redirectUrl.searchParams.set('state', oauthState)
+    }
 
     const finalUrl = redirectUrl.toString()
     console.log('IDaaS Login: Final redirect URL:', finalUrl)
 
-    // 延迟重定向，让用户看到加载状态
-    setTimeout(() => {
-      console.log('IDaaS Login: Executing redirect to:', finalUrl)
+    window.setTimeout(() => {
       window.location.href = finalUrl
-    }, 1000)
+    }, 600)
   }
 
   return (
@@ -73,31 +79,31 @@ function App() {
       <h1>IDaaS 认证</h1>
       {redirecting ? (
         <div className="redirecting">
-          <p>登录成功，正在重定向...</p>
+          <p>登录成功，正在跳转...</p>
         </div>
       ) : (
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="username">用户名</label>
             <input
-              type="text"
               id="username"
+              type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(event) => setUsername(event.target.value)}
               placeholder="请输入用户名"
             />
           </div>
           <div className="form-group">
             <label htmlFor="password">密码</label>
             <input
-              type="password"
               id="password"
+              type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               placeholder="请输入密码"
             />
           </div>
-          {error && <div className="error">{error}</div>}
+          {error ? <div className="error">{error}</div> : null}
           <button type="submit">登录</button>
         </form>
       )}
