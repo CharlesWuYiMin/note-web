@@ -147,6 +147,16 @@ describe('NoteService', () => {
     })
   })
 
+  describe('copyNote', () => {
+    it('uses the new /:noteId/copy endpoint with target notebookId in the request body', async () => {
+      mockPost.mockResolvedValue({ data: { id: 'copied-1' } })
+
+      await noteService.copyNote('note-123', 'target-notebook-2')
+
+      expect(mockPost).toHaveBeenCalledWith('/note-123/copy', { notebookId: 'target-notebook-2' })
+    })
+  })
+
   describe('deleteNote', () => {
     it('calls POST /notes/:id/delete for soft deletion', async () => {
       mockPost.mockResolvedValue({ success: true })

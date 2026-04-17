@@ -1,11 +1,16 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Button, Checkbox, Modal, Select, message } from 'antd'
+import { Button, Checkbox, Dropdown, Input, Modal, Select, message } from 'antd'
 import {
   CalendarOutlined,
   CheckOutlined,
   ClockCircleOutlined,
+  CopyOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  ExportOutlined,
   FilterOutlined,
+  MoreOutlined,
   ShareAltOutlined,
   StarFilled,
   StarOutlined,
@@ -132,6 +137,7 @@ function NotesSidebar({ visible = true }) {
     fetchMyShares,
     fetchDeletedNotes,
     toggleStar,
+    updateName,
     isLoading,
     isStarredNotesLoadingMore,
   } = useNote()
@@ -141,9 +147,17 @@ function NotesSidebar({ visible = true }) {
   const [batchMode, setBatchMode] = useState(false)
   const [selectedNoteIds, setSelectedNoteIds] = useState([])
   const [moveDialogOpen, setMoveDialogOpen] = useState(false)
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false)
   const [targetNotebookId, setTargetNotebookId] = useState(null)
+  const [copyTargetNotebookId, setCopyTargetNotebookId] = useState(null)
+  const [copySourceNoteId, setCopySourceNoteId] = useState(null)
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false)
+  const [renameTargetNoteId, setRenameTargetNoteId] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
   const [isBatchSubmitting, setIsBatchSubmitting] = useState(false)
   const [pendingField, setPendingField] = useState(DEFAULT_RECENT_NOTE_SORT.field)
+  const [hoveredNoteId, setHoveredNoteId] = useState(null)
+  const [activeMoreNoteId, setActiveMoreNoteId] = useState(null)
   const hasRedirectedRef = useRef(false)
   const menuRef = useRef(null)
   const scrollContainerRef = useRef(null)
@@ -313,6 +327,8 @@ function NotesSidebar({ visible = true }) {
     setSelectedNoteIds([])
     setMoveDialogOpen(false)
     setTargetNotebookId(null)
+    setHoveredNoteId(null)
+    setActiveMoreNoteId(null)
   }, [currentSection, currentNotebook?.id])
 
   useEffect(() => {
@@ -414,6 +430,9 @@ function NotesSidebar({ visible = true }) {
     setSelectedNoteIds([])
     setMoveDialogOpen(false)
     setTargetNotebookId(null)
+    setCopyDialogOpen(false)
+    setCopyTargetNotebookId(null)
+    setCopySourceNoteId(null)
   }
 
   const exitBatchAfterRefresh = async (actedIds = selectedNoteIds) => {
@@ -451,6 +470,225 @@ function NotesSidebar({ visible = true }) {
         ? prev.filter((id) => id !== noteId)
         : [...prev, noteId]
     ))
+  }
+
+  const handleOpenSingleMoveDialog = (noteId) => {
+    setActiveMoreNoteId(null)
+    setSelectedNoteIds([String(noteId)])
+    setTargetNotebookId(null)
+    setMoveDialogOpen(true)
+  }
+
+  const handleOpenSingleCopyDialog = (noteId) => {
+    setActiveMoreNoteId(null)
+    setCopySourceNoteId(String(noteId))
+    setCopyTargetNotebookId(null)
+    setCopyDialogOpen(true)
+  }
+
+  const handleOpenRenameDialog = (note) => {
+    setActiveMoreNoteId(null)
+    setRenameTargetNoteId(String(note.id))
+    setRenameValue(note.title || '')
+    setRenameDialogOpen(true)
+  }
+
+  const handleDeleteSingleNote = async (noteId) => {
+    setActiveMoreNoteId(null)
+    setIsBatchSubmitting(true)
+    try {
+      await noteService.deleteNote(noteId)
+      await exitBatchAfterRefresh([String(noteId)])
+      message.success('删除成功')
+    } catch (error) {
+      message.error(getErrorMessage(error, '删除失败，请稍后重试'))
+    } finally {
+      setIsBatchSubmitting(false)
+    }
+  }
+
+  const handleDeleteSingleShare = async (shareCode, noteId) => {
+    if (!shareCode) {
+      return
+    }
+
+    setActiveMoreNoteId(null)
+    setIsBatchSubmitting(true)
+    try {
+      await shareService.deleteShare(shareCode)
+      await exitBatchAfterRefresh([String(noteId)])
+      message.success('已取消分享')
+    } catch (error) {
+      message.error(getErrorMessage(error, '取消分享失败，请稍后重试'))
+    } finally {
+      setIsBatchSubmitting(false)
+    }
+  }
+
+  const openSharePanelForNote = (note) => {
+    const detailPath = getDetailPath(currentSection, note)
+
+    if (detailPath === location.pathname) {
+      window.dispatchEvent(new CustomEvent('note:open-share-panel', {
+        detail: { noteId: String(note.id) },
+      }))
+      setActiveMoreNoteId(null)
+      return
+    }
+
+    setActiveMoreNoteId(null)
+    navigate(detailPath, {
+      state: { note, openSharePanel: true },
+    })
+  }
+
+  const handleRestoreSingleNote = async (noteId) => {
+    setActiveMoreNoteId(null)
+    setIsBatchSubmitting(true)
+    try {
+      await noteService.restoreDeletedNote([String(noteId)])
+      await exitBatchAfterRefresh([String(noteId)])
+      message.success('恢复成功')
+    } catch (error) {
+      message.error(getErrorMessage(error, '恢复失败，请稍后重试'))
+    } finally {
+      setIsBatchSubmitting(false)
+    }
+  }
+
+  const handlePermanentDeleteSingleNote = async (noteId) => {
+    setActiveMoreNoteId(null)
+    setIsBatchSubmitting(true)
+    try {
+      await noteService.permanentDeleteNote([String(noteId)])
+      await exitBatchAfterRefresh([String(noteId)])
+      message.success('删除成功')
+    } catch (error) {
+      message.error(getErrorMessage(error, '删除失败，请稍后重试'))
+    } finally {
+      setIsBatchSubmitting(false)
+    }
+  }
+
+  const getNoteMoreMenuItems = (note) => {
+    if (currentSection === 'recyclebin') {
+      return [
+        {
+          key: 'batch',
+          icon: <UnorderedListOutlined />,
+          label: '批量操作',
+        },
+        {
+          key: 'restore',
+          icon: <ExportOutlined rotate={180} />,
+          label: '恢复',
+        },
+        {
+          key: 'permanentDelete',
+          icon: <DeleteOutlined />,
+          label: <span style={{ color: '#dc2626' }}>删除</span>,
+        },
+      ]
+    }
+
+    const items = [
+      ...(currentSection !== 'shares'
+        ? [{
+            key: 'rename',
+            icon: <EditOutlined />,
+            label: '重命名',
+          }]
+        : []),
+      ...(isRecentLikeSection
+        ? [{
+            key: 'move',
+            icon: <ExportOutlined />,
+            label: '移动到',
+          }]
+        : []),
+      ...(currentSection !== 'shares'
+        && currentSection !== 'recyclebin'
+        ? [{
+            key: 'copy',
+            icon: <CopyOutlined />,
+            label: '复制到',
+          }]
+        : []),
+      {
+        key: 'batch',
+        icon: <UnorderedListOutlined />,
+        label: '批量操作',
+      },
+      {
+        key: 'share',
+        icon: <ShareAltOutlined />,
+        label: '分享',
+      },
+    ]
+
+    if (currentSection === 'shares') {
+      items.push({
+        key: 'unshare',
+        icon: <DeleteOutlined />,
+        label: <span style={{ color: '#dc2626' }}>取消分享</span>,
+      })
+      return items
+    }
+
+    items.push({
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      label: <span style={{ color: '#dc2626' }}>删除</span>,
+    })
+
+    return items
+  }
+
+  const handleNoteMoreAction = async ({ key, note }) => {
+    if (key === 'batch') {
+      setActiveMoreNoteId(null)
+      handleToggleBatchMode()
+      return
+    }
+
+    if (key === 'move') {
+      handleOpenSingleMoveDialog(note.id)
+      return
+    }
+
+    if (key === 'copy') {
+      handleOpenSingleCopyDialog(note.id)
+      return
+    }
+
+    if (key === 'rename') {
+      handleOpenRenameDialog(note)
+      return
+    }
+
+    if (key === 'share') {
+      openSharePanelForNote(note)
+      return
+    }
+
+    if (key === 'delete') {
+      await handleDeleteSingleNote(note.id)
+      return
+    }
+
+    if (key === 'unshare') {
+      await handleDeleteSingleShare(note.shareCode, note.id)
+      return
+    }
+
+    if (key === 'restore') {
+      await handleRestoreSingleNote(note.id)
+      return
+    }
+
+    if (key === 'permanentDelete') {
+      await handlePermanentDeleteSingleNote(note.id)
+    }
   }
 
   const runBatchAction = async (action) => {
@@ -503,9 +741,51 @@ function NotesSidebar({ visible = true }) {
       setMoveDialogOpen(false)
       setTargetNotebookId(null)
       await exitBatchAfterRefresh()
+      await fetchNotebooks()
       message.success('批量移动成功')
     } catch (error) {
       message.error(getErrorMessage(error, '批量移动失败，请稍后重试'))
+    } finally {
+      setIsBatchSubmitting(false)
+    }
+  }
+
+  const handleConfirmCopy = async () => {
+    if (!copyTargetNotebookId || !copySourceNoteId || isBatchSubmitting) {
+      return
+    }
+
+    setIsBatchSubmitting(true)
+    try {
+      await noteService.copyNote(copySourceNoteId, copyTargetNotebookId)
+      setCopyDialogOpen(false)
+      setCopyTargetNotebookId(null)
+      setCopySourceNoteId(null)
+      await refreshCurrentSection()
+      await fetchNotebooks()
+      message.success('复制成功')
+    } catch (error) {
+      message.error(getErrorMessage(error, '复制失败，请稍后重试'))
+    } finally {
+      setIsBatchSubmitting(false)
+    }
+  }
+
+  const handleConfirmRename = async () => {
+    const nextTitle = renameValue.trim()
+    if (!renameTargetNoteId || !nextTitle || isBatchSubmitting) {
+      return
+    }
+
+    setIsBatchSubmitting(true)
+    try {
+      await updateName(renameTargetNoteId, nextTitle)
+      setRenameDialogOpen(false)
+      setRenameTargetNoteId(null)
+      setRenameValue('')
+      message.success('重命名成功')
+    } catch (error) {
+      message.error(getErrorMessage(error, '重命名失败，请稍后重试'))
     } finally {
       setIsBatchSubmitting(false)
     }
@@ -789,6 +1069,12 @@ function NotesSidebar({ visible = true }) {
             key={note.id}
             type="button"
             data-testid="recent-note-card"
+            onMouseEnter={() => setHoveredNoteId(String(note.id))}
+            onMouseLeave={() => {
+              if (activeMoreNoteId !== String(note.id)) {
+                setHoveredNoteId((prev) => (prev === String(note.id) ? null : prev))
+              }
+            }}
             onClick={() => {
               if (batchMode) {
                 handleToggleNoteSelection(String(note.id))
@@ -815,6 +1101,12 @@ function NotesSidebar({ visible = true }) {
               transition: 'all 0.18s ease',
             }}
           >
+            {(() => {
+              const noteId = String(note.id)
+              const showHoverActions = !batchMode && (hoveredNoteId === noteId || activeMoreNoteId === noteId)
+              const showStarAction = !batchMode && (note.isStarred || hoveredNoteId === noteId || activeMoreNoteId === noteId)
+
+              return (
               <div
                 style={{
                   display: 'flex',
@@ -878,8 +1170,28 @@ function NotesSidebar({ visible = true }) {
                   </div>
                   </div>
                 </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexShrink: 0 }}>
-                {hasVoiceRecords(note) ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginTop: 2,
+                  flexShrink: 0,
+                  minWidth: 78,
+                  justifyContent: 'flex-end',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    opacity: showHoverActions ? 1 : 0,
+                    pointerEvents: showHoverActions ? 'auto' : 'none',
+                    transition: 'opacity 0.16s ease',
+                  }}
+                >
+                  {hasVoiceRecords(note) ? (
                   <span
                     title="有语音记录"
                     aria-label="有语音记录"
@@ -894,35 +1206,34 @@ function NotesSidebar({ visible = true }) {
                   >
                     <SoundOutlined />
                   </span>
-                ) : null}
-                <button
-                  type="button"
-                  title={sharedNoteIdSet.has(String(note.id)) ? '已分享，点击打开分享面板' : '分享'}
-                  aria-label={sharedNoteIdSet.has(String(note.id)) ? '已分享' : '分享'}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    if (batchMode) {
-                      return
-                    }
-                    navigate(getDetailPath(currentSection, note), {
-                      state: { note, openSharePanel: true },
-                    })
-                  }}
-                  style={{
-                    border: 'none',
-                    background: 'transparent',
-                    padding: 0,
-                    color: sharedNoteIdSet.has(String(note.id)) ? '#2563eb' : 'rgba(100,116,139,0.58)',
-                    fontSize: 16,
-                    lineHeight: 1,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    flexShrink: 0,
-                    cursor: batchMode ? 'default' : 'pointer',
-                  }}
-                >
-                  <ShareAltOutlined />
-                </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    title={sharedNoteIdSet.has(String(note.id)) ? '已分享，点击打开分享面板' : '分享'}
+                    aria-label={sharedNoteIdSet.has(String(note.id)) ? '已分享' : '分享'}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      if (batchMode) {
+                        return
+                      }
+                      openSharePanelForNote(note)
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      padding: 0,
+                      color: sharedNoteIdSet.has(String(note.id)) ? '#2563eb' : 'rgba(100,116,139,0.58)',
+                      fontSize: 16,
+                      lineHeight: 1,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      flexShrink: 0,
+                      cursor: batchMode ? 'default' : 'pointer',
+                    }}
+                  >
+                    <ShareAltOutlined />
+                  </button>
+                </div>
                 <button
                   type="button"
                   title={note.isStarred ? '取消星标' : '星标'}
@@ -945,12 +1256,68 @@ function NotesSidebar({ visible = true }) {
                     alignItems: 'center',
                     flexShrink: 0,
                     cursor: batchMode ? 'default' : 'pointer',
+                    opacity: showStarAction ? 1 : 0,
+                    pointerEvents: showStarAction ? 'auto' : 'none',
+                    transition: 'opacity 0.16s ease',
                   }}
                 >
                   {note.isStarred ? <StarFilled /> : <StarOutlined />}
                 </button>
+                <div
+                  style={{
+                    opacity: showHoverActions ? 1 : 0,
+                    pointerEvents: showHoverActions ? 'auto' : 'none',
+                    transition: 'opacity 0.16s ease',
+                  }}
+                >
+                  <Dropdown
+                    trigger={['click']}
+                    placement="bottomRight"
+                    menu={{
+                      items: getNoteMoreMenuItems(note),
+                      onClick: async ({ key, domEvent }) => {
+                        domEvent.stopPropagation()
+                        await handleNoteMoreAction({ key, note })
+                      },
+                    }}
+                    onOpenChange={(open) => {
+                      if (open) {
+                        setActiveMoreNoteId(String(note.id))
+                        setHoveredNoteId(String(note.id))
+                        return
+                      }
+
+                      setActiveMoreNoteId((prev) => (prev === String(note.id) ? null : prev))
+                    }}
+                  >
+                    <button
+                      type="button"
+                      title="更多"
+                      aria-label="更多"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                      }}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        padding: 0,
+                        color: 'rgba(100,116,139,0.58)',
+                        fontSize: 16,
+                        lineHeight: 1,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        flexShrink: 0,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <MoreOutlined />
+                    </button>
+                  </Dropdown>
+                </div>
               </div>
             </div>
+              )
+            })()}
           </button>
         ))}
 
@@ -1002,6 +1369,57 @@ function NotesSidebar({ visible = true }) {
           options={moveNotebookOptions.filter((item) => (
             currentSection === 'notebooks' ? item.value !== currentNotebook?.id : true
           ))}
+        />
+      </Modal>
+
+      <Modal
+        title="复制到笔记本"
+        open={copyDialogOpen}
+        destroyOnHidden
+        onCancel={() => {
+          setCopyDialogOpen(false)
+          setCopyTargetNotebookId(null)
+          setCopySourceNoteId(null)
+        }}
+        onOk={handleConfirmCopy}
+        okText="复制"
+        cancelText={t('common.cancel', { defaultValue: '取消' })}
+        confirmLoading={isBatchSubmitting}
+        okButtonProps={{ disabled: !copyTargetNotebookId }}
+      >
+        <div style={{ color: 'rgba(16,34,58,0.7)', marginBottom: 12 }}>
+          请选择复制后的目标笔记本
+        </div>
+        <Select
+          style={{ width: '100%' }}
+          placeholder="请选择目标笔记本"
+          value={copyTargetNotebookId}
+          onChange={setCopyTargetNotebookId}
+          options={moveNotebookOptions}
+        />
+      </Modal>
+
+      <Modal
+        title="重命名笔记"
+        open={renameDialogOpen}
+        destroyOnHidden
+        onCancel={() => {
+          setRenameDialogOpen(false)
+          setRenameTargetNoteId(null)
+          setRenameValue('')
+        }}
+        onOk={handleConfirmRename}
+        okText="确认"
+        cancelText={t('common.cancel', { defaultValue: '取消' })}
+        confirmLoading={isBatchSubmitting}
+        okButtonProps={{ disabled: !renameValue.trim() }}
+      >
+        <Input
+          value={renameValue}
+          maxLength={200}
+          placeholder="请输入笔记名称"
+          onChange={(event) => setRenameValue(event.target.value)}
+          onPressEnter={handleConfirmRename}
         />
       </Modal>
     </aside>
@@ -1082,7 +1500,7 @@ function getDetailPath(section, note) {
   }
 
   if (section === 'shares') {
-    return `/cloudnote/shares/${note.id}`
+    return `/cloudnote/recent/${note.id}`
   }
 
   if (section === 'notebooks') {

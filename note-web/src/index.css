@@ -51,6 +51,41 @@ h1, h2, h3, h4, h5, h6 {
   height: 0;
 }
 
+.search-panel-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.search-panel-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.search-panel-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 14px;
+}
+
+.search-panel-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.search-panel-scroll:hover {
+  scrollbar-color: rgba(124, 140, 167, 0.52) transparent;
+}
+
+.search-panel-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(124, 140, 167, 0.52);
+  background-clip: padding-box;
+}
+
+.search-panel-scroll:hover::-webkit-scrollbar-thumb:hover {
+  background: rgba(90, 107, 136, 0.58);
+  background-clip: padding-box;
+}
+
 .workspace-unified {
   background: #ffffff;
   border-radius: 24px;

@@ -1,16 +1,20 @@
 ﻿﻿import React, { useEffect, useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ConfigProvider, Spin } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import LoginPage from '@/pages/Login/LoginPage'
 import MainLayoutFloating from '@/layouts/MainLayoutFloating'
 import EditorWorkspace from '@/components/layout/EditorWorkspace'
 import SearchResultPage from '@/pages/Search/SearchResultPage'
+import SharedNoteViewerPage from '@/pages/SharedNotes/SharedNoteViewerPage'
 import useAuthStore from '@/store/useAuthStore'
 import authService from '@/services/authService'
+import { consumePostLoginRedirect, rememberPostLoginRedirect } from '@/utils/authNavigation'
 import { schedulePageEditorPreload } from '@/utils/pageEditorPreload'
 
 function AuthProvider({ children }) {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [authState, setAuthState] = useState({
     isLoading: true,
     isAuthenticated: false,
@@ -24,8 +28,20 @@ function AuthProvider({ children }) {
         const authData = authService.detectAuthFromUrl()
 
         if (authData) {
+          const redirectFromState = authService.getPostLoginRedirectFromUrl()
+          if (redirectFromState) {
+            rememberPostLoginRedirect(redirectFromState)
+          }
           await storeLogin(authData)
           authService.clearUrlAuthParams()
+          const redirectPath = consumePostLoginRedirect()
+          if (redirectPath) {
+            const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
+            if (redirectPath !== currentPath) {
+              navigate(redirectPath, { replace: true })
+              return
+            }
+          }
           setAuthState({ isLoading: false, isAuthenticated: true, error: null })
         } else {
           const isAuthenticated = checkAuthStatus()
@@ -42,7 +58,7 @@ function AuthProvider({ children }) {
     }
 
     initAuth()
-  }, [storeLogin, checkAuthStatus])
+  }, [storeLogin, checkAuthStatus, navigate, location.key])
 
   useEffect(() => schedulePageEditorPreload(), [])
 
@@ -68,7 +84,13 @@ function AuthGuard({ children }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace state={{ from: window.location.pathname }} />
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: `${window.location.pathname}${window.location.search}${window.location.hash}` }}
+      />
+    )
   }
 
   return children
@@ -88,6 +110,10 @@ function AppRoutes() {
           }
         />
         <Route
+          path="/cloudnote/shares/:id"
+          element={<SharedNoteViewerPage />}
+        />
+        <Route
           path="/cloudnote"
           element={
             <AuthGuard>
@@ -102,7 +128,6 @@ function AppRoutes() {
           <Route path="starred/:id" element={<EditorWorkspace />} />
           <Route path="star/:id" element={<EditorWorkspace />} />
           <Route path="shares" element={<EditorWorkspace />} />
-          <Route path="shares/:id" element={<EditorWorkspace />} />
           <Route path="search" element={<SearchResultPage />} />
           <Route path="notebooks" element={<EditorWorkspace />} />
           <Route path="notebooks/:id" element={<EditorWorkspace />} />

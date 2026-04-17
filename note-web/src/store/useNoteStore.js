@@ -233,6 +233,13 @@ const useNoteStore = create((set, get) => ({
       await noteService.updateName(id, name)
       set((state) => ({
         notes: state.notes.map((n) => (n.id === id ? { ...n, title: name } : n)),
+        starredNotes: state.starredNotes.map((n) => (n.id === id ? { ...n, title: name } : n)),
+        myShares: state.myShares.map((n) => (
+          (n.id === id || n.noteId === id)
+            ? { ...n, title: name, noteTitle: name }
+            : n
+        )),
+        deletedNotes: state.deletedNotes.map((n) => (n.id === id ? { ...n, title: name } : n)),
         currentNote:
           state.currentNote?.id === id
             ? { ...state.currentNote, title: name }

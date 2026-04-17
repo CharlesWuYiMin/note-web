@@ -4,7 +4,7 @@ import { Alert, Button, Card, Spin } from 'antd'
 import { LoginOutlined, MobileOutlined } from '@ant-design/icons'
 import authService from '@/services/authService'
 import useAuthStore from '@/store/useAuthStore'
-import { consumePostLoginRedirect } from '@/utils/authNavigation'
+import { consumePostLoginRedirect, peekPostLoginRedirect, rememberPostLoginRedirect } from '@/utils/authNavigation'
 
 function LoginPage() {
   const navigate = useNavigate()
@@ -26,6 +26,10 @@ function LoginPage() {
 
       const authData = authService.detectAuthFromUrl()
       if (authData) {
+        const redirectFromState = authService.getPostLoginRedirectFromUrl()
+        if (redirectFromState) {
+          rememberPostLoginRedirect(redirectFromState)
+        }
         await storeLogin(authData)
         authService.clearUrlAuthParams()
         navigate(resolveAfterLoginPath(), { replace: true })
@@ -47,7 +51,19 @@ function LoginPage() {
   }, [isAuthenticated, navigate, location.key])
 
   const handleIdaasLogin = () => {
-    authService.redirectToIdaas()
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    const rememberedPath = peekPostLoginRedirect()
+    const targetPath = (
+      location.state?.from
+      || rememberedPath
+      || (currentPath.startsWith('/login') ? '' : currentPath)
+    )
+
+    if (targetPath) {
+      rememberPostLoginRedirect(targetPath)
+    }
+
+    authService.redirectToIdaas(targetPath)
   }
 
   const handleWelinkLogin = () => {

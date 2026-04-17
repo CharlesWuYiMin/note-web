@@ -1,9 +1,11 @@
 import request from '@/utils/request'
 import { getAppConfig } from '@/utils/config'
+import { rememberPostLoginRedirect } from '@/utils/authNavigation'
 
 class AuthService {
   constructor() {
     this.config = getAppConfig()
+    this.userStorageKey = 'cloud_doc_user'
   }
 
   getEditorPageConfig() {
@@ -213,7 +215,17 @@ class AuthService {
         authType: loginData.authType,
         redirectUri: loginData.redirectUri || this.config.auth.idaas.redirectUri || `${window.location.origin}/cloudnote/recent`,
       })
-      
+
+      const payload = response?.data ?? response ?? {}
+      const rawUser =
+        payload.data?.userInfo ||
+        payload.data?.user ||
+        payload.userInfo ||
+        payload.user ||
+        payload.data?.profile ||
+        payload.profile ||
+        payload
+      this.saveUserProfile(this.normalizeUserProfile(rawUser, loginData))
       return response
     } catch (error) {
       console.error('Login failed:', error)
@@ -221,8 +233,10 @@ class AuthService {
     }
   }
 
-  getIdaasAuthUrl() {
+  getIdaasAuthUrl(targetPath) {
     const { authUrl, clientId, redirectUri } = this.config.auth.idaas
+    const redirectTarget = targetPath || this.getPostLoginRedirectFromUrl() || ''
+    const safeRedirectTarget = redirectTarget.startsWith('/login') ? '' : redirectTarget
     
     const params = new URLSearchParams({
       client_id: clientId,
@@ -230,12 +244,19 @@ class AuthService {
       response_type: 'code',
       scope: 'openid profile email',
     })
+
+    if (safeRedirectTarget) {
+      params.set('state', safeRedirectTarget)
+    }
     
     return `${authUrl}?${params.toString()}`
   }
 
-  redirectToIdaas() {
-    const url = this.getIdaasAuthUrl()
+  redirectToIdaas(targetPath) {
+    if (targetPath) {
+      rememberPostLoginRedirect(targetPath)
+    }
+    const url = this.getIdaasAuthUrl(targetPath)
     window.location.href = url
   }
 
@@ -307,11 +328,34 @@ class AuthService {
     return null
   }
 
+  getPostLoginRedirectFromUrl() {
+    const urlParams = new URLSearchParams(window.location.search)
+    const state = urlParams.get('state')
+
+    if (!state) {
+      return ''
+    }
+
+    try {
+      const decoded = decodeURIComponent(state)
+      if (decoded.startsWith('/')) {
+        return decoded
+      }
+    } catch {
+      if (state.startsWith('/')) {
+        return state
+      }
+    }
+
+    return ''
+  }
+
   clearUrlAuthParams() {
     if (window.history.replaceState) {
       const url = new URL(window.location.href)
       url.searchParams.delete('type')
       url.searchParams.delete('code')
+      url.searchParams.delete('state')
       window.history.replaceState({}, document.title, url.toString())
     }
   }
@@ -334,6 +378,48 @@ class AuthService {
     return this.getCookie('cloud_doc_appid')
   }
 
+  normalizeUserProfile(user, fallback = {}) {
+    const source = user && typeof user === 'object' ? user : {}
+    const fallbackUserId = source.userId || source.user_id || source.id || fallback.userId || this.getUserId() || ''
+
+    return {
+      ...source,
+      id: source.id || fallbackUserId,
+      userId: source.userId || source.user_id || fallbackUserId,
+      userName: source.userName || source.username || source.user_name || fallbackUserId,
+      nickName: source.nickName || source.nickname || source.nick_name || source.name || source.realName || source.real_name || '',
+      name: source.name || source.realName || source.nickName || source.nickname || '',
+      realName: source.realName || source.real_name || source.name || source.nickName || source.nickname || '',
+      profileUrl: source.profileUrl || source.profile_url || '',
+      avatar: source.avatar || source.avatarUrl || source.avatar_url || source.picture || source.profileUrl || source.profile_url || '',
+      avatarUrl: source.avatarUrl || source.avatar_url || source.avatar || source.picture || source.profileUrl || source.profile_url || '',
+    }
+  }
+
+  saveUserProfile(user) {
+    try {
+      if (!user || typeof user !== 'object') {
+        return
+      }
+      window.localStorage.setItem(this.userStorageKey, JSON.stringify(user))
+    } catch (error) {
+      console.warn('Failed to persist user profile', error)
+    }
+  }
+
+  getStoredUserProfile() {
+    try {
+      const raw = window.localStorage.getItem(this.userStorageKey)
+      if (!raw) {
+        return null
+      }
+      return this.normalizeUserProfile(JSON.parse(raw))
+    } catch (error) {
+      console.warn('Failed to read stored user profile', error)
+      return null
+    }
+  }
+
   getCookie(name) {
     const value = `; ${document.cookie}`
     const parts = value.split(`; ${name}=`)
@@ -354,6 +440,11 @@ class AuthService {
 
   logout() {
     this.clearAuthCookies()
+    try {
+      window.localStorage.removeItem(this.userStorageKey)
+    } catch (error) {
+      console.warn('Failed to clear stored user profile', error)
+    }
     window.location.href = '/login'
   }
 }

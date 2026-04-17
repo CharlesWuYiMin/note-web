@@ -24,6 +24,7 @@ export function rememberPostLoginRedirect(targetPath) {
   }
 
   window.sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, currentPath)
+  window.localStorage.setItem(POST_LOGIN_REDIRECT_KEY, currentPath)
 }
 
 export function consumePostLoginRedirect() {
@@ -31,12 +32,28 @@ export function consumePostLoginRedirect() {
     return ''
   }
 
-  const targetPath = window.sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY) || ''
-  if (targetPath) {
-    window.sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY)
-  }
+  const targetPath = (
+    window.sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY)
+    || window.localStorage.getItem(POST_LOGIN_REDIRECT_KEY)
+    || ''
+  )
+
+  window.sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY)
+  window.localStorage.removeItem(POST_LOGIN_REDIRECT_KEY)
 
   return targetPath
+}
+
+export function peekPostLoginRedirect() {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+
+  return (
+    window.sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY)
+    || window.localStorage.getItem(POST_LOGIN_REDIRECT_KEY)
+    || ''
+  )
 }
 
 export function redirectToLogin(options = {}) {

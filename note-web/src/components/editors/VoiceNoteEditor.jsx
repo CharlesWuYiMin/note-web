@@ -870,6 +870,10 @@ function VoiceNoteEditor({
   const isRecording = recordingState === 'recording'
   const isUploading = recordingState === 'uploading'
   const isPlaying = playbackState === 'playing'
+  const resolvedPlaybackTotalMs = playbackDurationMs
+    || (Number.isFinite(playbackAudioRef.current?.duration) ? Math.floor(playbackAudioRef.current.duration * 1000) : 0)
+    || selectedRecordingData?.durationMs
+    || 0
   const toggleVoicePanel = onVoicePanelToggle || (() => setLocalVoicePanelVisible((value) => !value))
   const autoStartRecordingRef = useRef(null)
 
@@ -2495,11 +2499,14 @@ function VoiceNoteEditor({
         audio.src = objectUrl
       }
 
+      audio.preload = 'metadata'
       audio.currentTime = 0
       audio.__sourceKey = playbackKey
+      audio.load()
     }
 
     audio.onloadedmetadata = syncPlaybackProgress
+    audio.ondurationchange = syncPlaybackProgress
     audio.ontimeupdate = syncPlaybackProgress
     audio.onplay = () => {
       setPlaybackState('playing')
@@ -2507,6 +2514,7 @@ function VoiceNoteEditor({
       audio.volume = playbackVolumeRef.current
       audio.playbackRate = playbackRateRef.current
       audio.muted = playbackVolumeRef.current <= 0
+      syncPlaybackProgress()
     }
     audio.onpause = () => {
       if (playbackStateRef.current === 'playing') {
@@ -2691,6 +2699,57 @@ function VoiceNoteEditor({
 
     return undefined
   }, [selectedRecordingData?.fileId, selectedRecordingData?.url])
+
+  useEffect(() => {
+    let active = true
+
+    const preloadPlaybackDuration = async () => {
+      const playbackKey = getRecordingPlaybackKey(selectedRecordingData)
+      if (!playbackKey) {
+        setPlaybackDurationMs(0)
+        setPlaybackPositionMs(0)
+        return
+      }
+
+      try {
+        const audio = await ensurePlaybackAudio(selectedRecordingData)
+        if (!active || !audio) {
+          return
+        }
+
+        const updateDuration = () => {
+          if (!active) {
+            return
+          }
+          const resolvedDuration = Number.isFinite(audio.duration) ? Math.floor(audio.duration * 1000) : 0
+          setPlaybackDurationMs(resolvedDuration || Number(selectedRecordingData?.durationMs) || 0)
+          if (playbackStateRef.current !== 'playing') {
+            setPlaybackPositionMs(Number.isFinite(audio.currentTime) ? Math.floor(audio.currentTime * 1000) : 0)
+          }
+        }
+
+        if (Number.isFinite(audio.duration) && audio.duration > 0) {
+          updateDuration()
+          return
+        }
+
+        audio.onloadedmetadata = () => {
+          syncPlaybackProgress()
+          updateDuration()
+        }
+      } catch {
+        if (active) {
+          setPlaybackDurationMs(Number(selectedRecordingData?.durationMs) || 0)
+        }
+      }
+    }
+
+    void preloadPlaybackDuration()
+
+    return () => {
+      active = false
+    }
+  }, [selectedRecordingData?.fileId, selectedRecordingData?.url, selectedRecordingData?.durationMs])
 
   const startRecording = async (language) => {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -3251,7 +3310,7 @@ function VoiceNoteEditor({
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 68, color: '#64748b', fontSize: 12, fontFamily: 'monospace', fontWeight: 700, lineHeight: 1.15, flexShrink: 0 }}>
                     <span>{formatElapsed(playbackPositionMs)}</span>
-                    <span>{formatElapsed(playbackDurationMs || selectedRecordingData?.durationMs || 32000)}</span>
+                    <span>{formatElapsed(resolvedPlaybackTotalMs)}</span>
                   </div>
 
                   <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}>

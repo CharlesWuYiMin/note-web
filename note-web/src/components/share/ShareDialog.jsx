@@ -10,6 +10,18 @@ import shareService from '@/services/shareService'
 
 const { Text, Paragraph } = Typography
 
+function toAbsoluteShareUrl(shareUrl) {
+  if (!shareUrl) {
+    return ''
+  }
+
+  if (/^https?:\/\//i.test(shareUrl)) {
+    return shareUrl
+  }
+
+  return `${window.location.origin}${shareUrl.startsWith('/') ? shareUrl : `/${shareUrl}`}`
+}
+
 const ShareDialog = ({ open, noteId, onClose }) => {
   const [loading, setLoading] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
@@ -26,8 +38,8 @@ const ShareDialog = ({ open, noteId, onClose }) => {
         expiresIn,
       })
       
-      setShareUrl(result.shareUrl)
-      setShareCode(result.shareCode)
+      setShareUrl(toAbsoluteShareUrl(result.shareUrl || `/cloudnote/shares/${result.noteId || result.shareCode}`))
+      setShareCode(result.shareCode || result.noteId || '')
       message.success('分享链接已生成')
     } catch (err) {
       setError(err.message || '创建分享失败')

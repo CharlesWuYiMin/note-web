@@ -258,7 +258,16 @@ function EditorWorkspace() {
   }, [currentNote, deletedNotes, id, myShares, notes, routeNotePreview, starredNotes])
   const noteForRender = notePreview || currentRouteNote || null
   const noteId = noteForRender?.id || id || null
+  const sharedNoteIdSet = useMemo(
+    () => new Set(
+      myShares
+        .map((item) => String(item?.noteId || item?.id || '').trim())
+        .filter(Boolean)
+    ),
+    [myShares]
+  )
   const isStarred = Boolean(noteForRender?.isStarred)
+  const isShared = noteId ? sharedNoteIdSet.has(String(noteId)) : false
   const isRecycleBinRoute = location.pathname.startsWith('/cloudnote/recyclebin')
   const isDeletedNote = isRecycleBinRoute || noteForRender?.status === 'deleted'
   const hasVoiceMaterials = hasVoiceRecords(noteForRender)
@@ -344,6 +353,19 @@ function EditorWorkspace() {
     setShareDialogOpen(true)
     navigate(location.pathname, { replace: true, state: null })
   }, [location.pathname, location.state, navigate, noteId])
+
+  useEffect(() => {
+    const handleOpenSharePanel = (event) => {
+      const eventNoteId = String(event?.detail?.noteId || '')
+      if (!noteId || eventNoteId !== String(noteId)) {
+        return
+      }
+      setShareDialogOpen(true)
+    }
+
+    window.addEventListener('note:open-share-panel', handleOpenSharePanel)
+    return () => window.removeEventListener('note:open-share-panel', handleOpenSharePanel)
+  }, [noteId])
 
   useEffect(() => {
     if (!isTitleEditing || !titleInputRef.current) return
@@ -700,14 +722,7 @@ function EditorWorkspace() {
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <ToolbarIconButton
-            title={isStarred ? t('note.unstar', { defaultValue: '取消收藏' }) : t('note.star', { defaultValue: '收藏' })}
-            icon={isStarred ? <StarFilled /> : <StarOutlined />}
-            onClick={handleToggleStar}
-            loading={isStarPending}
-            disabled={!noteId || isDeletedNote}
-          />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
           <ToolbarIconButton
             title={isFullscreen
               ? t('note.exitFullscreen', { defaultValue: '退出全屏' })
@@ -720,6 +735,16 @@ function EditorWorkspace() {
             icon={<ShareAltOutlined />}
             onClick={() => setShareDialogOpen(true)}
             disabled={!noteId || isDeletedNote}
+            active={isShared}
+          />
+          <ToolbarIconButton
+            title={isStarred ? t('note.unstar', { defaultValue: '取消收藏' }) : t('note.star', { defaultValue: '收藏' })}
+            icon={isStarred ? <StarFilled /> : <StarOutlined />}
+            onClick={handleToggleStar}
+            loading={isStarPending}
+            disabled={!noteId || isDeletedNote}
+            active={isStarred}
+            activeColor="#d97706"
           />
           {isDeletedNote ? (
             <>
@@ -756,10 +781,14 @@ function EditorWorkspace() {
               icon={<MoreOutlined />}
               disabled={!noteId}
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: 6,
+                minWidth: 'auto',
+                width: 'auto',
+                height: 'auto',
+                padding: 0,
+                borderRadius: 0,
                 color: '#64748b',
+                fontSize: 16,
+                lineHeight: 1,
               }}
             />
           </Dropdown>
@@ -932,7 +961,7 @@ function EditorWorkspace() {
   )
 }
 
-function ToolbarIconButton({ title, icon, onClick, danger = false, loading = false, disabled = false, active = false }) {
+function ToolbarIconButton({ title, icon, onClick, danger = false, loading = false, disabled = false, active = false, activeColor }) {
   return (
     <Button
       type="text"
@@ -942,11 +971,15 @@ function ToolbarIconButton({ title, icon, onClick, danger = false, loading = fal
       loading={loading}
       disabled={disabled}
       style={{
-        width: 32,
-        height: 32,
-        borderRadius: 6,
-        color: danger ? '#ef4444' : active ? '#2563eb' : '#64748b',
-        background: active ? 'rgba(37,99,235,0.08)' : 'transparent',
+        minWidth: 'auto',
+        width: 'auto',
+        height: 'auto',
+        padding: 0,
+        borderRadius: 0,
+        color: danger ? '#ef4444' : active ? (activeColor || '#2563eb') : '#64748b',
+        background: 'transparent',
+        fontSize: 16,
+        lineHeight: 1,
       }}
     />
   )

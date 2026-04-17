@@ -87,6 +87,11 @@ class NoteService {
     return request.post(`/move/${noteId}`, { notebookId: targetNotebookId })
   }
 
+  async copyNote(noteId, targetNotebookId) {
+    const response = await request.post(`/${noteId}/copy`, { notebookId: targetNotebookId })
+    return extractPayload(response)
+  }
+
   deleteNote(id) {
     return request.post(`/notes/${id}/delete`)
   }

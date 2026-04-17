@@ -93,8 +93,8 @@ function SharePanelDialog({ open, noteId, onClose, onShareChanged }) {
         }
 
         setEnabled(true)
-        setShareCode(currentShare.shareCode || '')
-        setShareUrl(toAbsoluteShareUrl(currentShare.shareUrl || `/v1/note/shares/${currentShare.shareCode}`))
+        setShareCode(currentShare.shareCode || currentShare.noteId || currentShare.id || '')
+        setShareUrl(toAbsoluteShareUrl(currentShare.shareUrl || `/cloudnote/shares/${currentShare.noteId || currentShare.id || currentShare.shareCode}`))
         setShareScope(getShareScope(currentShare))
         setShareUsers(Array.isArray(currentShare.userList) ? currentShare.userList.join(', ') : '')
       } catch (err) {
@@ -139,8 +139,8 @@ function SharePanelDialog({ open, noteId, onClose, onShareChanged }) {
       })
 
       setEnabled(true)
-      setShareCode(result.shareCode || '')
-      setShareUrl(toAbsoluteShareUrl(result.shareUrl || `/v1/note/shares/${result.shareCode}`))
+      setShareCode(result.shareCode || result.noteId || '')
+      setShareUrl(toAbsoluteShareUrl(result.shareUrl || `/cloudnote/shares/${result.noteId || result.shareCode}`))
       message.success('分享已开启')
       onShareChanged?.()
       return true
@@ -160,7 +160,9 @@ function SharePanelDialog({ open, noteId, onClose, onShareChanged }) {
     }
 
     if (!checked) {
-      if (!shareCode) {
+      const shareKey = shareCode || String(noteId || '')
+
+      if (!shareKey) {
         setEnabled(false)
         setShareUrl('')
         return
@@ -169,7 +171,7 @@ function SharePanelDialog({ open, noteId, onClose, onShareChanged }) {
       setLoading(true)
       setError('')
       try {
-        await shareService.deleteShare(shareCode)
+        await shareService.deleteShare(shareKey)
         setEnabled(false)
         setShareCode('')
         setShareUrl('')

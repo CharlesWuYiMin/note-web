@@ -62,19 +62,30 @@ function navItemStyle({ collapsed, isActive }) {
   }
 }
 
-function NewCreatePanel({ onCreate, options }) {
+function NewCreatePanel({ onCreate, options, collapsed }) {
   return (
     <div
       style={{
-        width: 292,
-        padding: 10,
-        borderRadius: 18,
+        width: collapsed ? 244 : '100%',
+        minWidth: collapsed ? 244 : 'auto',
+        maxWidth: collapsed ? 244 : '100%',
+        boxSizing: 'border-box',
+        padding: collapsed ? 10 : '12px 14px 10px',
+        borderRadius: 20,
         background: 'rgba(255,255,255,0.98)',
-        boxShadow: '0 18px 36px rgba(16,34,58,0.14)',
+        border: '1px solid rgba(226,232,240,0.9)',
+        boxShadow: '0 14px 32px rgba(16,34,58,0.10)',
       }}
     >
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
-        {options.map((option) => (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          columnGap: collapsed ? 8 : 8,
+          rowGap: collapsed ? 8 : 6,
+        }}
+      >
+        {options.map((option, index) => (
           <button
             key={option.key}
             type="button"
@@ -83,13 +94,15 @@ function NewCreatePanel({ onCreate, options }) {
               border: 'none',
               background: 'transparent',
               cursor: 'pointer',
-              borderRadius: 14,
-              padding: '12px 10px 10px',
+              borderRadius: 16,
+              padding: collapsed ? '12px 10px 10px' : '10px 6px 8px',
+              minHeight: collapsed ? 'auto' : 96,
+              gridColumn: !collapsed && index === options.length - 1 ? '1 / 2' : 'auto',
               transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease',
             }}
             onMouseEnter={(event) => {
-              event.currentTarget.style.background = 'rgba(248,250,252,0.95)'
-              event.currentTarget.style.boxShadow = '0 14px 28px rgba(16,34,58,0.08)'
+              event.currentTarget.style.background = 'rgba(248,250,252,0.96)'
+              event.currentTarget.style.boxShadow = '0 12px 24px rgba(16,34,58,0.08)'
               event.currentTarget.style.transform = 'translateY(-1px)'
             }}
             onMouseLeave={(event) => {
@@ -100,22 +113,32 @@ function NewCreatePanel({ onCreate, options }) {
           >
             <div
               style={{
-                width: 52,
-                height: 52,
-                margin: '0 auto 10px',
-                borderRadius: 16,
+                width: collapsed ? 52 : 42,
+                height: collapsed ? 52 : 42,
+                margin: collapsed ? '0 auto 10px' : '0 auto 8px',
+                borderRadius: collapsed ? 16 : 14,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: option.color,
-                fontSize: 22,
+                fontSize: collapsed ? 22 : 18,
                 background: option.bg,
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.75)',
               }}
             >
               {option.icon}
             </div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', lineHeight: 1.25 }}>{option.label}</div>
+            <div
+              style={{
+                fontSize: collapsed ? 14 : 14,
+                fontWeight: 600,
+                color: '#111827',
+                lineHeight: 1.15,
+                letterSpacing: '-0.01em',
+              }}
+            >
+              {option.label}
+            </div>
           </button>
         ))}
       </div>
@@ -591,7 +614,7 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
       </div>
 
       <div
-        style={{ margin: '0 12px 20px', position: 'relative' }}
+        style={{ margin: '0 12px 14px', position: 'relative' }}
         onMouseEnter={() => {
           if (!collapsed) {
             openCreatePanel()
@@ -624,7 +647,27 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
             boxShadow: '0 10px 24px rgba(0,97,164,0.24)',
           }}
         >
-          {!collapsed && t('sidebar.new', { defaultValue: '新建' })}
+          {!collapsed ? (
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingLeft: 4 }}>
+              <span>{t('sidebar.new', { defaultValue: '新建' })}</span>
+              <span
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 8,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(255,255,255,0.16)',
+                  color: 'rgba(255,255,255,0.92)',
+                  fontSize: 12,
+                  flexShrink: 0,
+                }}
+              >
+                <DownOutlined rotate={createOpen ? 180 : 0} />
+              </span>
+            </span>
+          ) : null}
         </Button>
 
         {createOpen ? (
@@ -636,13 +679,13 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
               zIndex: 40,
             } : {
               position: 'absolute',
-              top: 'calc(100% - 2px)',
+              top: 'calc(100% + 4px)',
               left: 0,
+              right: 0,
               zIndex: 40,
-              paddingTop: 2,
             }}
           >
-            <NewCreatePanel onCreate={handleCreateOption} options={createOptions} />
+            <NewCreatePanel onCreate={handleCreateOption} options={createOptions} collapsed={collapsed} />
           </div>
         ) : null}
       </div>

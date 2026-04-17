@@ -1,17 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Button,
   Empty,
   Pagination,
-  Space,
   Spin,
   Tag,
   Typography,
   message,
 } from 'antd'
 import {
-  ClockCircleOutlined,
   CloseOutlined,
   DeleteOutlined,
   FolderOutlined,
@@ -78,12 +76,42 @@ function resolveCardColors(item) {
   }
 }
 
+function getKeywordSnippet(text, keyword, radius = 18) {
+  const source = String(text || '').trim()
+  const query = String(keyword || '').trim()
+
+  if (!source) {
+    return '点击即可打开对应笔记。'
+  }
+
+  if (!query) {
+    return source.length > radius * 2
+      ? `${source.slice(0, radius * 2).trim()}...`
+      : source
+  }
+
+  const lowerSource = source.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  const matchIndex = lowerSource.indexOf(lowerQuery)
+
+  if (matchIndex < 0) {
+    return source.length > radius * 2
+      ? `${source.slice(0, radius * 2).trim()}...`
+      : source
+  }
+
+  const start = Math.max(0, matchIndex - radius)
+  const end = Math.min(source.length, matchIndex + query.length + radius)
+  const prefix = start > 0 ? '...' : ''
+  const suffix = end < source.length ? '...' : ''
+  return `${prefix}${source.slice(start, end).trim()}${suffix}`
+}
+
 function NoteSearchPanelWorkspace({
   open,
   onClose,
   keyword = '',
   currentPath = '',
-  onOpenFullPage,
   onKeywordChange,
 }) {
   const navigate = useNavigate()
@@ -100,6 +128,7 @@ function NoteSearchPanelWorkspace({
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
   const [recentSearches, setRecentSearches] = useState([])
+  const [hoveredItemId, setHoveredItemId] = useState(null)
 
   const trimmedKeyword = keyword.trim()
   const hasKeyword = debouncedKeyword.length > 0
@@ -239,12 +268,6 @@ function NoteSearchPanelWorkspace({
     navigate(path)
   }
 
-  const handleOpenFullPage = () => {
-    const nextRecentSearches = searchService.rememberRecentSearch?.(trimmedKeyword)
-    setRecentSearches(Array.isArray(nextRecentSearches) ? nextRecentSearches.slice(0, 8) : [])
-    onOpenFullPage?.(trimmedKeyword)
-  }
-
   const handleClearRecentSearches = async () => {
     try {
       const nextRecentSearches = await searchService.clearRecentSearches()
@@ -270,7 +293,7 @@ function NoteSearchPanelWorkspace({
         position: 'absolute',
         top: 'calc(100% + 12px)',
         right: 0,
-        width: 'min(860px, calc(100vw - 36px))',
+        width: 'min(620px, calc(100vw - 48px))',
         zIndex: 40,
       }}
     >
@@ -283,51 +306,27 @@ function NoteSearchPanelWorkspace({
           border: '1px solid rgba(16,34,58,0.08)',
         }}
       >
-        <div style={{ padding: 18, borderBottom: '1px solid rgba(16,34,58,0.06)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#10223a' }}>搜索笔记</div>
-              <div style={{ marginTop: 4, fontSize: 13, color: 'rgba(16,34,58,0.56)' }}>
-                当前仅搜索 <Text strong style={{ color: '#0256d2' }}>{context.label}</Text>，支持实时检索与分页浏览。
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Tag style={{ borderRadius: 999, marginInlineEnd: 0, padding: '4px 12px' }} color="blue">
-                {context.label}
-              </Tag>
-              <Button
-                type="text"
-                aria-label="关闭搜索"
-                onClick={() => onClose?.()}
-                icon={<CloseOutlined />}
-                style={{ borderRadius: 999 }}
-              />
-            </div>
-          </div>
-
-          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <Space size={10} wrap>
-              <Tag icon={<ClockCircleOutlined />} style={{ borderRadius: 999, marginInlineEnd: 0 }}>
-                {context.hint}
-              </Tag>
-              <Tag icon={<FileTextOutlined />} style={{ borderRadius: 999, marginInlineEnd: 0 }}>
-                标题与正文片段高亮
-              </Tag>
-            </Space>
-            <Button
-              type="link"
-              style={{ padding: 0 }}
-              onClick={handleOpenFullPage}
-              disabled={!trimmedKeyword}
-            >
-              打开完整结果页
-            </Button>
-          </div>
-        </div>
-
-        <div style={{ padding: 18, minHeight: 360, maxHeight: '70vh', overflow: 'auto' }}>
+        <div
+          className="search-panel-scroll"
+          style={{
+            padding: 16,
+            paddingRight: 10,
+            minHeight: 320,
+            maxHeight: '70vh',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            position: 'relative',
+          }}
+        >
+          <Button
+            type="text"
+            aria-label="鍏抽棴鎼滅储"
+            onClick={() => onClose?.()}
+            icon={<CloseOutlined />}
+            style={{ position: 'absolute', top: 8, right: 8, borderRadius: 999, zIndex: 1 }}
+          />
           {showRecent ? (
-            <div style={{ display: 'grid', gap: 16 }}>
+            <div style={{ display: 'grid', gap: 14, paddingTop: 28 }}>
               <section style={{ padding: 18, borderRadius: 22, background: '#fff', border: '1px solid rgba(16,34,58,0.06)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#10223a' }}>
@@ -369,54 +368,55 @@ function NoteSearchPanelWorkspace({
                   )}
                 </div>
               </section>
-
-              <section style={{ padding: 18, borderRadius: 22, background: '#fff', border: '1px solid rgba(16,34,58,0.06)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#10223a' }}>
-                  <SearchOutlined />
-                  <span>搜索提示</span>
-                </div>
-                <div style={{ marginTop: 12, color: 'rgba(16,34,58,0.64)', lineHeight: 1.8 }}>
-                  在顶部搜索框输入关键词后，结果会实时刷新。按回车或点击“打开完整结果页”可以进入完整搜索结果。
-                </div>
-              </section>
             </div>
           ) : (
             <Spin spinning={loading}>
               {showEmptyState ? (
                 <Empty
-                  description={`未找到与 “${debouncedKeyword}” 相关的笔记`}
+                  description={`未找到与“${debouncedKeyword}”相关的笔记`}
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   style={{ padding: '72px 0' }}
                 >
-                  <div style={{ color: 'rgba(16,34,58,0.45)', fontSize: 13 }}>尝试更短的标题词或更明确的关键词</div>
+                  <div style={{ color: 'rgba(16,34,58,0.45)', fontSize: 13 }}>试试更短的标题词或更明确的关键词</div>
                 </Empty>
               ) : (
-                <div style={{ display: 'grid', gap: 12 }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: 0,
+                    background: '#fff',
+                    borderRadius: 18,
+                    overflow: 'hidden',
+                  }}
+                >
                   {items.map((item) => {
                     const cardColors = resolveCardColors(item)
+                    const isHovered = hoveredItemId === item.id
 
                     return (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => handleResultClick(item)}
+                        onMouseEnter={() => setHoveredItemId(item.id)}
+                        onMouseLeave={() => setHoveredItemId((current) => (current === item.id ? null : current))}
                         style={{
                           width: '100%',
-                          border: '1px solid rgba(16,34,58,0.06)',
-                          borderRadius: 18,
-                          background: '#fff',
-                          padding: 16,
+                          border: 'none',
+                          borderBottom: '1px solid rgba(16,34,58,0.06)',
+                          background: isHovered ? 'rgba(16,34,58,0.05)' : '#fff',
+                          padding: '14px 16px',
                           textAlign: 'left',
-                          boxShadow: '0 10px 24px rgba(16,34,58,0.04)',
                           cursor: 'pointer',
+                          transition: 'background 0.16s ease',
                         }}
                       >
                         <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                           <div
                             style={{
-                              width: 44,
-                              height: 44,
-                              borderRadius: 14,
+                              width: 36,
+                              height: 36,
+                              borderRadius: 12,
                               background: cardColors.background,
                               color: cardColors.color,
                               display: 'flex',
@@ -432,29 +432,39 @@ function NoteSearchPanelWorkspace({
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                               <div style={{ minWidth: 0 }}>
-                                <div style={{ fontSize: 16, fontWeight: 800, color: '#10223a', lineHeight: 1.35 }}>
+                                <div style={{ fontSize: 15, fontWeight: 700, color: '#10223a', lineHeight: 1.35 }}>
                                   <SearchHighlightText
                                     as="span"
                                     text={item.highlightTitle || item.title || '未命名笔记'}
                                     keyword={debouncedKeyword}
                                   />
                                 </div>
+                                <Paragraph
+                                  ellipsis={{ rows: 1 }}
+                                  style={{ margin: '4px 0 0', color: 'rgba(16,34,58,0.68)', lineHeight: 1.6 }}
+                                >
+                                  <SearchHighlightText
+                                    as="span"
+                                    text={getKeywordSnippet(item.context, debouncedKeyword)}
+                                    keyword={debouncedKeyword}
+                                  />
+                                </Paragraph>
+                                <div
+                                  style={{
+                                    marginTop: 6,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 18,
+                                    flexWrap: 'wrap',
+                                    color: 'rgba(16,34,58,0.52)',
+                                    fontSize: 12,
+                                  }}
+                                >
+                                  {item.notebookName ? <span>{item.notebookName}</span> : null}
+                                  <span>修改时间 {formatUpdatedAt(item.updatedAt)}</span>
+                                </div>
                               </div>
-                              <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                                {formatUpdatedAt(item.updatedAt)}
-                              </Text>
                             </div>
-
-                            <Paragraph
-                              ellipsis={{ rows: 2 }}
-                              style={{ margin: '10px 0 0', color: 'rgba(16,34,58,0.58)', lineHeight: 1.7 }}
-                            >
-                              <SearchHighlightText
-                                as="span"
-                                text={item.context || '点击即可打开对应笔记。'}
-                                keyword={debouncedKeyword}
-                              />
-                            </Paragraph>
                           </div>
                         </div>
                       </button>
@@ -483,3 +493,4 @@ function NoteSearchPanelWorkspace({
 }
 
 export default NoteSearchPanelWorkspace
+

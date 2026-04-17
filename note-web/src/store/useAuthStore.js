@@ -15,6 +15,7 @@ const useAuthStore = create((set, get) => ({
     try {
       await authService.login(loginData)
       set({
+        user: authService.getStoredUserProfile(),
         isLoading: false,
         isAuthenticated: true,
         token: authService.getToken(),
@@ -35,6 +36,7 @@ const useAuthStore = create((set, get) => ({
     const isAuthenticated = authService.isAuthenticated()
     if (isAuthenticated) {
       set({
+        user: authService.getStoredUserProfile(),
         isAuthenticated: true,
         token: authService.getToken(),
         userId: authService.getUserId(),
