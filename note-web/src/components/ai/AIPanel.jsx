@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Input, Button, Card, Space, Typography, Spin, message } from 'antd'
 import {
   RobotOutlined,
-  SendOutlined,
+  SendOutlined, 
   CloseOutlined,
   BulbOutlined,
   TranslationOutlined,
