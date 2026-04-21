@@ -5,6 +5,17 @@ const NOTE_LIST_ORDER_BY_MAP = {
   updatedAt: 2,
   title: 3,
 }
+const DEFAULT_VOICE_FILE_CHUNK_THRESHOLD_BYTES = 5 * 1024 * 1024
+const DEFAULT_VOICE_FILE_CHUNK_SIZE_BYTES = 5 * 1024 * 1024
+const MIME_EXTENSION_MAP = {
+  'audio/webm': '.webm',
+  'audio/mpeg': '.mp3',
+  'audio/mp4': '.m4a',
+  'audio/aac': '.aac',
+  'audio/ogg': '.ogg',
+  'audio/wav': '.wav',
+  'audio/flac': '.flac',
+}
 
 function extractPayload(response) {
   return response && Object.prototype.hasOwnProperty.call(response, 'data')
@@ -27,6 +38,37 @@ function normalizeListParams(params = {}) {
   delete normalizedParams.order
 
   return normalizedParams
+}
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function resolveVoiceFilename(file) {
+  if (typeof file?.name === 'string' && file.name.trim()) {
+    return file.name.trim()
+  }
+  const extension = MIME_EXTENSION_MAP[file?.type] || '.webm'
+  return `voice-note${extension}`
+}
+
+function pickValue(source, ...keys) {
+  if (!source || typeof source !== 'object') {
+    return null
+  }
+  for (const key of keys) {
+    const value = source[key]
+    if (value !== undefined && value !== null && value !== '') {
+      return value
+    }
+  }
+  return null
+}
+
+async function getSysConfigValue(key) {
+  const response = await request.get(`/sysConfig/${encodeURIComponent(key)}`)
+  return extractPayload(response)
 }
 
 class NoteService {
@@ -55,24 +97,89 @@ class NoteService {
   }
 
   async uploadVoiceFile(noteId, file, options = {}) {
-    const { sessionId } = options
+    const chunkThresholdBytes = parsePositiveInteger(
+      await getSysConfigValue('voice.file.chunk_threshold_bytes').catch(() => null),
+      DEFAULT_VOICE_FILE_CHUNK_THRESHOLD_BYTES,
+    )
+
+    if (Number(file?.size) > chunkThresholdBytes) {
+      return this.uploadVoiceFileInChunks(noteId, file, options)
+    }
+
+    const { sessionId, duration } = options
     const formData = new FormData()
-    formData.append('file', file)
+    formData.append('file', file, resolveVoiceFilename(file))
 
     const response = await request.post('/voice-notes/upload', formData, {
       params: {
         noteId,
         ...(sessionId ? { sessionId } : {}),
+        ...(Number.isFinite(duration) && duration >= 0 ? { duration } : {}),
       },
     })
     return extractPayload(response)
   }
 
-  async getVoiceFile(fileId) {
-    const response = await request.get(`/voice-notes/files/${fileId}`, {
-      responseType: 'blob',
+  async uploadVoiceFileInChunks(noteId, file, options = {}) {
+    const { sessionId, duration } = options
+    const filename = resolveVoiceFilename(file)
+    const chunkSizeBytes = parsePositiveInteger(
+      await getSysConfigValue('voice.file.chunk_size_bytes').catch(() => null),
+      DEFAULT_VOICE_FILE_CHUNK_SIZE_BYTES,
+    )
+    const initResponse = await request.post('/file/chunk/init', null, {
+      params: {
+        file_name: filename,
+      },
     })
-    return extractPayload(response)
+    const initPayload = extractPayload(initResponse)
+    const uploadId = pickValue(initPayload, 'uploadId', 'upload_id')
+
+    if (!uploadId) {
+      throw new Error('upload_id is required')
+    }
+
+    for (let chunkIndex = 0, offset = 0; offset < file.size; chunkIndex += 1, offset += chunkSizeBytes) {
+      const chunk = file.slice(offset, offset + chunkSizeBytes, file.type || 'application/octet-stream')
+      const formData = new FormData()
+      formData.append('file', chunk, filename)
+      await request.post('/file/chunk/upload', formData, {
+        params: {
+          upload_id: uploadId,
+          chunk_index: chunkIndex,
+        },
+      })
+    }
+
+    const mergeResponse = await request.post('/file/chunk/merge', null, {
+      params: {
+        upload_id: uploadId,
+        is_doc_res: true,
+        is_template: false,
+        is_gen_new_file: false,
+        document_id: noteId,
+        ...(Number.isFinite(duration) && duration >= 0 ? { effective_duration: duration } : {}),
+        response_type: 1,
+        is_public: false,
+      },
+    })
+    const mergePayload = extractPayload(mergeResponse)
+    const fileId = pickValue(mergePayload, 'fileId', 'file_id')
+    const fileResource = pickValue(mergePayload, 'fileResource', 'file_resource')
+
+    if (!fileId || !fileResource) {
+      throw new Error('chunk merge response is invalid')
+    }
+
+    const completeResponse = await request.post('/voice-notes/upload/complete', {
+      noteId,
+      ...(sessionId ? { sessionId } : {}),
+      duration: Number.isFinite(duration) && duration >= 0 ? duration : 0,
+      fileId,
+      fileResource,
+      size: file.size,
+    })
+    return extractPayload(completeResponse)
   }
 
   updateName(id, name) {

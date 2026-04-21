@@ -16,6 +16,12 @@ vi.mock('@/utils/request', () => ({
 }))
 
 describe('NoteService', () => {
+  const createLargeVoiceFile = () => new File(
+    [new Uint8Array(5 * 1024 * 1024 + 8)],
+    'voice.webm',
+    { type: 'audio/webm' },
+  )
+
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -83,10 +89,12 @@ describe('NoteService', () => {
   describe('uploadVoiceFile', () => {
     it('posts noteId and file as multipart form data', async () => {
       const file = new File(['voice-bytes'], 'voice.webm', { type: 'audio/webm' })
+      mockGet.mockResolvedValue({ data: '5242880' })
       mockPost.mockResolvedValue({ data: { fileId: 'file-1', url: '/v1/note/files/file-1' } })
 
       const result = await noteService.uploadVoiceFile('note-123', file)
 
+      expect(mockGet).toHaveBeenCalledWith('/sysConfig/voice.file.chunk_threshold_bytes')
       expect(mockPost).toHaveBeenCalledTimes(1)
       const [url, body, config] = mockPost.mock.calls[0]
       expect(url).toBe('/voice-notes/upload')
@@ -102,6 +110,7 @@ describe('NoteService', () => {
 
     it('includes sessionId when uploading a realtime archive file', async () => {
       const file = new File(['voice-bytes'], 'voice.webm', { type: 'audio/webm' })
+      mockGet.mockResolvedValue({ data: '5242880' })
       mockPost.mockResolvedValue({ data: { fileId: 'file-2', url: '/v1/note/files/file-2' } })
 
       await noteService.uploadVoiceFile('note-123', file, { sessionId: 'session-123' })
@@ -111,19 +120,91 @@ describe('NoteService', () => {
         params: { noteId: 'note-123', sessionId: 'session-123' },
       })
     })
-  })
 
-  describe('getVoiceFile', () => {
-    it('calls GET /voice-notes/files/:fileId with blob response type', async () => {
-      const blob = new Blob(['audio-bytes'], { type: 'audio/webm' })
-      mockGet.mockResolvedValue(blob)
+    it('includes duration when uploading a voice file', async () => {
+      const file = new File(['voice-bytes'], 'voice.webm', { type: 'audio/webm' })
+      mockGet.mockResolvedValue({ data: '5242880' })
+      mockPost.mockResolvedValue({ data: { fileId: 'file-3', url: '/v1/note/files/file-3' } })
 
-      const result = await noteService.getVoiceFile('file-456')
+      await noteService.uploadVoiceFile('note-123', file, { sessionId: 'session-123', duration: 18 })
 
-      expect(mockGet).toHaveBeenCalledWith('/voice-notes/files/file-456', {
-        responseType: 'blob',
+      const [, , config] = mockPost.mock.calls[0]
+      expect(config).toEqual({
+        params: { noteId: 'note-123', sessionId: 'session-123', duration: 18 },
       })
-      expect(result).toEqual(blob)
+    })
+
+    it('uploads large files through chunk endpoints and then completes archive metadata', async () => {
+      const file = createLargeVoiceFile()
+      mockGet
+        .mockResolvedValueOnce({ data: '5242880' })
+        .mockResolvedValueOnce({ data: '5242880' })
+      mockPost
+        .mockResolvedValueOnce({ data: { upload_id: 'upload-1' } })
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce({ data: { file_id: 'file-9', file_resource: 'assoc-9' } })
+        .mockResolvedValueOnce({ data: { fileId: 'file-9', url: '/v1/note/doc/preview/assoc-9', duration: 18, size: file.size, storageType: 'content' } })
+
+      const result = await noteService.uploadVoiceFile('note-123', file, {
+        sessionId: 'session-123',
+        duration: 18,
+      })
+
+      expect(mockGet.mock.calls).toEqual([
+        ['/sysConfig/voice.file.chunk_threshold_bytes'],
+        ['/sysConfig/voice.file.chunk_size_bytes'],
+      ])
+      expect(mockPost).toHaveBeenCalledTimes(5)
+      expect(mockPost.mock.calls[0]).toEqual([
+        '/file/chunk/init',
+        null,
+        { params: { file_name: 'voice.webm' } },
+      ])
+      expect(mockPost.mock.calls[1][0]).toBe('/file/chunk/upload')
+      expect(mockPost.mock.calls[1][1]).toBeInstanceOf(FormData)
+      expect(mockPost.mock.calls[1][2]).toEqual({
+        params: { upload_id: 'upload-1', chunk_index: 0 },
+      })
+      expect(mockPost.mock.calls[2][0]).toBe('/file/chunk/upload')
+      expect(mockPost.mock.calls[2][1]).toBeInstanceOf(FormData)
+      expect(mockPost.mock.calls[2][2]).toEqual({
+        params: { upload_id: 'upload-1', chunk_index: 1 },
+      })
+      expect(mockPost.mock.calls[3]).toEqual([
+        '/file/chunk/merge',
+        null,
+        {
+          params: {
+            upload_id: 'upload-1',
+            is_doc_res: true,
+            is_template: false,
+            is_gen_new_file: false,
+            document_id: 'note-123',
+            effective_duration: 18,
+            response_type: 1,
+            is_public: false,
+          },
+        },
+      ])
+      expect(mockPost.mock.calls[4]).toEqual([
+        '/voice-notes/upload/complete',
+        {
+          noteId: 'note-123',
+          sessionId: 'session-123',
+          duration: 18,
+          fileId: 'file-9',
+          fileResource: 'assoc-9',
+          size: file.size,
+        },
+      ])
+      expect(result).toEqual({
+        fileId: 'file-9',
+        url: '/v1/note/doc/preview/assoc-9',
+        duration: 18,
+        size: file.size,
+        storageType: 'content',
+      })
     })
   })
 

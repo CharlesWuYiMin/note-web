@@ -95,6 +95,16 @@ function formatElapsed(ms = 0) {
   return [minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':')
 }
 
+function resolveUploadDurationSeconds(elapsedMs = 0) {
+  const safeElapsedMs = Number.isFinite(Number(elapsedMs)) ? Number(elapsedMs) : 0
+
+  if (safeElapsedMs <= 0) {
+    return 0
+  }
+
+  return Math.max(1, Math.ceil(safeElapsedMs / 1000))
+}
+
 function formatPlaybackRate(rate = 1) {
   const normalized = Number(rate.toFixed(2))
   return Number.isInteger(normalized) ? normalized.toFixed(1) : String(normalized)
@@ -418,6 +428,26 @@ function getSessionSummaryStatus(session = {}) {
   return session?.status || 'processing'
 }
 
+function resolveDurationMs(...values) {
+  for (const value of values) {
+    const numericValue = Number(value)
+    if (Number.isFinite(numericValue) && numericValue > 0) {
+      return numericValue
+    }
+  }
+
+  return 0
+}
+
+function resolveAudioDurationMs(voice = {}, session = {}) {
+  return resolveDurationMs(
+    voice?.durationMs,
+    Number.isFinite(Number(voice?.audioDuration)) ? Number(voice.audioDuration) * 1000 : 0,
+    session?.durationMs,
+    Number.isFinite(Number(session?.audioDuration)) ? Number(session.audioDuration) * 1000 : 0
+  )
+}
+
 function normalizeTranscriptCards(cards = [], fallbackName = i18n.t('voice.segment', { defaultValue: '分段' })) {
   const sortedCards = cards
     .filter(Boolean)
@@ -490,7 +520,7 @@ function buildVoiceStateFromNote(note = {}) {
         ? i18n.t('voice.fileLabel', { defaultValue: '语音文件 {{index}}', index: key })
         : i18n.t('voice.cardFileLabel', { defaultValue: '语音卡片 {{index}}', index: key }),
       duration: getTranscriptStatusLabel(transcriptStatus),
-      durationMs: Number.isFinite(voice?.durationMs) ? voice.durationMs : Number(session?.durationMs) || 0,
+      durationMs: resolveAudioDurationMs(voice, session),
       time: formatVoiceCardTime(voice?.createdAt || voice?.updatedAt || session?.finishedAt || session?.startedAt),
       language: voice?.language || session?.language || 'zh-CN',
       status: transcriptStatus,
@@ -529,7 +559,7 @@ function buildVoiceStateFromNote(note = {}) {
       key,
       title: i18n.t('voice.realtimeSessionLabel', { defaultValue: '实时会话 {{index}}', index: key }),
       duration: getTranscriptStatusLabel(getSessionSummaryStatus(session)),
-      durationMs: Number(session?.receivedBytes) || 0,
+      durationMs: resolveAudioDurationMs({}, session),
       time: formatVoiceCardTime(session?.startedAt || session?.finishedAt || session?.updatedAt),
       language: session?.language || 'zh_CN',
       status: session?.status || 'opened',
@@ -1678,6 +1708,10 @@ function VoiceNoteEditor({
   }
 
   const getRecordingPlaybackKey = (recording) => {
+    if (recording?.url) {
+      return `url:${recording.url}`
+    }
+
     if (recording?.fileId) {
       return `file:${recording.fileId}`
     }
@@ -2196,6 +2230,7 @@ function VoiceNoteEditor({
     clearRealtimeReconnectTimer()
     const sessionId = realtimeSessionIdRef.current
     const audioMimeType = realtimeMimeTypeRef.current || 'audio/webm'
+    const uploadDurationSeconds = resolveUploadDurationSeconds(accumulatedElapsedRef.current)
     const audioBlob = realtimeAudioChunksRef.current.length > 0
       ? new Blob(realtimeAudioChunksRef.current, { type: audioMimeType })
       : null
@@ -2215,7 +2250,10 @@ function VoiceNoteEditor({
 
       if (audioBlob && audioBlob.size > 0 && note?.id) {
         try {
-          uploadedVoice = await noteService.uploadVoiceFile(note.id, audioBlob, { sessionId })
+          uploadedVoice = await noteService.uploadVoiceFile(note.id, audioBlob, {
+            sessionId,
+            duration: uploadDurationSeconds,
+          })
         } catch (error) {
           preserveInterruptedRecordingDraft(error?.message || '音频上传失败')
           throw error
@@ -2488,15 +2526,12 @@ function VoiceNoteEditor({
         playbackObjectUrlRef.current = ''
       }
 
-      if (recording?.fileId) {
-        voiceRealtimeLog('playback-load-voice-file', {
-          fileId: recording.fileId,
+      if (recording?.url) {
+        voiceRealtimeLog('playback-load-audio-url', {
+          url: recording.url,
           sessionId: recording.sessionId || null,
         })
-        const blob = await noteService.getVoiceFile(recording.fileId)
-        const objectUrl = URL.createObjectURL(blob)
-        playbackObjectUrlRef.current = objectUrl
-        audio.src = objectUrl
+        audio.src = recording.url
       }
 
       audio.preload = 'metadata'
