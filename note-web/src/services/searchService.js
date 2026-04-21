@@ -1,8 +1,14 @@
 import request from '@/utils/request'
+import {
+  clearRecentSearchesFromStorage,
+  getRecentSearchesFromStorage,
+  normalizeSearchItem,
+  rememberRecentSearchInStorage,
+} from '@/utils/searchPresentation'
 
-function normalizeSearchPage(data) {
+function normalizeSearchPage(data, fallbackStatus) {
   if (Array.isArray(data)) {
-    const items = data
+    const items = data.map((item) => normalizeSearchItem(item, fallbackStatus))
     items.items = items
     items.total = data.length
     items.page = 1
@@ -12,7 +18,7 @@ function normalizeSearchPage(data) {
 
   const payload = data?.data ?? data
   if (Array.isArray(payload?.items)) {
-    const items = payload.items
+    const items = payload.items.map((item) => normalizeSearchItem(item, fallbackStatus))
     items.items = items
     items.total = Number(payload.total || payload.items.length || 0)
     items.page = Number(payload.page || 1)
@@ -31,6 +37,7 @@ function normalizeSearchPage(data) {
 const searchService = {
   searchNotes: async (keyword, params = {}) => {
     const { signal, ...queryParams } = params
+    const fallbackStatus = queryParams.status || 'active'
 
     if (!keyword || !keyword.trim()) {
       const items = []
@@ -49,16 +56,14 @@ const searchService = {
       signal,
     })
 
-    return normalizeSearchPage(response)
+    return normalizeSearchPage(response, fallbackStatus)
   },
 
-  getRecentSearches: async () => {
-    return request.get('/search/recent')
-  },
+  getRecentSearches: async () => getRecentSearchesFromStorage(),
 
-  clearRecentSearches: async () => {
-    return request.delete('/search/recent')
-  },
+  clearRecentSearches: async () => clearRecentSearchesFromStorage(),
+
+  rememberRecentSearch: (keyword) => rememberRecentSearchInStorage(keyword),
 }
 
 export default searchService
