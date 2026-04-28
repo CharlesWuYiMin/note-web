@@ -25,7 +25,7 @@ const SECTION_CONFIG = {
     label: '鏄熸爣瑙嗗浘',
     accent: '#f59e0b',
   },
-  shares: {
+  myshares: {
     title: '鎴戠殑鍒嗕韩',
     lead: '杩欓噷淇濈暀鍜岃繎鏈熺瑪璁颁竴鑷寸殑椤甸潰缁撴瀯锛屽睍绀虹殑鏄綘鐨勫垎浜褰曚笌鍘熺瑪璁板叆鍙ｃ€?,
     label: '鍒嗕韩瑙嗗浘',
@@ -70,7 +70,7 @@ function CollectionWorkspacePage({ section }) {
 
   useEffect(() => {
     if (section === 'starred') fetchStarredNotes()
-    if (section === 'shares') fetchMyShares()
+    if (section === 'myshares') fetchMyShares()
     if (section === 'notebooks') fetchNotebooks()
     if (section === 'recyclebin') fetchDeletedNotes()
   }, [section, fetchStarredNotes, fetchMyShares, fetchNotebooks, fetchDeletedNotes])
@@ -79,7 +79,7 @@ function CollectionWorkspacePage({ section }) {
 
   const items = useMemo(() => {
     if (section === 'starred') return starredNotes
-    if (section === 'shares') return myShares
+    if (section === 'myshares') return myShares
     if (section === 'notebooks') return notebooks
     if (section === 'recyclebin') return deletedNotes
     return []
@@ -87,7 +87,7 @@ function CollectionWorkspacePage({ section }) {
 
   const refresh = () => {
     if (section === 'starred') fetchStarredNotes()
-    if (section === 'shares') fetchMyShares()
+    if (section === 'myshares') fetchMyShares()
     if (section === 'notebooks') fetchNotebooks()
     if (section === 'recyclebin') fetchDeletedNotes()
   }
@@ -165,11 +165,11 @@ function CollectionWorkspacePage({ section }) {
       dataSource={items}
       renderItem={(item) => {
         const title =
-          section === 'shares'
+          section === 'myshares'
             ? item.noteTitle || item.title || '鏈懡鍚嶅垎浜?
             : item.title || item.name || '鏈懡鍚嶅唴瀹?
         const summary =
-          section === 'shares'
+          section === 'myshares'
             ? item.description || item.noteSummary || '鍒嗕韩璁板綍鍙粠杩欓噷鎵撳紑鍘熺瑪璁般€?
             : item.content || item.description || '鐐瑰嚮鍚庤繘鍏ュ搴斿唴瀹广€?
         const dateValue =
@@ -194,7 +194,7 @@ function CollectionWorkspacePage({ section }) {
             })}
             onClick={() => {
               if (section === 'starred' && item.id) navigate(`/cloudnote/recent/${item.id}`)
-              if (section === 'shares' && item.noteId) navigate(`/cloudnote/recent/${item.noteId}`)
+              if (section === 'myshares' && item.noteId) navigate(`/cloudnote/myshares/${item.noteId}`)
             }}
           >
             <List.Item.Meta
@@ -223,6 +223,11 @@ function CollectionWorkspacePage({ section }) {
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     {item.notebookName && <Tag style={{ borderRadius: 999 }}>{item.notebookName}</Tag>}
+                    {item.isShared && (
+                      <Tag color="blue" style={{ borderRadius: 999 }}>
+                        <ShareAltOutlined /> 已分享
+                      </Tag>
+                    )}
                     {item.shareCode && <Tag style={{ borderRadius: 999 }}>鍒嗕韩鐮?{item.shareCode}</Tag>}
                     {dateValue && (
                       <span style={{ fontSize: 12, color: 'rgba(16,34,58,0.44)' }}>
@@ -314,7 +319,7 @@ function CollectionWorkspacePage({ section }) {
 
 function renderAvatarIcon(section) {
   if (section === 'starred') return <StarFilled />
-  if (section === 'shares') return <ShareAltOutlined />
+  if (section === 'myshares') return <ShareAltOutlined />
   if (section === 'recyclebin') return <DeleteOutlined />
   return <FolderOutlined />
 }
@@ -344,7 +349,7 @@ function buildActions(section, item, navigate, handlers) {
     ]
   }
 
-  if (section === 'shares') {
+  if (section === 'myshares') {
     return [
       <Button key="share-code" type="text">
         {item.shareCode || '鍒嗕韩鐮?}
@@ -354,7 +359,7 @@ function buildActions(section, item, navigate, handlers) {
         type="text"
         onClick={(event) => {
           event.stopPropagation()
-          if (item.noteId) navigate(`/cloudnote/recent/${item.noteId}`)
+          if (item.noteId) navigate(`/cloudnote/myshares/${item.noteId}`)
         }}
       >
         鎵撳紑

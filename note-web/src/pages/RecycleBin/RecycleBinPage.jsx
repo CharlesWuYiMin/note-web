@@ -1,5 +1,6 @@
 ﻿﻿import React, { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, Empty, List, Spin, Tag, Typography } from 'antd'
 import {
@@ -24,28 +25,42 @@ function RecycleBinPage() {
   const navigate = useNavigate()
   const {
     deletedNotes,
+    deletedNotesPagination,
     isLoading,
     fetchDeletedNotes,
     restoreNote,
     permanentDeleteNote,
     clearRecycleBin,
   } = useNote()
+  const [isBootstrapping, setIsBootstrapping] = useState(true)
 
   useEffect(() => {
-    fetchDeletedNotes()
+    let active = true
+    setIsBootstrapping(true)
+    Promise.resolve(fetchDeletedNotes()).finally(() => {
+      if (active) {
+        setIsBootstrapping(false)
+      }
+    })
+
+    return () => {
+      active = false
+    }
   }, [fetchDeletedNotes])
 
+  const totalDeletedNotes = Number(deletedNotesPagination?.total) || deletedNotes.length
+
   const stats = useMemo(() => [
-    { key: 'trash', label: '回收站条目', value: deletedNotes.length, hint: '已删除但可恢复的笔记', icon: <DeleteOutlined /> },
+    { key: 'trash', label: '回收站条目', value: totalDeletedNotes, hint: '已删除但可恢复的笔记', icon: <DeleteOutlined /> },
     { key: 'latest', label: '最近删除', value: deletedNotes.length > 0 ? new Date(deletedNotes[0].deletedAt || Date.now()).toLocaleDateString() : '--', hint: '按删除时间排序', icon: <ClockCircleOutlined /> },
     { key: 'sync', label: '同步状态', value: '在线', hint: '删除记录已同步', icon: <SafetyCertificateOutlined /> },
     { key: 'scope', label: '当前范围', value: '回收站', hint: '与其他区域统一框架', icon: <FolderOutlined /> },
-  ], [deletedNotes])
+  ], [deletedNotes, totalDeletedNotes])
 
   const tabs = [
     { key: 'recent', label: '近期笔记', icon: <HistoryOutlined />, active: false, onClick: () => navigate('/cloudnote/recent') },
     { key: 'starred', label: '星标笔记', icon: <StarOutlined />, active: false, onClick: () => navigate('/cloudnote/starred') },
-    { key: 'shares', label: '我的分享', icon: <ShareAltOutlined />, active: false, onClick: () => navigate('/cloudnote/shares') },
+    { key: 'myshares', label: '我的分享', icon: <ShareAltOutlined />, active: false, onClick: () => navigate('/cloudnote/myshares') },
     { key: 'notebooks', label: '笔记本', icon: <FolderOutlined />, active: false, onClick: () => navigate('/cloudnote/notebooks') },
     { key: 'recyclebin', label: '回收站', icon: <DeleteOutlined />, active: true, onClick: () => navigate('/cloudnote/recyclebin') },
   ]
@@ -87,8 +102,8 @@ function RecycleBinPage() {
         )}
       </div>
 
-      <Spin spinning={isLoading}>
-        {deletedNotes.length === 0 && !isLoading ? (
+      <Spin spinning={isLoading || isBootstrapping}>
+        {deletedNotes.length === 0 && !isLoading && !isBootstrapping ? (
           <Empty style={{ padding: '48px 0' }} description={t('recycleBin.empty')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <List
@@ -148,6 +163,11 @@ function RecycleBinPage() {
                       </Paragraph>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         {note.notebookName && <Tag style={{ borderRadius: 999 }}>{note.notebookName}</Tag>}
+                        {note.isShared ? (
+                          <Tag color="blue" style={{ borderRadius: 999 }}>
+                            <ShareAltOutlined /> 已分享
+                          </Tag>
+                        ) : null}
                         <Text type="secondary" style={{ fontSize: 12 }}>{note.deletedAt ? `${t('recycleBin.title')}: ${new Date(note.deletedAt).toLocaleDateString()}` : ''}</Text>
                       </div>
                     </div>

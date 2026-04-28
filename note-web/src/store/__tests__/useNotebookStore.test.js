@@ -64,6 +64,25 @@ describe('useNotebookStore', () => {
     expect(useNotebookStore.getState().notebooks).toEqual(mockNotebooks)
   })
 
+  it('deduplicates concurrent notebook fetch requests', async () => {
+    let resolveRequest
+    const requestPromise = new Promise((resolve) => {
+      resolveRequest = resolve
+    })
+    mockGetNotebooks.mockReturnValue(requestPromise)
+
+    const firstCall = useNotebookStore.getState().fetchNotebooks()
+    const secondCall = useNotebookStore.getState().fetchNotebooks()
+
+    expect(secondCall).toBe(firstCall)
+    expect(mockGetNotebooks).toHaveBeenCalledTimes(1)
+
+    resolveRequest({ data: [{ id: '1', name: 'Default notebook', isDefault: true }] })
+    await firstCall
+
+    expect(useNotebookStore.getState().notebooks).toHaveLength(1)
+  })
+
   it('creates notebook and appends fallback fields when service returns nullish', async () => {
     mockCreateNotebook.mockResolvedValue(null)
 

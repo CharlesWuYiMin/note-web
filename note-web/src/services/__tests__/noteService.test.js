@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import noteService from '@/services/noteService'
 
-const { mockGet, mockPost, mockPatch } = vi.hoisted(() => ({
+const { mockGet, mockPost, mockPatch, mockDelete } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   mockPost: vi.fn(),
   mockPatch: vi.fn(),
+  mockDelete: vi.fn(),
 }))
 
 vi.mock('@/utils/request', () => ({
@@ -12,6 +13,7 @@ vi.mock('@/utils/request', () => ({
     get: mockGet,
     post: mockPost,
     patch: mockPatch,
+    delete: mockDelete,
   },
 }))
 
@@ -52,6 +54,74 @@ describe('NoteService', () => {
         params: { orderBy: 1, desc: 0 },
       })
     })
+
+    it('preserves pagination metadata when the list is returned in the data field', async () => {
+      const mockNotes = [
+        { id: '1', title: 'note 1' },
+        { id: '2', title: 'note 2' },
+      ]
+      mockGet.mockResolvedValue({
+        data: mockNotes,
+        total: 39,
+        page: 1,
+        size: 20,
+      })
+
+      const result = await noteService.getNotes()
+
+      expect(result).toEqual({
+        items: mockNotes,
+        total: 39,
+        page: 1,
+        size: 20,
+      })
+    })
+  })
+
+  describe('paged collections', () => {
+    it('preserves pagination metadata for my shares', async () => {
+      const mockShares = [{ id: 'share-1', noteId: '1', title: 'shared note' }]
+      mockGet.mockResolvedValue({
+        data: mockShares,
+        total: 26,
+        page: 1,
+        size: 20,
+      })
+
+      const result = await noteService.getMyShares({ page: 1, pageSize: 20 })
+
+      expect(mockGet).toHaveBeenCalledWith('/myshare/notes', {
+        params: { page: 1, pageSize: 20 },
+      })
+      expect(result).toEqual({
+        items: mockShares,
+        total: 26,
+        page: 1,
+        size: 20,
+      })
+    })
+
+    it('preserves pagination metadata for recycle bin notes', async () => {
+      const mockDeletedNotes = [{ id: 'deleted-1', title: 'deleted note' }]
+      mockGet.mockResolvedValue({
+        data: mockDeletedNotes,
+        total: 39,
+        page: 1,
+        size: 20,
+      })
+
+      const result = await noteService.getDeletedNotes({ page: 1, pageSize: 20 })
+
+      expect(mockGet).toHaveBeenCalledWith('/recycle-bin', {
+        params: { page: 1, pageSize: 20 },
+      })
+      expect(result).toEqual({
+        items: mockDeletedNotes,
+        total: 39,
+        page: 1,
+        size: 20,
+      })
+    })
   })
 
   describe('getNoteById', () => {
@@ -89,9 +159,7 @@ describe('NoteService', () => {
   describe('uploadVoiceFile', () => {
     it('posts noteId and file as multipart form data', async () => {
       const file = new File(['voice-bytes'], 'voice.webm', { type: 'audio/webm' })
-      mockGet
-        .mockResolvedValueOnce({ data: '100M' })
-        .mockResolvedValueOnce({ data: '5242880' })
+      mockGet.mockResolvedValue({ data: '5242880' })
       mockPost.mockResolvedValue({ data: { fileId: 'file-1', url: '/v1/note/files/file-1' } })
 
       const result = await noteService.uploadVoiceFile('note-123', file)
@@ -108,6 +176,20 @@ describe('NoteService', () => {
         params: { noteId: 'note-123' },
       })
       expect(result).toEqual({ fileId: 'file-1', url: '/v1/note/files/file-1' })
+    })
+
+    it('includes fileName in multipart form data when uploading a voice file', async () => {
+      const file = new File(['voice-bytes'], 'voice.webm', { type: 'audio/webm' })
+      mockGet.mockResolvedValue({ data: '5242880' })
+      mockPost.mockResolvedValue({ data: { fileId: 'file-1', fileName: '语音文件01', url: '/v1/note/files/file-1' } })
+
+      await noteService.uploadVoiceFile('note-123', file, { fileName: '语音文件01' })
+
+      const [, body] = mockPost.mock.calls[0]
+      expect(Array.from(body.entries())).toEqual([
+        ['file', file],
+        ['fileName', '语音文件01'],
+      ])
     })
 
     it('includes sessionId when uploading a realtime archive file', async () => {
@@ -151,6 +233,7 @@ describe('NoteService', () => {
       const result = await noteService.uploadVoiceFile('note-123', file, {
         sessionId: 'session-123',
         duration: 18,
+        fileName: '语音文件01',
       })
 
       expect(mockGet.mock.calls).toEqual([
@@ -195,6 +278,7 @@ describe('NoteService', () => {
           noteId: 'note-123',
           sessionId: 'session-123',
           duration: 18,
+          fileName: '语音文件01',
           fileId: 'file-9',
           fileResource: 'assoc-9',
           size: file.size,
@@ -210,20 +294,29 @@ describe('NoteService', () => {
     })
   })
 
+  describe('deleteVoiceNoteCard', () => {
+    it('calls DELETE /voice-notes/files/:fileId with noteId query param', async () => {
+      mockDelete.mockResolvedValue({ data: null })
+
+      await noteService.deleteVoiceNoteCard('note-123', 'file-456')
+
+      expect(mockDelete).toHaveBeenCalledWith('/voice-notes/files/file-456', {
+        params: { noteId: 'note-123' },
+      })
+    })
+  })
+
   describe('importDocumentArchive', () => {
     it('uploads a small archive directly and then starts an async import task with fileResource id', async () => {
       const file = new File(['zip-bytes'], 'notes.zip', { type: 'application/zip' })
       mockGet.mockResolvedValue({ data: '5242880' })
       mockPost
         .mockResolvedValueOnce({ data: { file_resource: '/v1/file/internal/resources/file-zip-1' } })
-        .mockResolvedValueOnce({ data: { taskId: 'task-import-1', status: 1, statusText: '初始化' } })
+        .mockResolvedValueOnce({ data: { taskId: 'task-import-1', status: 1, statusText: 'initializing' } })
 
       const result = await noteService.importDocumentArchive(file)
 
-      expect(mockGet.mock.calls).toEqual([
-        ['/sysConfig/upload_max_size'],
-        ['/sysConfig/import.file.chunk_threshold_bytes'],
-      ])
+      expect(mockGet).toHaveBeenCalledWith('/sysConfig/import.file.chunk_threshold_bytes')
       expect(mockPost.mock.calls[0][0]).toBe('/file/upload')
       expect(mockPost.mock.calls[0][1]).toBeInstanceOf(FormData)
       expect(mockPost.mock.calls[0][2]).toEqual({
@@ -235,13 +328,12 @@ describe('NoteService', () => {
         '/convert/file/import-raw-zip',
         { file_id: 'file-zip-1' },
       ])
-      expect(result).toEqual({ taskId: 'task-import-1', status: 1, statusText: '初始化' })
+      expect(result).toEqual({ taskId: 'task-import-1', status: 1, statusText: 'initializing' })
     })
 
     it('uploads a large archive in chunks before triggering import', async () => {
       const file = new File([new Uint8Array(5 * 1024 * 1024 + 4)], 'notes.zip', { type: 'application/zip' })
       mockGet
-        .mockResolvedValueOnce({ data: '100M' })
         .mockResolvedValueOnce({ data: '5242880' })
         .mockResolvedValueOnce({ data: '5242880' })
       mockPost
@@ -249,12 +341,11 @@ describe('NoteService', () => {
         .mockResolvedValueOnce({ success: true })
         .mockResolvedValueOnce({ success: true })
         .mockResolvedValueOnce({ data: { file_id: 'file-zip-9', file_resource: '/v1/file/internal/resources/file-zip-9' } })
-        .mockResolvedValueOnce({ data: { taskId: 'task-import-9', status: 1, statusText: '初始化' } })
+        .mockResolvedValueOnce({ data: { taskId: 'task-import-9', status: 1, statusText: 'initializing' } })
 
       const result = await noteService.importDocumentArchive(file)
 
       expect(mockGet.mock.calls).toEqual([
-        ['/sysConfig/upload_max_size'],
         ['/sysConfig/import.file.chunk_threshold_bytes'],
         ['/sysConfig/import.file.chunk_size_bytes'],
       ])
@@ -281,30 +372,20 @@ describe('NoteService', () => {
         '/convert/file/import-raw-zip',
         { file_id: 'file-zip-9' },
       ])
-      expect(result).toEqual({ taskId: 'task-import-9', status: 1, statusText: '初始化' })
+      expect(result).toEqual({ taskId: 'task-import-9', status: 1, statusText: 'initializing' })
     })
 
     it('queries import task status through the task endpoint', async () => {
-      mockGet.mockResolvedValue({ data: { taskId: 'task-import-1', status: 2, statusText: '运行中' } })
+      mockGet.mockResolvedValue({
+        data: [
+          { taskId: 'task-import-1', status: 2, statusText: 'running' },
+        ],
+      })
 
       const result = await noteService.getImportTask('task-import-1')
 
       expect(mockGet).toHaveBeenCalledWith('/tasks')
-      expect(result).toEqual({ taskId: 'task-import-1', status: 2, statusText: '运行中' })
-    })
-
-    it('rejects archives that exceed upload_max_size before upload starts', async () => {
-      const file = new File([new Uint8Array(100 * 1024 * 1024 + 1)], 'notes.zip', { type: 'application/zip' })
-      mockGet.mockResolvedValueOnce({ data: '100M' })
-
-      await expect(noteService.importDocumentArchive(file))
-        .rejects
-        .toThrow('import archive size cannot exceed 100MB')
-
-      expect(mockGet.mock.calls).toEqual([
-        ['/sysConfig/upload_max_size'],
-      ])
-      expect(mockPost).not.toHaveBeenCalled()
+      expect(result).toEqual({ taskId: 'task-import-1', status: 2, statusText: 'running' })
     })
 
     it('reads import task polling interval from sys config with a default fallback', async () => {
@@ -375,3 +456,4 @@ describe('NoteService', () => {
     })
   })
 })
+

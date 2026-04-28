@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useState } from 'react'
 import { Modal, Button, Input, Select, message, Space, Typography } from 'antd'
 import {
   ShareAltOutlined,
@@ -6,7 +6,11 @@ import {
   LinkOutlined,
   CloseOutlined,
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
+import '@/i18n'
 import shareService from '@/services/shareService'
+import { reportError } from '@/utils/observability'
+import { showSharePromptModal } from '@/utils/shareErrorMessages'
 
 const { Text, Paragraph } = Typography
 
@@ -22,28 +26,45 @@ function toAbsoluteShareUrl(shareUrl) {
   return `${window.location.origin}${shareUrl.startsWith('/') ? shareUrl : `/${shareUrl}`}`
 }
 
+function buildExpiresAt(days) {
+  if (days === -1) {
+    return undefined
+  }
+
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  date.setHours(23, 59, 59, 999)
+  return date.toISOString()
+}
+
 const ShareDialog = ({ open, noteId, onClose }) => {
+  const { t, i18n } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
   const [shareCode, setShareCode] = useState('')
   const [expiresIn, setExpiresIn] = useState(7)
-  const [error, setError] = useState(null)
 
   const handleCreateShare = async () => {
     try {
       setLoading(true)
-      setError(null)
-      
+
       const result = await shareService.createShare(noteId, {
-        expiresIn,
+        expiresAt: buildExpiresAt(expiresIn),
       })
-      
+
       setShareUrl(toAbsoluteShareUrl(result.shareUrl || `/cloudnote/shares/${result.noteId || result.shareCode}`))
       setShareCode(result.shareCode || result.noteId || '')
-      message.success('分享链接已生成')
+      message.success(t('share.shareSuccess'))
     } catch (err) {
-      setError(err.message || '创建分享失败')
-      message.error('创建分享失败')
+      showSharePromptModal({
+        operation: 'create',
+        error: err,
+        language: i18n.language,
+      })
+      reportError(err, {
+        feature: 'share_dialog_create',
+        noteId: String(noteId || ''),
+      })
     } finally {
       setLoading(false)
     }
@@ -51,16 +72,19 @@ const ShareDialog = ({ open, noteId, onClose }) => {
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareUrl).then(() => {
-      message.success('链接已复制到剪贴板')
-    }).catch(() => {
-      message.error('复制失败，请手动复制')
+      message.success(t('share.copySuccess'))
+    }).catch((err) => {
+      showSharePromptModal({
+        operation: 'copy',
+        error: err,
+        language: i18n.language,
+      })
     })
   }
 
   const handleClose = () => {
     setShareUrl('')
     setShareCode('')
-    setError(null)
     setExpiresIn(7)
     onClose()
   }
@@ -70,7 +94,7 @@ const ShareDialog = ({ open, noteId, onClose }) => {
       title={
         <Space>
           <ShareAltOutlined style={{ color: '#0256d2' }} />
-          <span>分享笔记</span>
+          <span>{t('share.title')}</span>
         </Space>
       }
       open={open}
@@ -78,11 +102,11 @@ const ShareDialog = ({ open, noteId, onClose }) => {
       onCancel={handleClose}
       footer={[
         <Button key="cancel" onClick={handleClose} icon={<CloseOutlined />}>
-          取消
+          {t('common.cancel')}
         </Button>,
         shareUrl ? (
           <Button key="copy" type="primary" icon={<CopyOutlined />} onClick={handleCopyLink}>
-            复制链接
+            {t('share.copyLink')}
           </Button>
         ) : (
           <Button
@@ -97,7 +121,7 @@ const ShareDialog = ({ open, noteId, onClose }) => {
               borderRadius: 8,
             }}
           >
-            生成分享链接
+            {t('share.generateLink')}
           </Button>
         ),
       ]}
@@ -108,7 +132,7 @@ const ShareDialog = ({ open, noteId, onClose }) => {
         {!shareUrl ? (
           <div>
             <Paragraph style={{ marginBottom: 16, color: '#5f6368' }}>
-              选择链接有效期：
+              {t('share.validityPeriod')}
             </Paragraph>
 
             <Select
@@ -116,23 +140,18 @@ const ShareDialog = ({ open, noteId, onClose }) => {
               onChange={setExpiresIn}
               style={{ width: '100%', marginBottom: 16 }}
               options={[
-                { value: 1, label: '1 天后过期' },
-                { value: 7, label: '7 天后过期 (推荐)' },
-                { value: 30, label: '30 天后过期' },
-                { value: -1, label: '永不过期' },
+                { value: 1, label: t('share.oneDay') },
+                { value: 7, label: t('share.sevenDays') },
+                { value: 30, label: t('share.thirtyDays') },
+                { value: -1, label: t('share.permanent') },
               ]}
             />
 
-            {error && (
-              <div style={{ color: '#ff4d4f', fontSize: 13, marginTop: 8 }}>
-                {error}
-              </div>
-            )}
           </div>
         ) : (
           <div>
             <Paragraph style={{ marginBottom: 12 }}>
-              <Text strong>分享链接已创建</Text>
+              <Text strong>{t('share.generated')}</Text>
             </Paragraph>
 
             <Input.TextArea
@@ -156,7 +175,7 @@ const ShareDialog = ({ open, noteId, onClose }) => {
               fontSize: 13,
               color: '#5f6368',
             }}>
-              💡 提示：任何人拥有此链接都可以查看此笔记（只读模式）
+              {t('share.openShareDescription')}
             </div>
           </div>
         )}

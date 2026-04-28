@@ -3,6 +3,7 @@ import notebookService from '@/services/notebookService'
 import { getItem, setItem } from '@/utils/storageUtils'
 
 const NOTEBOOK_ORDER_STORAGE_KEY = 'cloudnote:notebook-order'
+let inFlightFetchNotebooks = null
 
 function normalizeNotebookCollection(data) {
   if (Array.isArray(data)) {
@@ -61,18 +62,30 @@ const useNotebookStore = create((set, get) => ({
   error: null,
 
   fetchNotebooks: async () => {
-    set({ isLoading: true, error: null })
-    try {
-      const data = await notebookService.getNotebooks()
-      const normalized = normalizeNotebookOrder(normalizeNotebookCollection(data), readNotebookOrder())
-      persistNotebookOrder(normalized.orderIds)
-      set({
-        notebooks: normalized.notebooks,
-        isLoading: false,
-      })
-    } catch (error) {
-      set({ error: error.message, isLoading: false })
+    if (inFlightFetchNotebooks) {
+      return inFlightFetchNotebooks
     }
+
+    const requestPromise = (async () => {
+      set({ isLoading: true, error: null })
+      try {
+        const data = await notebookService.getNotebooks()
+        const normalized = normalizeNotebookOrder(normalizeNotebookCollection(data), readNotebookOrder())
+        persistNotebookOrder(normalized.orderIds)
+        set({
+          notebooks: normalized.notebooks,
+          isLoading: false,
+        })
+      } catch (error) {
+        set({ error: error.message, isLoading: false })
+        throw error
+      } finally {
+        inFlightFetchNotebooks = null
+      }
+    })()
+
+    inFlightFetchNotebooks = requestPromise
+    return requestPromise
   },
 
   setCurrentNotebook: (notebook) => set({ currentNotebook: notebook }),

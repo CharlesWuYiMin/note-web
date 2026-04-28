@@ -1,7 +1,34 @@
+import { getAppConfig } from './config'
+
 const AUTH_COOKIE_NAMES = ['cloud_doc_token', 'cloud_doc_userid', 'cloud_doc_appid']
 const POST_LOGIN_REDIRECT_KEY = 'cloudnote:post-login-redirect'
 
 let redirectingToLogin = false
+
+function getIdaasLoginUrl(targetPath = '') {
+  const config = getAppConfig()
+  const idaasConfig = config?.auth?.idaas || {}
+  const authUrl = String(idaasConfig.authUrl || '').trim()
+  const clientId = String(idaasConfig.clientId || '').trim()
+  const redirectUri = String(idaasConfig.redirectUri || '').trim()
+
+  if (!authUrl || !clientId || !redirectUri) {
+    return ''
+  }
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'openid profile email',
+  })
+
+  if (targetPath) {
+    params.set('state', targetPath)
+  }
+
+  return `${authUrl}?${params.toString()}`
+}
 
 export function clearAuthCookies() {
   if (typeof document === 'undefined') {
@@ -69,17 +96,25 @@ export function redirectToLogin(options = {}) {
     rememberPostLoginRedirect()
   }
 
-  if (window.location.pathname === '/login' || redirectingToLogin) {
+  if (redirectingToLogin) {
+    return
+  }
+
+  const rememberedPath = peekPostLoginRedirect()
+  const loginUrl = getIdaasLoginUrl(rememberedPath)
+  if (!loginUrl) {
+    const fallbackUrl = new URL('/login', window.location.origin)
+    if (reason) {
+      fallbackUrl.searchParams.set('reason', reason)
+    }
+
+    redirectingToLogin = true
+    window.location.replace(`${fallbackUrl.pathname}${fallbackUrl.search}`)
     return
   }
 
   redirectingToLogin = true
-  const loginUrl = new URL('/login', window.location.origin)
-  if (reason) {
-    loginUrl.searchParams.set('reason', reason)
-  }
-
-  window.location.replace(`${loginUrl.pathname}${loginUrl.search}`)
+  window.location.replace(loginUrl)
 }
 
 export function handleUnauthorizedResponse() {

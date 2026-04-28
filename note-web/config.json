@@ -1,7 +1,7 @@
 {
   "development": {
     "app": {
-      "name": "云笔记",
+      "name": "cloudnote",
       "version": "1.0.0",
       "env": "development",
       "debug": true
@@ -11,11 +11,11 @@
       "contentServer": "http://localhost:5002"
     },
     "auth": {
-        "idaas": {
-          "redirectUri": "http://localhost:5173/cloudnote/recent",
-          "authUrl": "http://localhost:5176/idaas/login",
-          "clientId": "dev-client-id"
-        },
+      "idaas": {
+        "redirectUri": "http://localhost:5173/cloudnote/recent",
+        "authUrl": "http://localhost:5176/idaas/login",
+        "clientId": "dev-client-id"
+      },
       "welink": {
         "redirectUri": "http://localhost:3000/welink-callback",
         "clientId": "dev-welink-client-id"
@@ -45,42 +45,8 @@
         "monacoEditorUrl": "https://innovation.huaweiapaas.com/koopage/static/default/js/monaco-editor/vs",
         "dolphinWebUrl": "*",
         "obsPrefix": "https://koospace.obs.cn-north-4.myhuaweicloud.com"
-      }
-    }
-  },
-  "test": {
-    "app": {
-      "name": "云笔记",
-      "version": "1.0.0",
-      "env": "test",
-      "debug": false
-    },
-    "api": {
-      "baseUrl": "/v1/note",
-      "contentServer": "https://test-content.example.com"
-    },
-    "auth": {
-        "idaas": {
-          "redirectUri": "http://localhost:5173/cloudnote/recent",
-          "authUrl": "http://localhost:5176/idaas/login",
-          "clientId": "dev-client-id"
-        },
-      "welink": {
-        "redirectUri": "https://test-note.example.com/welink-callback",
-        "clientId": "test-welink-client-id"
-      }
-    },
-    "editor": {
-      "plugins": true,
-      "upload": {
-        "enabled": true,
-        "url": "https://test-note.example.com/api/upload",
-        "maxSize": {
-          "image": 5242880,
-          "video": 52428800
-        }
       },
-      "page": {
+      "board": {
         "auth": {
           "enabled": true,
           "appId": "12345666",
@@ -88,110 +54,151 @@
           "expiresInMs": 300000
         },
         "apiUrl": "http://localhost:5002/api",
-        "editorUrl": "https://innovation.huaweiapaas.com/editor",
+        "editorUrl": "https://innovation.huaweiapaas.com/koopage/editor/boardeditor/",
+        "collaborationUrl": "wss://innovation.huaweiapaas.com/koopage/websocket/",
+        "service": {
+          "baseURL": "http://localhost:5002",
+          "imgPrefix": ""
+        },
+        "scene": {
+          "mode": "editor",
+          "menuSetting": {
+            "disableMenus": [
+              "comment"
+            ]
+          }
+        }
+      },
+      "mind": {
+        "auth": {
+          "enabled": true,
+          "appId": "12345666",
+          "signKey": "11111111",
+          "expiresInMs": 300000
+        },
+        "apiUrl": "http://localhost:5002/api",
+        "editorUrl": "https://innovation.huaweiapaas.com/koopage/editor/mindeditor/",
         "collaborationUrl": "wss://innovation.huaweiapaas.com/koopage/mindboard/ws",
-        "flowDiagramUrl": "https://innovation.huaweiapaas.com/draw",
-        "monacoEditorUrl": "https://innovation.huaweiapaas.com/koopage/static/default/js/monaco-editor/vs",
-        "dolphinWebUrl": "*",
-        "obsPrefix": "https://koospace.obs.cn-north-4.myhuaweicloud.com"
+        "service": {
+          "baseURL": "http://localhost:5002",
+          "imgPrefix": ""
+        },
+        "scene": {
+          "mode": "editor",
+          "menuSetting": {
+            "disableMenus": [
+              "comment"
+            ]
+          }
+        }
+      }
+    },
+    "observability": {
+      "logging": {
+        "enabled": true,
+        "level": "debug"
+      },
+      "apm": {
+        "enabled": false,
+        "appId": "",
+        "domain": "",
+        "serviceName": "cloudnote-development",
+        "scriptUrl": "",
+        "sampleRate": 1,
+        "apiRepo": true,
+        "thirdApi": true,
+        "hashMode": true,
+        "JsErrorClear": true,
+        "smartJsErr": true,
+        "webResource": true,
+        "traceType": "apm",
+        "uid": "",
+        "tag": "",
+        "enableInp": false,
+        "pushState": true,
+        "captureApi": true,
+        "captureJsError": true,
+        "captureResource": true,
+        "captureRoute": true,
+        "capturePerformance": true,
+        "captureSession": true,
+        "captureCustomEvent": true
       }
     }
   },
   "staging": {
     "app": {
-      "name": "云笔记",
-      "version": "1.0.0",
       "env": "staging",
       "debug": false
     },
-    "api": {
-      "baseUrl": "/v1/note",
-      "contentServer": "https://staging-content.example.com"
-    },
-    "auth": {
-        "idaas": {
-          "redirectUri": "http://localhost:5173/cloudnote/recent",
-          "authUrl": "http://localhost:5176/idaas/login",
-          "clientId": "dev-client-id"
-        },
-      "welink": {
-        "redirectUri": "https://staging-note.example.com/welink-callback",
-        "clientId": "staging-welink-client-id"
-      }
-    },
-    "editor": {
-      "plugins": true,
-      "upload": {
+    "observability": {
+      "logging": {
         "enabled": true,
-        "url": "https://staging-note.example.com/api/upload",
-        "maxSize": {
-          "image": 5242880,
-          "video": 52428800
-        }
+        "level": "info"
       },
-      "page": {
-        "auth": {
-          "enabled": true,
-          "appId": "12345666",
-          "signKey": "11111111",
-          "expiresInMs": 300000
-        },
-        "apiUrl": "http://localhost:5002/api",
-        "editorUrl": "https://innovation.huaweiapaas.com/editor",
-        "collaborationUrl": "wss://innovation.huaweiapaas.com/koopage/mindboard/ws",
-        "flowDiagramUrl": "https://innovation.huaweiapaas.com/draw",
-        "monacoEditorUrl": "https://innovation.huaweiapaas.com/koopage/static/default/js/monaco-editor/vs",
-        "dolphinWebUrl": "*",
-        "obsPrefix": "https://koospace.obs.cn-north-4.myhuaweicloud.com"
+      "apm": {
+        "enabled": true,
+        "appId": "",
+        "domain": "",
+        "serviceName": "cloudnote-staging",
+        "scriptUrl": "",
+        "sampleRate": 1,
+        "apiRepo": true,
+        "thirdApi": true,
+        "hashMode": true,
+        "JsErrorClear": true,
+        "smartJsErr": true,
+        "webResource": true,
+        "traceType": "apm",
+        "uid": "",
+        "tag": "",
+        "enableInp": false,
+        "pushState": true,
+        "captureApi": true,
+        "captureJsError": true,
+        "captureResource": true,
+        "captureRoute": true,
+        "capturePerformance": true,
+        "captureSession": true,
+        "captureCustomEvent": true
       }
     }
   },
   "production": {
     "app": {
-      "name": "云笔记",
-      "version": "1.0.0",
       "env": "production",
       "debug": false
     },
-    "api": {
-      "baseUrl": "/v1/note",
-      "contentServer": "https://prod-content.example.com"
-    },
-    "auth": {
-        "idaas": {
-          "redirectUri": "http://localhost:5173/cloudnote/recent",
-          "authUrl": "http://localhost:5176/idaas/login",
-          "clientId": "dev-client-id"
-        },
-      "welink": {
-        "redirectUri": "https://prod-note.example.com/welink-callback",
-        "clientId": "prod-welink-client-id"
-      }
-    },
-    "editor": {
-      "plugins": true,
-      "upload": {
+    "observability": {
+      "logging": {
         "enabled": true,
-        "url": "https://prod-note.example.com/api/upload",
-        "maxSize": {
-          "image": 5242880,
-          "video": 52428800
-        }
+        "level": "warn"
       },
-      "page": {
-        "auth": {
-          "enabled": true,
-          "appId": "12345666",
-          "signKey": "11111111",
-          "expiresInMs": 300000
-        },
-        "apiUrl": "http://localhost:5002/api",
-        "editorUrl": "https://innovation.huaweiapaas.com/editor",
-        "collaborationUrl": "wss://innovation.huaweiapaas.com/koopage/ws",
-        "flowDiagramUrl": "https://innovation.huaweiapaas.com/draw",
-        "monacoEditorUrl": "https://innovation.huaweiapaas.com/koopage/static/default/js/monaco-editor/vs",
-        "dolphinWebUrl": "*",
-        "obsPrefix": "https://koospace.obs.cn-north-4.myhuaweicloud.com"
+      "apm": {
+        "enabled": true,
+        "appId": "",
+        "domain": "",
+        "serviceName": "cloudnote-production",
+        "scriptUrl": "",
+        "sampleRate": 1,
+        "apiRepo": true,
+        "thirdApi": true,
+        "hashMode": true,
+        "JsErrorClear": true,
+        "smartJsErr": true,
+        "webResource": true,
+        "traceType": "apm",
+        "uid": "",
+        "tag": "",
+        "enableInp": false,
+        "pushState": true,
+        "captureApi": true,
+        "captureJsError": true,
+        "captureResource": true,
+        "captureRoute": true,
+        "capturePerformance": true,
+        "captureSession": true,
+        "captureCustomEvent": true
       }
     }
   }

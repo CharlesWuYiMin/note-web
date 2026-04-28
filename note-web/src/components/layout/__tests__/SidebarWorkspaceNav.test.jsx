@@ -170,7 +170,11 @@ describe('SidebarWorkspaceNav', () => {
       }))
     })
 
-    expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recent/note-2', undefined)
+    expect(navigateMock).toHaveBeenCalledWith('/cloudnote/notebooks/work-nb/note-2', {
+      state: {
+        note: expect.objectContaining({ id: 'note-2', title: 'note', type: 'text' }),
+      },
+    })
   })
 
   it('calls deleteNotebook after confirming delete in the notebook row menu', async () => {

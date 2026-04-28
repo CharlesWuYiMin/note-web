@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import { Button, Empty, List, Spin, Tag, Tooltip, Typography } from 'antd'
 import {
   ShareAltOutlined,
@@ -17,23 +18,36 @@ const { Text, Paragraph } = Typography
 
 function MySharesPage() {
   const navigate = useNavigate()
-  const { myShares, isLoading, fetchMyShares } = useNote()
+  const { myShares, mySharesPagination, isLoading, fetchMyShares } = useNote()
+  const [isBootstrapping, setIsBootstrapping] = useState(true)
 
   useEffect(() => {
-    fetchMyShares()
+    let active = true
+    setIsBootstrapping(true)
+    Promise.resolve(fetchMyShares()).finally(() => {
+      if (active) {
+        setIsBootstrapping(false)
+      }
+    })
+
+    return () => {
+      active = false
+    }
   }, [fetchMyShares])
 
+  const totalMyShares = Number(mySharesPagination?.total) || myShares.length
+
   const stats = useMemo(() => [
-    { key: 'shares', label: '我的分享', value: myShares.length, hint: '对外可访问的分享记录', icon: <ShareAltOutlined /> },
+    { key: 'myshares', label: '我的分享', value: totalMyShares, hint: '对外可访问的分享记录', icon: <ShareAltOutlined /> },
     { key: 'recent', label: '最近分享', value: myShares.length > 0 ? new Date(myShares[0].createdAt || Date.now()).toLocaleDateString() : '--', hint: '按创建时间展示', icon: <ClockCircleOutlined /> },
     { key: 'sync', label: '同步状态', value: '在线', hint: '分享信息已同步', icon: <SafetyCertificateOutlined /> },
     { key: 'scope', label: '页面框架', value: '统一', hint: '与近期/星标/回收站一致', icon: <FolderOutlined /> },
-  ], [myShares])
+  ], [myShares, totalMyShares])
 
   const tabs = [
     { key: 'recent', label: '近期笔记', icon: <HistoryOutlined />, active: false, onClick: () => navigate('/cloudnote/recent') },
     { key: 'starred', label: '星标笔记', icon: <StarOutlined />, active: false, onClick: () => navigate('/cloudnote/starred') },
-    { key: 'shares', label: '我的分享', icon: <ShareAltOutlined />, active: true, onClick: () => navigate('/cloudnote/shares') },
+    { key: 'myshares', label: '我的分享', icon: <ShareAltOutlined />, active: true, onClick: () => navigate('/cloudnote/myshares') },
     { key: 'notebooks', label: '笔记本', icon: <FolderOutlined />, active: false, onClick: () => navigate('/cloudnote/notebooks') },
     { key: 'recyclebin', label: '回收站', icon: <DeleteOutlined />, active: false, onClick: () => navigate('/cloudnote/recyclebin') },
   ]
@@ -49,8 +63,8 @@ function MySharesPage() {
         <div style={{ fontSize: 13, color: 'rgba(16,34,58,0.54)', marginTop: 4 }}>分享页采用和近期笔记一致的壳子，只展示不同的数据内容。</div>
       </div>
 
-      <Spin spinning={isLoading}>
-        {myShares.length === 0 && !isLoading ? (
+      <Spin spinning={isLoading || isBootstrapping}>
+        {myShares.length === 0 && !isLoading && !isBootstrapping ? (
           <Empty style={{ padding: '48px 0' }} description="暂无分享记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <List
@@ -80,14 +94,14 @@ function MySharesPage() {
                       <Button type="text" size="small" onClick={(e) => {
                         e.stopPropagation()
                         if (share.noteId) {
-                          navigate(`/cloudnote/recent/${share.noteId}`)
+                          navigate(`/cloudnote/myshares/${share.noteId}`)
                         }
                       }}>
                         打开
                       </Button>
                     </Tooltip>,
                   ]}
-                  onClick={() => share.noteId && navigate(`/cloudnote/recent/${share.noteId}`)}
+                  onClick={() => share.noteId && navigate(`/cloudnote/myshares/${share.noteId}`)}
                 >
                   <List.Item.Meta
                     avatar={

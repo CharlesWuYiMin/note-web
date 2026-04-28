@@ -379,7 +379,7 @@ function AIPanel({ onClose, requestedScene = null, requestNonce = 0, autoSendReq
     <section
       id="ai-panel"
       style={{
-        width,
+        width: `var(--cloudnote-ai-width, ${width}px)`,
         display: 'flex',
         flexDirection: 'column',
         background: 'transparent',

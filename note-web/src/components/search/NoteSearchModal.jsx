@@ -24,33 +24,11 @@ import {
   FileTextOutlined,
 } from '@ant-design/icons'
 import searchService from '@/services/searchService'
+import SearchResultIcon from '@/components/search/SearchResultIcon'
+import { hasVoiceRecords } from '@/utils/searchPresentation'
 import { getSearchContext, getSearchResultPath } from '@/utils/searchContext'
 
 const { Text, Paragraph } = Typography
-
-function hasVoiceRecords(note) {
-  if (!note) {
-    return false
-  }
-
-  if (Array.isArray(note.voiceNote) && note.voiceNote.length > 0) {
-    return true
-  }
-
-  if (Array.isArray(note.voiceRealtimeSessions) && note.voiceRealtimeSessions.length > 0) {
-    return true
-  }
-
-  if (Number(note.voiceNumber) > 0) {
-    return true
-  }
-
-  if (Number(note.voiceCount) > 0) {
-    return true
-  }
-
-  return false
-}
 
 const DEFAULT_PAGE_SIZE = 8
 
@@ -225,6 +203,11 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
   }
 
   const handleKeywordSubmit = () => {
+    if (trimmedKeyword) {
+      const nextRecentSearches = searchService.rememberRecentSearch?.(trimmedKeyword)
+      setRecentSearches(Array.isArray(nextRecentSearches) ? nextRecentSearches.slice(0, 8) : [])
+    }
+
     setPage(1)
     setDebouncedKeyword(trimmedKeyword)
   }
@@ -403,29 +386,7 @@ function NoteSearchModal({ open, onClose, initialKeyword = '', currentPath = '',
                     }}
                   >
                     <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                      <div style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 14,
-                        background: item.status === 'deleted'
-                          ? 'rgba(255,77,79,0.08)'
-                          : item.isStarred
-                            ? 'rgba(250,173,20,0.12)'
-                            : 'rgba(2,86,210,0.08)',
-                        color: item.status === 'deleted'
-                          ? '#ff4d4f'
-                          : item.isStarred
-                            ? '#d97706'
-                            : '#0256d2',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                        fontSize: 18,
-                      }}
-                      >
-                        {item.status === 'deleted' ? <DeleteOutlined /> : item.isStarred ? <StarOutlined /> : <FileTextOutlined />}
-                      </div>
+                      <SearchResultIcon note={item} size={44} fontSize={18} />
 
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>

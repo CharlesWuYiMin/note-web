@@ -19,9 +19,9 @@ import {
   SearchOutlined,
   ShareAltOutlined,
   StarOutlined,
-  FileTextOutlined,
 } from '@ant-design/icons'
 import searchService from '@/services/searchService'
+import SearchResultIcon from '@/components/search/SearchResultIcon'
 import { getSearchContext, getSearchResultPath } from '@/utils/searchContext'
 
 const { Text, Paragraph } = Typography
@@ -375,37 +375,7 @@ function NoteSearchPanel({
                       }}
                     >
                       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                        <div style={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: 14,
-                          background: item.status === 'deleted'
-                            ? 'rgba(255,77,79,0.08)'
-                            : item.isStarred
-                              ? 'rgba(250,173,20,0.12)'
-                              : 'rgba(2,86,210,0.08)',
-                          color: item.status === 'deleted'
-                            ? '#ff4d4f'
-                            : item.isStarred
-                              ? '#d97706'
-                              : '#0256d2',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          fontSize: 18,
-                        }}
-                        >
-                          {item.status === 'deleted'
-                            ? <DeleteOutlined />
-                            : item.status === 'share'
-                              ? <ShareAltOutlined />
-                              : item.isStarred
-                                ? <StarOutlined />
-                                : item.notebookId
-                                  ? <FolderOutlined />
-                                  : <FileTextOutlined />}
-                        </div>
+                        <SearchResultIcon note={item} size={44} fontSize={18} />
 
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>

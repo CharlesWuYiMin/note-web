@@ -1,6 +1,6 @@
 ﻿import React from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { message } from 'antd'
@@ -9,6 +9,7 @@ import NotesSidebar from '@/components/layout/NotesSidebar'
 const {
   navigateMock,
   fetchNotesMock,
+  loadMoreNotesMock,
   fetchStarredNotesMock,
   loadMoreStarredNotesMock,
   fetchMySharesMock,
@@ -23,6 +24,7 @@ const {
 } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   fetchNotesMock: vi.fn(),
+  loadMoreNotesMock: vi.fn(),
   fetchStarredNotesMock: vi.fn(),
   loadMoreStarredNotesMock: vi.fn(),
   fetchMySharesMock: vi.fn(),
@@ -58,6 +60,12 @@ const notesFixture = [
 
 const useNoteState = {
   notes: notesFixture,
+  notesPagination: {
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    hasMore: false,
+  },
   starredNotes: [],
   starredNotesPagination: {
     page: 1,
@@ -66,14 +74,36 @@ const useNoteState = {
     hasMore: false,
   },
   myShares: [],
+  mySharesPagination: {
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    hasMore: false,
+  },
   deletedNotes: [],
+  deletedNotesPagination: {
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    hasMore: false,
+  },
   fetchNotes: fetchNotesMock,
+  loadMoreNotes: loadMoreNotesMock,
   fetchStarredNotes: fetchStarredNotesMock,
   loadMoreStarredNotes: loadMoreStarredNotesMock,
   fetchMyShares: fetchMySharesMock,
+  loadMoreMyShares: vi.fn(),
   fetchDeletedNotes: fetchDeletedNotesMock,
+  loadMoreDeletedNotes: vi.fn(),
   isLoading: false,
+  isNotesLoadingMore: false,
   isStarredNotesLoadingMore: false,
+  isMySharesLoadingMore: false,
+  isDeletedNotesLoadingMore: false,
+  hasLoadedNotes: true,
+  hasLoadedStarredNotes: true,
+  hasLoadedMyShares: true,
+  hasLoadedDeletedNotes: true,
 }
 
 const useNotebookState = {
@@ -109,6 +139,12 @@ vi.mock('@/services/shareService', () => ({
   },
 }))
 
+vi.mock('@/components/share/SharePanelDialog', () => ({
+  default: ({ open, noteId }) => (
+    open ? <div data-testid="share-panel" data-note-id={noteId} /> : null
+  ),
+}))
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
   return {
@@ -125,9 +161,10 @@ function renderSidebar(initialEntry = '/cloudnote/recent') {
         <Route path="/cloudnote/recent/:id" element={<NotesSidebar visible />} />
         <Route path="/cloudnote/starred" element={<NotesSidebar visible />} />
         <Route path="/cloudnote/starred/:id" element={<NotesSidebar visible />} />
-        <Route path="/cloudnote/shares" element={<NotesSidebar visible />} />
-        <Route path="/cloudnote/shares/:id" element={<NotesSidebar visible />} />
+        <Route path="/cloudnote/myshares" element={<NotesSidebar visible />} />
+        <Route path="/cloudnote/myshares/:id" element={<NotesSidebar visible />} />
         <Route path="/cloudnote/notebooks" element={<NotesSidebar visible />} />
+        <Route path="/cloudnote/notebooks/:notebookId/:noteId" element={<NotesSidebar visible />} />
         <Route path="/cloudnote/notebooks/:id" element={<NotesSidebar visible />} />
         <Route path="/cloudnote/recyclebin" element={<NotesSidebar visible />} />
         <Route path="/cloudnote/recyclebin/:id" element={<NotesSidebar visible />} />
@@ -142,6 +179,12 @@ describe('NotesSidebar', () => {
     vi.spyOn(message, 'error').mockImplementation(vi.fn())
     vi.spyOn(message, 'success').mockImplementation(vi.fn())
     useNoteState.notes = [...notesFixture]
+    useNoteState.notesPagination = {
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      hasMore: false,
+    }
     useNoteState.starredNotes = []
     useNoteState.starredNotesPagination = {
       page: 1,
@@ -150,14 +193,36 @@ describe('NotesSidebar', () => {
       hasMore: false,
     }
     useNoteState.myShares = []
+    useNoteState.mySharesPagination = {
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      hasMore: false,
+    }
     useNoteState.deletedNotes = []
+    useNoteState.deletedNotesPagination = {
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      hasMore: false,
+    }
     useNoteState.fetchNotes = fetchNotesMock
+    useNoteState.loadMoreNotes = loadMoreNotesMock
     useNoteState.fetchStarredNotes = fetchStarredNotesMock
     useNoteState.loadMoreStarredNotes = loadMoreStarredNotesMock
     useNoteState.fetchMyShares = fetchMySharesMock
+    useNoteState.loadMoreMyShares = vi.fn()
     useNoteState.fetchDeletedNotes = fetchDeletedNotesMock
+    useNoteState.loadMoreDeletedNotes = vi.fn()
     useNoteState.isLoading = false
+    useNoteState.isNotesLoadingMore = false
     useNoteState.isStarredNotesLoadingMore = false
+    useNoteState.isMySharesLoadingMore = false
+    useNoteState.isDeletedNotesLoadingMore = false
+    useNoteState.hasLoadedNotes = true
+    useNoteState.hasLoadedStarredNotes = true
+    useNoteState.hasLoadedMyShares = true
+    useNoteState.hasLoadedDeletedNotes = true
     useNotebookState.notebooks = [
       { id: 'nb-1', name: '项目 A' },
       { id: 'nb-2', name: '项目 B' },
@@ -201,14 +266,14 @@ describe('NotesSidebar', () => {
 
     await waitFor(() => {
       expect(fetchNotesMock).toHaveBeenCalledWith({ field: 'updatedAt', order: 'desc', notebookId: 'nb-1' })
-      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/notebooks/2', {
+      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/notebooks/nb-1/2', {
         replace: true,
         state: { note: expect.objectContaining({ id: '2' }) },
       })
     })
   })
 
-  it('redirects /cloudnote/shares to the first shared note', async () => {
+  it('redirects /cloudnote/myshares to the first shared note', async () => {
     useNoteState.myShares = [
       {
         noteId: '2',
@@ -226,10 +291,10 @@ describe('NotesSidebar', () => {
       },
     ]
 
-    renderSidebar('/cloudnote/shares')
+    renderSidebar('/cloudnote/myshares')
 
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/shares/2', {
+      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/myshares/2', {
         replace: true,
         state: { note: expect.objectContaining({ id: '2' }) },
       })
@@ -249,10 +314,33 @@ describe('NotesSidebar', () => {
     })
   })
 
-  it('shows total recent note count', () => {
+  it('shows total recent note count without loading progress', () => {
+    useNoteState.notesPagination = {
+      page: 1,
+      pageSize: 20,
+      total: 39,
+      hasMore: true,
+    }
+
     renderSidebar('/cloudnote/recent/2')
 
-    expect(screen.getByText(/2\s*篇笔记/)).toBeInTheDocument()
+    expect(screen.getByText(/39\s*篇笔记/)).toBeInTheDocument()
+    expect(screen.queryByText(/已加载/)).not.toBeInTheDocument()
+  })
+
+  it('shows total recycle bin note count without loading progress', () => {
+    useNoteState.deletedNotes = [...notesFixture]
+    useNoteState.deletedNotesPagination = {
+      page: 1,
+      pageSize: 20,
+      total: 39,
+      hasMore: true,
+    }
+
+    renderSidebar('/cloudnote/recyclebin/2')
+
+    expect(screen.getByText(/39\s*篇笔记/)).toBeInTheDocument()
+    expect(screen.queryByText(/已加载/)).not.toBeInTheDocument()
   })
 
   it('fills notebook name from notebookId when recent notes omit notebookName', () => {
@@ -274,7 +362,122 @@ describe('NotesSidebar', () => {
   it('renders a voice indicator on notes with recordings', () => {
     renderSidebar('/cloudnote/recent/2')
 
-    expect(screen.getByTitle('有语音记录')).toBeInTheDocument()
+    expect(screen.getByLabelText('有语音记录')).toBeInTheDocument()
+  })
+
+  it('renders multiple status icons without hover for voice, star and shared notes', () => {
+    useNoteState.myShares = [
+      {
+        noteId: '2',
+        title: 'Alpha',
+        shareCode: 'share-2',
+        updatedAt: '2026-04-10T10:00:00.000Z',
+      },
+    ]
+
+    renderSidebar('/cloudnote/recent/2')
+
+    const noteCard = screen.getAllByTestId('recent-note-card').find((card) => within(card).queryByText('Alpha'))
+    expect(noteCard).toBeTruthy()
+    expect(within(noteCard).getByLabelText('有语音记录')).toBeInTheDocument()
+    expect(within(noteCard).getByRole('button', { name: '已分享' })).toBeInTheDocument()
+    expect(within(noteCard).getByRole('button', { name: '取消收藏' })).toBeInTheDocument()
+  })
+
+  it('shows note actions on hover and opens share panel without navigating away', async () => {
+    const user = userEvent.setup()
+    useNoteState.currentNote = {
+      id: '1',
+      title: 'Alpha',
+      notebookName: '项目 A',
+      createdAt: '2026-04-08T08:00:00.000Z',
+      updatedAt: '2026-04-09T08:00:00.000Z',
+      isStarred: false,
+    }
+    useNoteState.notes = [
+      {
+        id: '1',
+        title: 'Alpha',
+        notebookName: '项目 A',
+        createdAt: '2026-04-08T08:00:00.000Z',
+        updatedAt: '2026-04-09T08:00:00.000Z',
+        isStarred: false,
+      },
+      {
+        id: '2',
+        title: 'Beta',
+        notebookName: '项目 B',
+        createdAt: '2026-04-10T08:00:00.000Z',
+        updatedAt: '2026-04-10T10:00:00.000Z',
+        isStarred: false,
+      },
+    ]
+    renderSidebar('/cloudnote/recent/1')
+
+    const noteCard = screen.getAllByTestId('recent-note-card')[0]
+    await user.hover(noteCard)
+
+    const shareButton = within(noteCard).getByRole('button', { name: '分享' })
+    const starButton = within(noteCard).getByRole('button', { name: '收藏' })
+    const moreButton = within(noteCard).getByRole('button', { name: '更多' })
+
+    expect(shareButton).toHaveStyle({ opacity: '1' })
+    expect(starButton).toHaveStyle({ opacity: '1' })
+    expect(moreButton).toHaveStyle({ opacity: '1' })
+
+    await user.click(shareButton)
+
+    expect(screen.getByTestId('share-panel')).toHaveAttribute('data-note-id', '2')
+    expect(navigateMock).not.toHaveBeenCalled()
+  })
+
+  it('hides the more menu on unselected notes', () => {
+    renderSidebar('/cloudnote/recent/2')
+
+    const noteCards = screen.getAllByTestId('recent-note-card')
+    expect(within(noteCards[1]).queryByRole('button', { name: '更多' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the share icon visible for already shared notes without hover', () => {
+    useNoteState.currentNote = {
+      id: '1',
+      title: 'Alpha',
+      notebookName: '项目 A',
+      createdAt: '2026-04-08T08:00:00.000Z',
+      updatedAt: '2026-04-09T08:00:00.000Z',
+      isStarred: false,
+    }
+    useNoteState.notes = [
+      {
+        id: '1',
+        title: 'Alpha',
+        notebookName: '项目 A',
+        createdAt: '2026-04-08T08:00:00.000Z',
+        updatedAt: '2026-04-09T08:00:00.000Z',
+        isStarred: false,
+      },
+      {
+        id: '2',
+        title: 'Beta',
+        notebookName: '项目 B',
+        createdAt: '2026-04-10T08:00:00.000Z',
+        updatedAt: '2026-04-10T10:00:00.000Z',
+        isStarred: false,
+      },
+    ]
+    useNoteState.myShares = [
+      {
+        noteId: '2',
+        title: 'Beta',
+        shareCode: 'share-2',
+        updatedAt: '2026-04-10T10:00:00.000Z',
+      },
+    ]
+
+    renderSidebar('/cloudnote/recent/1')
+
+    const sharedCard = screen.getAllByTestId('recent-note-card')[1]
+    expect(within(sharedCard).getByRole('button', { name: '已分享' })).toHaveStyle({ opacity: '1' })
   })
 
   it('sorts by title ascending when selected from the menu', async () => {
@@ -310,6 +513,7 @@ describe('NotesSidebar', () => {
     await user.click(screen.getByRole('button', { name: '切换批量操作模式' }))
     await user.click(screen.getByText('全选'))
     await user.click(screen.getByRole('button', { name: '批量删除' }))
+    await user.click(screen.getByRole('button', { name: /确\s*认/ }))
 
     await waitFor(() => {
       expect(deleteNoteMock).toHaveBeenCalledTimes(2)
@@ -320,7 +524,7 @@ describe('NotesSidebar', () => {
   it('batch moves notebook notes and refetches notebook notes', async () => {
     const user = userEvent.setup()
     moveNoteMock.mockResolvedValue({})
-    renderSidebar('/cloudnote/notebooks/2')
+    renderSidebar('/cloudnote/notebooks/nb-1/2')
 
     await user.click(screen.getByRole('button', { name: '切换批量操作模式' }))
     await user.click(screen.getByText('全选'))
@@ -350,7 +554,7 @@ describe('NotesSidebar', () => {
         },
       },
     })
-    renderSidebar('/cloudnote/notebooks/2')
+    renderSidebar('/cloudnote/notebooks/nb-1/2')
 
     await user.click(screen.getByRole('button', { name: '切换批量操作模式' }))
     await user.click(screen.getByText('全选'))
@@ -391,11 +595,12 @@ describe('NotesSidebar', () => {
       { noteId: '2', title: 'Alpha', shareCode: 'share-2', updatedAt: '2026-04-10T10:00:00.000Z' },
       { noteId: '1', title: 'Beta', shareCode: 'share-1', updatedAt: '2026-04-09T08:00:00.000Z' },
     ]
-    renderSidebar('/cloudnote/shares/2')
+    renderSidebar('/cloudnote/myshares/2')
 
     await user.click(screen.getByRole('button', { name: '切换批量操作模式' }))
     await user.click(screen.getByText('全选'))
     await user.click(screen.getByRole('button', { name: '取消分享' }))
+    await user.click(screen.getByRole('button', { name: /确\s*认/ }))
 
     await waitFor(() => {
       expect(deleteShareMock).toHaveBeenCalledWith('share-2')
@@ -429,6 +634,7 @@ describe('NotesSidebar', () => {
     await user.click(screen.getByRole('button', { name: '切换批量操作模式' }))
     await user.click(screen.getByText('全选'))
     await user.click(screen.getByRole('button', { name: '彻底删除' }))
+    await user.click(screen.getAllByRole('button', { name: /删\s*除/ }).at(-1))
 
     await waitFor(() => {
       expect(permanentDeleteNoteMock).toHaveBeenCalledWith(['2', '1'])
@@ -460,8 +666,7 @@ describe('NotesSidebar', () => {
     })
   })
 
-  it('shows load more for starred notes and loads the next page', async () => {
-    const user = userEvent.setup()
+  it('auto loads the next starred page when scrolling to the bottom', async () => {
     useNoteState.starredNotes = [...notesFixture]
     useNoteState.starredNotesPagination = {
       page: 1,
@@ -470,11 +675,169 @@ describe('NotesSidebar', () => {
       hasMore: true,
     }
 
-    renderSidebar('/cloudnote/starred')
+    const { container } = renderSidebar('/cloudnote/starred')
+    const scrollContainer = container.querySelector('.notes-sidebar__scroll')
+    expect(scrollContainer).toBeTruthy()
 
-    await user.click(screen.getByRole('button', { name: '加载更多' }))
+    Object.defineProperty(scrollContainer, 'clientHeight', {
+      value: 400,
+      configurable: true,
+    })
+    Object.defineProperty(scrollContainer, 'scrollHeight', {
+      value: 800,
+      configurable: true,
+    })
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      value: 430,
+      configurable: true,
+      writable: true,
+    })
 
-    expect(loadMoreStarredNotesMock).toHaveBeenCalledWith({ field: 'updatedAt', order: 'desc' })
-    expect(screen.getByText('已加载 2/25')).toBeInTheDocument()
+    fireEvent.scroll(scrollContainer)
+
+    await waitFor(() => {
+      expect(loadMoreStarredNotesMock).toHaveBeenCalledWith({ field: 'updatedAt', order: 'desc' })
+    })
+    expect(screen.queryByRole('button', { name: '加载更多' })).not.toBeInTheDocument()
+  })
+
+  it('auto loads the next recent page when scrolling to the bottom', async () => {
+    useNoteState.notesPagination = {
+      page: 1,
+      pageSize: 20,
+      total: 26,
+      hasMore: true,
+    }
+
+    const { container } = renderSidebar('/cloudnote/recent/2')
+    const scrollContainer = container.querySelector('.notes-sidebar__scroll')
+    expect(scrollContainer).toBeTruthy()
+
+    Object.defineProperty(scrollContainer, 'clientHeight', {
+      value: 400,
+      configurable: true,
+    })
+    Object.defineProperty(scrollContainer, 'scrollHeight', {
+      value: 800,
+      configurable: true,
+    })
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      value: 430,
+      configurable: true,
+      writable: true,
+    })
+
+    fireEvent.scroll(scrollContainer)
+
+    await waitFor(() => {
+      expect(loadMoreNotesMock).toHaveBeenCalledWith({ field: 'updatedAt', order: 'desc' })
+    })
+  })
+
+  it('auto loads the next notebook page when scrolling to the bottom', async () => {
+    useNoteState.notesPagination = {
+      page: 1,
+      pageSize: 20,
+      total: 26,
+      hasMore: true,
+    }
+
+    const { container } = renderSidebar('/cloudnote/notebooks/nb-1/2')
+    const scrollContainer = container.querySelector('.notes-sidebar__scroll')
+    expect(scrollContainer).toBeTruthy()
+
+    Object.defineProperty(scrollContainer, 'clientHeight', {
+      value: 400,
+      configurable: true,
+    })
+    Object.defineProperty(scrollContainer, 'scrollHeight', {
+      value: 800,
+      configurable: true,
+    })
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      value: 430,
+      configurable: true,
+      writable: true,
+    })
+
+    fireEvent.scroll(scrollContainer)
+
+    await waitFor(() => {
+      expect(loadMoreNotesMock).toHaveBeenCalledWith({ field: 'updatedAt', order: 'desc', notebookId: 'nb-1' })
+    })
+  })
+
+  it('auto loads the next share page when scrolling to the bottom', async () => {
+    const loadMoreMySharesMock = vi.fn()
+    useNoteState.myShares = [
+      { id: 'share-1', noteId: '1', title: 'Alpha', updatedAt: '2026-04-10T10:00:00.000Z' },
+    ]
+    useNoteState.mySharesPagination = {
+      page: 1,
+      pageSize: 20,
+      total: 26,
+      hasMore: true,
+    }
+    useNoteState.loadMoreMyShares = loadMoreMySharesMock
+
+    const { container } = renderSidebar('/cloudnote/myshares/1')
+    const scrollContainer = container.querySelector('.notes-sidebar__scroll')
+    expect(scrollContainer).toBeTruthy()
+
+    Object.defineProperty(scrollContainer, 'clientHeight', {
+      value: 400,
+      configurable: true,
+    })
+    Object.defineProperty(scrollContainer, 'scrollHeight', {
+      value: 800,
+      configurable: true,
+    })
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      value: 430,
+      configurable: true,
+      writable: true,
+    })
+
+    fireEvent.scroll(scrollContainer)
+
+    await waitFor(() => {
+      expect(loadMoreMySharesMock).toHaveBeenCalledWith({})
+    })
+  })
+
+  it('auto loads the next recycle bin page when scrolling to the bottom', async () => {
+    const loadMoreDeletedNotesMock = vi.fn()
+    useNoteState.deletedNotes = [...notesFixture]
+    useNoteState.deletedNotesPagination = {
+      page: 1,
+      pageSize: 20,
+      total: 39,
+      hasMore: true,
+    }
+    useNoteState.loadMoreDeletedNotes = loadMoreDeletedNotesMock
+
+    const { container } = renderSidebar('/cloudnote/recyclebin/2')
+    const scrollContainer = container.querySelector('.notes-sidebar__scroll')
+    expect(scrollContainer).toBeTruthy()
+
+    Object.defineProperty(scrollContainer, 'clientHeight', {
+      value: 400,
+      configurable: true,
+    })
+    Object.defineProperty(scrollContainer, 'scrollHeight', {
+      value: 800,
+      configurable: true,
+    })
+    Object.defineProperty(scrollContainer, 'scrollTop', {
+      value: 430,
+      configurable: true,
+      writable: true,
+    })
+
+    fireEvent.scroll(scrollContainer)
+
+    await waitFor(() => {
+      expect(loadMoreDeletedNotesMock).toHaveBeenCalledWith({})
+    })
   })
 })

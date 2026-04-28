@@ -1,7 +1,6 @@
-﻿import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Alert, Button, Card, Spin } from 'antd'
-import { LoginOutlined, MobileOutlined } from '@ant-design/icons'
+import { Alert, Spin } from 'antd'
 import authService from '@/services/authService'
 import useAuthStore from '@/store/useAuthStore'
 import { consumePostLoginRedirect, peekPostLoginRedirect, rememberPostLoginRedirect } from '@/utils/authNavigation'
@@ -12,6 +11,7 @@ function LoginPage() {
   const { login: storeLogin, isAuthenticated, isLoading, error, clearError } = useAuthStore()
   const [isProcessing, setIsProcessing] = useState(false)
   const loginReason = new URLSearchParams(location.search).get('reason')
+  const authData = useMemo(() => authService.detectAuthFromUrl(), [location.search])
 
   const resolveAfterLoginPath = () => (
     location.state?.from
@@ -19,56 +19,50 @@ function LoginPage() {
     || '/cloudnote/recent'
   )
 
-  const handleAuthCallback = async () => {
-    try {
-      setIsProcessing(true)
-      clearError()
-
-      const authData = authService.detectAuthFromUrl()
-      if (authData) {
-        const redirectFromState = authService.getPostLoginRedirectFromUrl()
-        if (redirectFromState) {
-          rememberPostLoginRedirect(redirectFromState)
-        }
-        await storeLogin(authData)
-        authService.clearUrlAuthParams()
-        navigate(resolveAfterLoginPath(), { replace: true })
-      }
-    } catch (authError) {
-      console.error('Auth callback error:', authError)
-    } finally {
-      setIsProcessing(false)
-    }
-  }
-
   useEffect(() => {
     if (isAuthenticated) {
       navigate(resolveAfterLoginPath(), { replace: true })
       return
     }
 
-    void handleAuthCallback()
-  }, [isAuthenticated, navigate, location.key])
+    const handleLoginFlow = async () => {
+      if (authData) {
+        try {
+          setIsProcessing(true)
+          clearError()
 
-  const handleIdaasLogin = () => {
-    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
-    const rememberedPath = peekPostLoginRedirect()
-    const targetPath = (
-      location.state?.from
-      || rememberedPath
-      || (currentPath.startsWith('/login') ? '' : currentPath)
-    )
+          const redirectFromState = authService.getPostLoginRedirectFromUrl()
+          if (redirectFromState) {
+            rememberPostLoginRedirect(redirectFromState)
+          }
 
-    if (targetPath) {
-      rememberPostLoginRedirect(targetPath)
+          await storeLogin(authData)
+          authService.clearUrlAuthParams()
+          navigate(resolveAfterLoginPath(), { replace: true })
+        } catch (authError) {
+          console.error('Auth callback error:', authError)
+          setIsProcessing(false)
+        }
+        return
+      }
+
+      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
+      const rememberedPath = peekPostLoginRedirect()
+      const targetPath = (
+        location.state?.from
+        || rememberedPath
+        || (currentPath.startsWith('/login') ? '' : currentPath)
+      )
+
+      if (targetPath) {
+        rememberPostLoginRedirect(targetPath)
+      }
+
+      authService.redirectToIdaas(targetPath)
     }
 
-    authService.redirectToIdaas(targetPath)
-  }
-
-  const handleWelinkLogin = () => {
-    window.location.href = '/welink-auth'
-  }
+    void handleLoginFlow()
+  }, [authData, clearError, isAuthenticated, location.hash, location.key, location.search, location.state, navigate, storeLogin])
 
   return (
     <div
@@ -77,104 +71,31 @@ function LoginPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        flexDirection: 'column',
+        gap: 16,
         background: 'var(--surface)',
         padding: 24,
       }}
     >
-      <Card
-        style={{
-          width: '100%',
-          maxWidth: 448,
-          borderRadius: 16,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
-        }}
-        styles={{ body: { padding: 32 } }}
-      >
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--primary)', marginBottom: 8 }}>
-            云笔记
-          </h1>
-          <p style={{ fontSize: 14, color: '#8c8c8c' }}>
-            智能协作，高效记录
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <Button
-            type="primary"
-            size="large"
-            icon={<LoginOutlined />}
-            onClick={handleIdaasLogin}
-            loading={isLoading || isProcessing}
-            block
-            style={{
-              height: 52,
-              borderRadius: 8,
-              background: 'linear-gradient(135deg, var(--primary), var(--primary-container))',
-              border: 'none',
-              boxShadow: '0 4px 12px rgba(0,97,164,0.25)',
-              fontWeight: 600,
-            }}
-          >
-            IDaaS 账号登录
-          </Button>
-
-          <Button
-            size="large"
-            icon={<MobileOutlined />}
-            onClick={handleWelinkLogin}
-            disabled={isLoading || isProcessing}
-            block
-            style={{
-              height: 52,
-              borderRadius: 8,
-              borderColor: 'rgba(0,0,0,0.1)',
-              fontWeight: 600,
-            }}
-          >
-            Welink 免登
-          </Button>
-        </div>
-
-        {error ? (
-          <Alert
-            message={error}
-            type="error"
-            showIcon
-            closable
-            onClose={clearError}
-            style={{ marginTop: 16 }}
-          />
-        ) : null}
-
-        {!error && loginReason === 'expired' ? (
-          <Alert
-            message="当前登录已失效，请重新登录"
-            type="warning"
-            showIcon
-            style={{ marginTop: 16 }}
-          />
-        ) : null}
-
-        {(isLoading || isProcessing) ? (
-          <div style={{ textAlign: 'center', paddingTop: 16 }}>
-            <Spin tip="正在处理登录..." />
-          </div>
-        ) : null}
-      </Card>
-
-      <p
-        style={{
-          position: 'fixed',
-          bottom: 24,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          fontSize: 12,
-          color: '#bfbfbf',
-        }}
-      >
-        登录即表示您同意我们的服务条款和隐私政策
-      </p>
+      <Spin size="large" tip={authData ? '正在处理登录...' : '正在跳转登录...'} />
+      {error ? (
+        <Alert
+          message={error}
+          type="error"
+          showIcon
+          closable
+          onClose={clearError}
+          style={{ maxWidth: 420 }}
+        />
+      ) : null}
+      {!error && loginReason === 'expired' && !isLoading && !isProcessing ? (
+        <Alert
+          message="当前登录已失效，正在跳转登录"
+          type="warning"
+          showIcon
+          style={{ maxWidth: 420 }}
+        />
+      ) : null}
     </div>
   )
 }

@@ -53,6 +53,12 @@ describe('EditorFactory', () => {
     expect(screen.getByTestId('outline-editor')).toBeInTheDocument()
   })
 
+  it('should render OutlineEditor for type "mind"', () => {
+    render(<EditorFactory type="mind" {...defaultProps} />)
+
+    expect(screen.getByTestId('outline-editor')).toBeInTheDocument()
+  })
+
   it('should render HandwrittenEditor for type "handwritten"', () => {
     render(<EditorFactory type="handwritten" {...defaultProps} />)
 

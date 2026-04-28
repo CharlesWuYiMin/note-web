@@ -3,36 +3,28 @@ import { render, screen } from '@testing-library/react'
 import EmptyState from '@/components/common/EmptyState'
 
 describe('EmptyState', () => {
-  it('should render with default message', () => {
+  it('renders with the default message', () => {
     render(<EmptyState />)
 
-    expect(screen.getByText(/no data/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/no data/i).length).toBeGreaterThan(0)
   })
 
-  it('should render with custom description', () => {
-    render(<EmptyState description="暂无笔记" />)
+  it('renders a title and description when provided', () => {
+    render(<EmptyState title="暂无笔记" description="创建后会显示在这里。" />)
 
     expect(screen.getByText('暂无笔记')).toBeInTheDocument()
+    expect(screen.getByText('创建后会显示在这里。')).toBeInTheDocument()
   })
 
-  it('should render custom icon', () => {
-    const { container } = render(
-      <EmptyState icon={<span data-testid="custom-icon">📝</span>} />
-    )
+  it('renders a custom icon', () => {
+    render(<EmptyState icon={<span data-testid="custom-icon">Icon</span>} />)
 
     expect(screen.getByTestId('custom-icon')).toBeInTheDocument()
   })
 
-  it('should render action button when provided', () => {
+  it('renders an action when provided', () => {
     render(<EmptyState action={<button>创建笔记</button>} />)
 
-    expect(screen.getByRole('button', { name: /create/i })).toBeInTheDocument()
-  })
-
-  it('should apply size prop correctly', () => {
-    const { container } = render(<EmptyState size="large" />)
-
-    const emptyElement = container.querySelector('.ant-empty-normal')
-    expect(emptyElement).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '创建笔记' })).toBeInTheDocument()
   })
 })

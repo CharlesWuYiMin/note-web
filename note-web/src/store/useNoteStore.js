@@ -52,33 +52,164 @@ function mergeNoteIntoCollection(collection, note) {
   })
 }
 
-const useNoteStore = create((set, get) => ({
-  notes: [],
-  currentNote: null,
-  starredNotes: [],
-  starredNotesPagination: {
+function mergeUniqueNotes(existingNotes, nextNotes) {
+  if (!Array.isArray(existingNotes)) {
+    return Array.isArray(nextNotes) ? nextNotes : []
+  }
+
+  const seenIds = new Set(existingNotes.map((item) => item?.id || item?.noteId).filter(Boolean))
+  const additions = Array.isArray(nextNotes)
+    ? nextNotes.filter((item) => {
+      const itemId = item?.id || item?.noteId
+      return itemId && !seenIds.has(itemId)
+    })
+    : []
+
+  return [...existingNotes, ...additions]
+}
+
+function normalizeNoteId(note) {
+  return String(note?.id || note?.noteId || '').trim()
+}
+
+function syncShareStateInCollection(collection, noteId, isShared, shareData = {}) {
+  if (!Array.isArray(collection) || !noteId) {
+    return collection
+  }
+
+  return collection.map((item) => {
+    const itemId = normalizeNoteId(item)
+    if (itemId !== noteId) {
+      return item
+    }
+
+    if (isShared) {
+      return {
+        ...item,
+        ...shareData,
+        id: item?.id || shareData.id || shareData.noteId || noteId,
+        noteId: item?.noteId || shareData.noteId || noteId,
+        isShared: true,
+      }
+    }
+
+    const nextItem = {
+      ...item,
+      ...shareData,
+      isShared: false,
+    }
+
+    delete nextItem.shareCode
+    delete nextItem.shareUrl
+    delete nextItem.shareType
+    delete nextItem.shareUsers
+    delete nextItem.shareUserList
+    delete nextItem.sharedAt
+
+    return nextItem
+  })
+}
+
+function createPaginationState() {
+  return {
     page: 1,
     pageSize: 20,
     total: 0,
     hasMore: false,
-  },
+  }
+}
+
+function resolvePagination(data, page, pageSize, items) {
+  const total = Number(data?.total) || items.length || 0
+  const currentPage = Number(data?.page) || page
+  const size = Number(data?.size) || pageSize
+
+  return {
+    page: currentPage,
+    pageSize: size,
+    total,
+    hasMore: currentPage * size < total,
+  }
+}
+
+const useNoteStore = create((set, get) => ({
+  notes: [],
+  notesPagination: createPaginationState(),
+  currentNote: null,
+  starredNotes: [],
+  starredNotesPagination: createPaginationState(),
   myShares: [],
+  mySharesPagination: createPaginationState(),
   deletedNotes: [],
+  deletedNotesPagination: createPaginationState(),
   isLoading: false,
+  isNotesLoadingMore: false,
   isStarredNotesLoadingMore: false,
+  isMySharesLoadingMore: false,
+  isDeletedNotesLoadingMore: false,
+  hasLoadedNotes: false,
+  hasLoadedStarredNotes: false,
+  hasLoadedMyShares: false,
+  hasLoadedDeletedNotes: false,
   error: null,
 
   fetchNotes: async (params = {}) => {
-    set({ isLoading: true, error: null })
+    const {
+      page = 1,
+      pageSize = 20,
+      append = page > 1,
+      ...restParams
+    } = params
+
+    set({
+      isLoading: append ? get().isLoading : true,
+      isNotesLoadingMore: append,
+      error: null,
+    })
     try {
-      const data = await noteService.getNotes(params)
-      set({
-        notes: normalizeCollection(data),
-        isLoading: false,
+      const data = await noteService.getNotes({
+        page,
+        pageSize,
+        ...restParams,
+      })
+      const items = normalizeCollection(data)
+
+      set((state) => {
+        const nextNotes = append
+          ? mergeUniqueNotes(state.notes, items)
+          : items
+
+        return {
+          notes: nextNotes,
+          notesPagination: resolvePagination(data, page, pageSize, items),
+          isLoading: false,
+          isNotesLoadingMore: false,
+        }
       })
     } catch (error) {
-      set({ error: error.message, isLoading: false })
+      set({
+        error: error.message,
+        isLoading: false,
+        isNotesLoadingMore: false,
+      })
+    } finally {
+      set({ hasLoadedNotes: true })
     }
+  },
+
+  loadMoreNotes: async (params = {}) => {
+    const { notesPagination } = get()
+
+    if (!notesPagination.hasMore || get().isNotesLoadingMore) {
+      return
+    }
+
+    await get().fetchNotes({
+      ...params,
+      page: notesPagination.page + 1,
+      pageSize: notesPagination.pageSize,
+      append: true,
+    })
   },
 
   loadNoteById: async (id) => {
@@ -137,24 +268,16 @@ const useNoteStore = create((set, get) => ({
         pageSize,
         ...restParams,
       })
-      const items = Array.isArray(data?.items) ? data.items : []
-      const total = Number(data?.total) || 0
-      const currentPage = Number(data?.page) || page
-      const size = Number(data?.size) || pageSize
+      const items = normalizeCollection(data)
 
       set((state) => {
         const mergedItems = append
-          ? [...state.starredNotes, ...items.filter((item) => !state.starredNotes.some((note) => note.id === item.id))]
+          ? mergeUniqueNotes(state.starredNotes, items)
           : items
 
         return {
           starredNotes: mergedItems,
-          starredNotesPagination: {
-            page: currentPage,
-            pageSize: size,
-            total,
-            hasMore: currentPage * size < total,
-          },
+          starredNotesPagination: resolvePagination(data, page, pageSize, items),
           isLoading: false,
           isStarredNotesLoadingMore: false,
         }
@@ -165,6 +288,8 @@ const useNoteStore = create((set, get) => ({
         isLoading: false,
         isStarredNotesLoadingMore: false,
       })
+    } finally {
+      set({ hasLoadedStarredNotes: true })
     }
   },
 
@@ -183,27 +308,122 @@ const useNoteStore = create((set, get) => ({
     })
   },
 
-  fetchMyShares: async () => {
-    set({ isLoading: true, error: null })
+  fetchMyShares: async (params = {}) => {
+    const {
+      page = 1,
+      pageSize = 20,
+      append = page > 1,
+    } = params
+
+    set({
+      isLoading: append ? get().isLoading : true,
+      isMySharesLoadingMore: append,
+      error: null,
+    })
     try {
-      const data = await noteService.getMyShares()
-      set({ myShares: normalizeCollection(data), isLoading: false })
+      const data = await noteService.getMyShares({
+        page,
+        pageSize,
+      })
+      const items = normalizeCollection(data)
+      set((state) => ({
+        myShares: append ? mergeUniqueNotes(state.myShares, items) : items,
+        mySharesPagination: resolvePagination(data, page, pageSize, items),
+        isLoading: false,
+        isMySharesLoadingMore: false,
+      }))
     } catch (error) {
-      set({ error: error.message, isLoading: false })
+      set({
+        error: error.message,
+        isLoading: false,
+        isMySharesLoadingMore: false,
+      })
+    } finally {
+      set({ hasLoadedMyShares: true })
     }
   },
 
-  fetchDeletedNotes: async () => {
-    set({ isLoading: true, error: null })
-    try {
-      const data = await noteService.getDeletedNotes()
-      set({ deletedNotes: normalizeCollection(data), isLoading: false })
-    } catch (error) {
-      set({ error: error.message, isLoading: false })
+  loadMoreMyShares: async () => {
+    const { mySharesPagination } = get()
+
+    if (!mySharesPagination.hasMore || get().isMySharesLoadingMore) {
+      return
     }
+
+    await get().fetchMyShares({
+      page: mySharesPagination.page + 1,
+      pageSize: mySharesPagination.pageSize,
+      append: true,
+    })
+  },
+
+  fetchDeletedNotes: async (params = {}) => {
+    const {
+      page = 1,
+      pageSize = 20,
+      append = page > 1,
+    } = params
+
+    set({
+      isLoading: append ? get().isLoading : true,
+      isDeletedNotesLoadingMore: append,
+      error: null,
+    })
+    try {
+      const data = await noteService.getDeletedNotes({
+        page,
+        pageSize,
+      })
+      const items = normalizeCollection(data)
+      set((state) => ({
+        deletedNotes: append ? mergeUniqueNotes(state.deletedNotes, items) : items,
+        deletedNotesPagination: resolvePagination(data, page, pageSize, items),
+        isLoading: false,
+        isDeletedNotesLoadingMore: false,
+      }))
+    } catch (error) {
+      set({
+        error: error.message,
+        isLoading: false,
+        isDeletedNotesLoadingMore: false,
+      })
+    } finally {
+      set({ hasLoadedDeletedNotes: true })
+    }
+  },
+
+  loadMoreDeletedNotes: async () => {
+    const { deletedNotesPagination } = get()
+
+    if (!deletedNotesPagination.hasMore || get().isDeletedNotesLoadingMore) {
+      return
+    }
+
+    await get().fetchDeletedNotes({
+      page: deletedNotesPagination.page + 1,
+      pageSize: deletedNotesPagination.pageSize,
+      append: true,
+    })
   },
 
   setCurrentNote: (note) => set({ currentNote: note }),
+
+  syncNoteShareState: (noteId, isShared, shareData = {}) => {
+    const normalizedNoteId = String(noteId || '').trim()
+    if (!normalizedNoteId) {
+      return
+    }
+
+    set((state) => ({
+      notes: syncShareStateInCollection(state.notes, normalizedNoteId, isShared, shareData),
+      starredNotes: syncShareStateInCollection(state.starredNotes, normalizedNoteId, isShared, shareData),
+      myShares: syncShareStateInCollection(state.myShares, normalizedNoteId, isShared, shareData),
+      deletedNotes: syncShareStateInCollection(state.deletedNotes, normalizedNoteId, isShared, shareData),
+      currentNote: normalizeNoteId(state.currentNote) === normalizedNoteId
+        ? syncShareStateInCollection([state.currentNote], normalizedNoteId, isShared, shareData)[0]
+        : state.currentNote,
+    }))
+  },
 
   importDocumentArchive: async (file) => {
     set({ isLoading: true, error: null })
@@ -220,8 +440,6 @@ const useNoteStore = create((set, get) => ({
   getImportTask: async (taskId) => noteService.getImportTask(taskId),
 
   getImportTasks: async () => noteService.getImportTasks(),
-
-  getImportArchiveMaxBytes: async () => noteService.getImportArchiveMaxBytes(),
 
   getImportTaskPollIntervalMs: async () => noteService.getImportTaskPollIntervalMs(),
 
@@ -241,6 +459,13 @@ const useNoteStore = create((set, get) => ({
         }
       set((state) => ({
         notes: [newNote, ...state.notes],
+        notesPagination: {
+          ...state.notesPagination,
+          total: state.notesPagination.total + 1,
+          hasMore:
+            state.notesPagination.total + 1
+            > state.notesPagination.page * state.notesPagination.pageSize,
+        },
         isLoading: false,
       }))
       return newNote
@@ -308,9 +533,36 @@ const useNoteStore = create((set, get) => ({
 
         return {
           notes: state.notes.filter((n) => n.id !== id),
+          notesPagination: {
+            ...state.notesPagination,
+            total: Math.max(0, state.notesPagination.total - 1),
+            hasMore:
+              Math.max(0, state.notesPagination.total - 1)
+              > state.notesPagination.page * state.notesPagination.pageSize,
+          },
           starredNotes: state.starredNotes.filter((n) => n.id !== id),
           myShares: state.myShares.filter((item) => item.id !== id && item.noteId !== id),
+          mySharesPagination: {
+            ...state.mySharesPagination,
+            total: state.myShares.some((item) => item.id === id || item.noteId === id)
+              ? Math.max(0, state.mySharesPagination.total - 1)
+              : state.mySharesPagination.total,
+            hasMore:
+              state.myShares.some((item) => item.id === id || item.noteId === id)
+                ? Math.max(0, state.mySharesPagination.total - 1)
+                  > state.mySharesPagination.page * state.mySharesPagination.pageSize
+                : state.mySharesPagination.hasMore,
+          },
           deletedNotes: nextDeletedNotes,
+          deletedNotesPagination: deletedNote
+            ? {
+              ...state.deletedNotesPagination,
+              total: state.deletedNotesPagination.total + 1,
+              hasMore:
+                state.deletedNotesPagination.total + 1
+                > state.deletedNotesPagination.page * state.deletedNotesPagination.pageSize,
+            }
+            : state.deletedNotesPagination,
           currentNote: state.currentNote?.id === id ? null : state.currentNote,
           isLoading: false,
         }
@@ -327,6 +579,20 @@ const useNoteStore = create((set, get) => ({
       await noteService.restoreDeletedNote(id)
       set((state) => ({
         deletedNotes: state.deletedNotes.filter((note) => note.id !== id),
+        deletedNotesPagination: {
+          ...state.deletedNotesPagination,
+          total: Math.max(0, state.deletedNotesPagination.total - 1),
+          hasMore:
+            Math.max(0, state.deletedNotesPagination.total - 1)
+            > state.deletedNotesPagination.page * state.deletedNotesPagination.pageSize,
+        },
+        notesPagination: {
+          ...state.notesPagination,
+          total: state.notesPagination.total + 1,
+          hasMore:
+            state.notesPagination.total + 1
+            > state.notesPagination.page * state.notesPagination.pageSize,
+        },
         isLoading: false,
       }))
     } catch (error) {
@@ -341,6 +607,13 @@ const useNoteStore = create((set, get) => ({
       await noteService.permanentDeleteNote(id)
       set((state) => ({
         deletedNotes: state.deletedNotes.filter((note) => note.id !== id),
+        deletedNotesPagination: {
+          ...state.deletedNotesPagination,
+          total: Math.max(0, state.deletedNotesPagination.total - 1),
+          hasMore:
+            Math.max(0, state.deletedNotesPagination.total - 1)
+            > state.deletedNotesPagination.page * state.deletedNotesPagination.pageSize,
+        },
         isLoading: false,
       }))
     } catch (error) {
@@ -353,7 +626,11 @@ const useNoteStore = create((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       await noteService.clearRecycleBin()
-      set({ deletedNotes: [], isLoading: false })
+      set({
+        deletedNotes: [],
+        deletedNotesPagination: createPaginationState(),
+        isLoading: false,
+      })
     } catch (error) {
       set({ error: error.message, isLoading: false })
       throw error

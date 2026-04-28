@@ -1,8 +1,12 @@
 ﻿﻿import React, { useEffect, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button, Empty, List, Spin, Tag, Tooltip, Typography } from 'antd'
 import {
   FileTextOutlined,
+  MoreOutlined,
+  StarFilled,
   StarOutlined,
   ShareAltOutlined,
   FolderOutlined,
@@ -13,11 +17,12 @@ import {
   HistoryOutlined,
 } from '@ant-design/icons'
 import useNote from '@/hooks/useNote'
+import '@/i18n'
 import WorkspaceSectionLayout from '@/components/workspace/WorkspaceSectionLayout'
 
 const { Text, Paragraph } = Typography
 
-function NoteListItem({ note, onClick, onStarToggle, onShare, onMore }) {
+function NoteListItem({ note, onClick, onStarToggle, onShare, onMore, t }) {
   return (
     <List.Item
       key={note.id}
@@ -26,38 +31,84 @@ function NoteListItem({ note, onClick, onStarToggle, onShare, onMore }) {
         borderRadius: 16,
         marginBottom: 10,
         cursor: 'pointer',
-        background: note.isStarred ? 'rgba(0,97,164,0.05)' : '#fff',
-        border: note.isStarred ? '1px solid rgba(0,97,164,0.12)' : '1px solid rgba(16,34,58,0.06)',
+        background: note.isShared
+          ? 'rgba(37,99,235,0.05)'
+          : note.isStarred
+            ? 'rgba(0,97,164,0.05)'
+            : '#fff',
+        border: note.isShared
+          ? '1px solid rgba(37,99,235,0.14)'
+          : note.isStarred
+            ? '1px solid rgba(0,97,164,0.12)'
+            : '1px solid rgba(16,34,58,0.06)',
         boxShadow: '0 8px 22px rgba(16,34,58,0.03)',
       }}
       actions={[
-        <Tooltip title={note.isStarred ? '取消星标' : '星标'} key="star">
+        <Tooltip
+          title={note.isStarred ? t('note.unstarNote', { defaultValue: '取消收藏' }) : t('note.starNote', { defaultValue: '收藏笔记' })}
+          key="star"
+          placement="top"
+          color="#2f3136"
+          mouseEnterDelay={0.1}
+          mouseLeaveDelay={0.05}
+        >
           <Button
             type="text"
             size="small"
-            icon={note.isStarred ? <StarOutlined style={{ color: 'var(--primary)' }} /> : <StarOutlined />}
+            className={[
+              'cloudnote-icon-action-btn',
+              'cloudnote-icon-action-btn--compact',
+              note.isStarred ? 'cloudnote-icon-action-btn--active' : '',
+            ].filter(Boolean).join(' ')}
+            aria-label={note.isStarred ? t('note.unstarNote', { defaultValue: '取消收藏' }) : t('note.starNote', { defaultValue: '收藏笔记' })}
+            icon={note.isStarred ? <StarFilled style={{ color: 'var(--primary)' }} /> : <StarOutlined />}
             onClick={(e) => {
               e.stopPropagation()
               onStarToggle?.(note)
             }}
           />
         </Tooltip>,
-        <Tooltip title="分享" key="share">
+        <Tooltip
+          title={note.isShared ? t('note.openSharePanel', { defaultValue: '打开分享面板' }) : t('note.shareNote', { defaultValue: '分享笔记' })}
+          key="share"
+          placement="top"
+          color="#2f3136"
+          mouseEnterDelay={0.1}
+          mouseLeaveDelay={0.05}
+        >
           <Button
             type="text"
             size="small"
-            icon={<ShareAltOutlined />}
+            className={[
+              'cloudnote-icon-action-btn',
+              'cloudnote-icon-action-btn--compact',
+              note.isShared ? 'cloudnote-icon-action-btn--active' : '',
+            ].filter(Boolean).join(' ')}
+            aria-label={note.isShared ? t('note.openSharePanel', { defaultValue: '已分享' }) : t('note.shareNote', { defaultValue: '分享笔记' })}
+            icon={<ShareAltOutlined style={{ color: note.isShared ? 'var(--primary)' : undefined }} />}
             onClick={(e) => {
               e.stopPropagation()
               onShare?.(note)
             }}
+            style={{
+              color: note.isShared ? 'var(--primary)' : undefined,
+            }}
           />
         </Tooltip>,
-        <Tooltip title="更多" key="more">
+        <Tooltip
+          title={t('note.moreActions', { defaultValue: '更多操作' })}
+          key="more"
+          placement="top"
+          color="#2f3136"
+          mouseEnterDelay={0.1}
+          mouseLeaveDelay={0.05}
+        >
           <Button
             type="text"
             size="small"
-            icon={<DeleteOutlined />}
+            className="cloudnote-icon-action-btn cloudnote-icon-action-btn--compact"
+            aria-label={t('note.moreActions', { defaultValue: '更多操作' })}
+            icon={<MoreOutlined />}
             onClick={(e) => {
               e.stopPropagation()
               onMore?.(note)
@@ -85,9 +136,7 @@ function NoteListItem({ note, onClick, onStarToggle, onShare, onMore }) {
             <FileTextOutlined />
           </div>
         }
-        title={
-          <SpaceTitle note={note} />
-        }
+          title={<SpaceTitle note={note} />}
         description={
           <div>
             <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '6px 0 8px', color: 'rgba(16,34,58,0.56)' }}>
@@ -109,9 +158,32 @@ function NoteListItem({ note, onClick, onStarToggle, onShare, onMore }) {
 function SpaceTitle({ note }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-      <span style={{ fontWeight: note.isStarred ? 700 : 600, fontSize: 15, color: note.isStarred ? 'var(--primary)' : '#10223a' }}>
-        {note.title || '未命名笔记'}
-      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <span style={{ fontWeight: note.isStarred ? 700 : 600, fontSize: 15, color: note.isStarred ? 'var(--primary)' : '#10223a' }}>
+          {note.title || '未命名笔记'}
+        </span>
+        {note.isShared ? (
+          <span
+            className="cloudnote-icon-action-btn cloudnote-icon-action-btn--compact cloudnote-icon-action-btn--active"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '0 8px',
+              height: 22,
+              borderRadius: 999,
+              color: 'var(--primary)',
+              background: 'rgba(37,99,235,0.08)',
+              fontSize: 11,
+              fontWeight: 700,
+              flexShrink: 0,
+            }}
+          >
+            <ShareAltOutlined style={{ fontSize: 11 }} />
+            已分享
+          </span>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -119,28 +191,41 @@ function SpaceTitle({ note }) {
 function RecentNotesPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { notes, isLoading, fetchNotes, toggleStar } = useNote()
+  const { t } = useTranslation()
+  const { notes, notesPagination, isLoading, fetchNotes, toggleStar } = useNote()
   const didRedirectRef = useRef(false)
+  const [isBootstrapping, setIsBootstrapping] = useState(true)
 
   useEffect(() => {
-    fetchNotes()
+    let active = true
+    setIsBootstrapping(true)
+    Promise.resolve(fetchNotes()).finally(() => {
+      if (active) {
+        setIsBootstrapping(false)
+      }
+    })
+
+    return () => {
+      active = false
+    }
   }, [fetchNotes])
 
   useEffect(() => {
-    if (location.pathname === '/cloudnote/recent' && !isLoading && notes.length > 0 && !didRedirectRef.current) {
+    if (location.pathname === '/cloudnote/recent' && !isLoading && !isBootstrapping && notes.length > 0 && !didRedirectRef.current) {
       didRedirectRef.current = true
       navigate(`/cloudnote/recent/${notes[0].id}`, { replace: true })
     }
-  }, [location.pathname, isLoading, navigate, notes])
+  }, [location.pathname, isLoading, isBootstrapping, navigate, notes])
 
   const stats = useMemo(() => {
+    const totalRecentNotes = Number(notesPagination?.total) || notes.length
     const starredCount = notes.filter((note) => note.isStarred).length
     const notebookCount = new Set(notes.map((note) => note.notebookName).filter(Boolean)).size
     return [
       {
         key: 'total',
         label: '近期笔记',
-        value: notes.length,
+        value: totalRecentNotes,
         hint: '登录后默认打开这一组内容',
         icon: <HistoryOutlined />,
       },
@@ -166,12 +251,12 @@ function RecentNotesPage() {
         icon: <SafetyCertificateOutlined />,
       },
     ]
-  }, [notes])
+  }, [notes, notesPagination?.total])
 
   const tabs = [
     { key: 'recent', label: '近期笔记', icon: <HistoryOutlined />, active: true, onClick: () => navigate('/cloudnote/recent') },
     { key: 'starred', label: '星标笔记', icon: <StarOutlined />, active: false, onClick: () => navigate('/cloudnote/starred') },
-    { key: 'shares', label: '我的分享', icon: <ShareAltOutlined />, active: false, onClick: () => navigate('/cloudnote/shares') },
+    { key: 'myshares', label: '我的分享', icon: <ShareAltOutlined />, active: false, onClick: () => navigate('/cloudnote/myshares') },
     { key: 'notebooks', label: '笔记本', icon: <FolderOutlined />, active: false, onClick: () => navigate('/cloudnote/notebooks') },
     { key: 'recyclebin', label: '回收站', icon: <DeleteOutlined />, active: false, onClick: () => navigate('/cloudnote/recyclebin') },
   ]
@@ -191,8 +276,8 @@ function RecentNotesPage() {
         <Tag color="blue" style={{ borderRadius: 999, marginInlineEnd: 0 }}>按时间排序</Tag>
       </div>
 
-      <Spin spinning={isLoading}>
-        {notes.length === 0 && !isLoading ? (
+      <Spin spinning={isLoading || isBootstrapping}>
+        {notes.length === 0 && !isLoading && !isBootstrapping ? (
           <Empty
             style={{ padding: '48px 0' }}
             description="暂无近期笔记"
@@ -205,6 +290,7 @@ function RecentNotesPage() {
               <NoteListItem
                 key={note.id}
                 note={note}
+                t={t}
                 onClick={(item) => navigate(`/cloudnote/recent/${item.id}`)}
                 onStarToggle={async (item) => {
                   await toggleStar(item)

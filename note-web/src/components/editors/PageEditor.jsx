@@ -5,28 +5,7 @@ import { KooEditor, getRuntimeConfig } from '@cloud/koopage-editor-sdk'
 import useAuth from '@/hooks/useAuth'
 import authService from '@/services/authService'
 import { getAppConfig } from '@/utils/config'
-import { preloadPageEditorResources } from '@/utils/pageEditorPreload'
-
-function serializeContent(editor) {
-  if (!editor?.getContent) {
-    return ''
-  }
-
-  const content = editor.getContent()
-  if (content == null) {
-    return ''
-  }
-
-  if (typeof content === 'string') {
-    return content
-  }
-
-  try {
-    return JSON.stringify(content)
-  } catch {
-    return String(content)
-  }
-}
+import { reportTiming } from '@/utils/observability'
 
 function formatEditorInitError(error, runtimeConfig) {
   const message = error?.message || '页面编辑器初始化失败'
@@ -38,13 +17,21 @@ function formatEditorInitError(error, runtimeConfig) {
   return details.length > 0 ? `${message} (${details.join(', ')})` : message
 }
 
+function applyEditorContainerPadding(root) {
+  const container = root?.querySelector?.('#js-tocs-container')
+  if (!container) {
+    return false
+  }
+
+  container.style.padding = `2rem 5rem`
+  container.style.boxSizing = 'border-box'
+  return true
+}
+
 function PageEditorV2({
-  onChange,
-  onSave,
   note,
   placeholder,
   readOnly = false,
-  headerActions = null,
 }) {
   const { api, editor } = getAppConfig()
   const pageEditorConfig = editor?.page || null
@@ -63,54 +50,24 @@ function PageEditorV2({
   const { user, userId, appId } = useAuth()
   const mountRef = useRef(null)
   const editorRef = useRef(null)
-  const saveTimerRef = useRef(null)
-  const lastSerializedRef = useRef('')
-  const onChangeRef = useRef(onChange)
-  const onSaveRef = useRef(onSave)
+  const initStartedAtRef = useRef(0)
   const [editorStatus, setEditorStatus] = useState('loading')
   const [errorMessage, setErrorMessage] = useState('')
   const [mountSize, setMountSize] = useState({ width: 0, height: 0 })
   const isDev = import.meta.env.DEV
-  const useGeneratedEditorJwt = pageEditorAuthEnabled
-
-  useEffect(() => {
-    onChangeRef.current = onChange
-  }, [onChange])
-
-  useEffect(() => {
-    onSaveRef.current = onSave
-  }, [onSave])
 
   const runtimeAuth = useMemo(
-    () => {
-      const legacyAuth = {
-        appId: appId || authService.getAppId() || '',
-        userId: userId || authService.getUserId() || '',
-        token: authService.getToken() || '',
-        user: {
-          id: user?.id || userId || authService.getUserId() || '',
-          name: user?.name || user?.realName || user?.nickName || userId || authService.getUserId() || 'unknown',
-          realName: user?.realName || user?.name || user?.nickName || userId || authService.getUserId() || 'unknown',
-          avatar: user?.avatar || user?.avatarUrl || user?.picture || '',
-        },
-      }
-
-      if (!useGeneratedEditorJwt) {
-        return legacyAuth
-      }
-
-      return authService.createEditorAuth({
-        documentId: note?.id,
-        user,
-        userId: userId || authService.getUserId(),
-        appId,
-        readOnly,
-      })
-    },
+    () => authService.createEditorAuth({
+      documentId: note?.id,
+      user,
+      userId: userId || authService.getUserId(),
+      appId,
+      readOnly,
+      editorKind: 'page',
+    }),
     [
       appId,
       note?.id,
-      pageEditorAuthEnabled,
       user?.avatar,
       user?.avatarUrl,
       user?.id,
@@ -237,11 +194,7 @@ function PageEditorV2({
     let frameId = null
     setEditorStatus('loading')
     setErrorMessage('')
-
-    preloadPageEditorResources({
-      editorUrl: runtimeConfig?.editorUrl,
-      appId: runtimeAuth?.appId || pageEditorAuthAppId || appId || authService.getAppId(),
-    })
+    initStartedAtRef.current = Date.now()
 
     frameId = window.requestAnimationFrame(() => {
       KooEditor.create({
@@ -254,6 +207,11 @@ function PageEditorV2({
         pure: {
           cover: false,
           title: false,
+        },
+        toc:{
+          show : true,
+          position : 'left',
+          collapsedDefault : true,
         },
         extensions: {
           LocalKit: true,
@@ -272,28 +230,8 @@ function PageEditorV2({
             onDocInfoStateChanged: () => { },
           },
           link: {
-            onOpen: () => { },
+            promptWhenLinking: true, 
           },
-        },
-        onTitleUpdate: () => { },
-        onSavingToDocument: async () => ({ success: true }),
-        onUpdate: ({ editor }) => {
-          const nextContent = serializeContent(editor)
-
-          if (!nextContent || nextContent === lastSerializedRef.current) {
-            return
-          }
-
-          lastSerializedRef.current = nextContent
-          onChangeRef.current?.(nextContent)
-
-          if (saveTimerRef.current) {
-            window.clearTimeout(saveTimerRef.current)
-          }
-
-          saveTimerRef.current = window.setTimeout(() => {
-            onSaveRef.current?.(nextContent)
-          }, 500)
         },
       }).then((editor) => {
         if (cancelled) {
@@ -304,8 +242,14 @@ function PageEditorV2({
         }
 
         editorRef.current = editor
-        lastSerializedRef.current = serializeContent(editor) || lastSerializedRef.current
+        applyEditorContainerPadding(mountRef.current)
         setEditorStatus('ready')
+        reportTiming('page_editor_init', Date.now() - initStartedAtRef.current, {
+          status: 'success',
+          noteId: note?.id || '',
+          editorUrl: runtimeConfig?.editorUrl || '',
+          apiUrl: runtimeConfig?.apiUrl || '',
+        })
         if (isDev) {
           console.debug('[PageEditor] ready', {
             noteId: note?.id,
@@ -320,6 +264,13 @@ function PageEditorV2({
 
         setEditorStatus('error')
         setErrorMessage(formatEditorInitError(error, runtimeConfig))
+        reportTiming('page_editor_init', Date.now() - initStartedAtRef.current, {
+          status: 'error',
+          noteId: note?.id || '',
+          editorUrl: runtimeConfig?.editorUrl || '',
+          apiUrl: runtimeConfig?.apiUrl || '',
+          errorName: error?.name || 'Error',
+        })
         if (isDev) {
           console.error('[PageEditor] failed', {
             error,
@@ -334,10 +285,6 @@ function PageEditorV2({
       cancelled = true
       if (frameId != null) {
         window.cancelAnimationFrame(frameId)
-      }
-      if (saveTimerRef.current) {
-        window.clearTimeout(saveTimerRef.current)
-        saveTimerRef.current = null
       }
       if (typeof editorRef.current?.destroy === 'function') {
         editorRef.current.destroy()

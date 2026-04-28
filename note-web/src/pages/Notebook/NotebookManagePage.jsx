@@ -1,5 +1,6 @@
 ﻿﻿import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Card,
@@ -137,9 +138,20 @@ function NotebookManagePage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingNotebook, setEditingNotebook] = useState(null)
   const [form] = Form.useForm()
+  const [isBootstrapping, setIsBootstrapping] = useState(true)
 
   useEffect(() => {
-    fetchNotebooks()
+    let active = true
+    setIsBootstrapping(true)
+    Promise.resolve(fetchNotebooks()).finally(() => {
+      if (active) {
+        setIsBootstrapping(false)
+      }
+    })
+
+    return () => {
+      active = false
+    }
   }, [fetchNotebooks])
 
   const stats = useMemo(() => {
@@ -155,7 +167,7 @@ function NotebookManagePage() {
   const tabs = [
     { key: 'recent', label: '近期笔记', icon: <HistoryOutlined />, active: false, onClick: () => navigate('/cloudnote/recent') },
     { key: 'starred', label: '星标笔记', icon: <StarOutlined />, active: false, onClick: () => navigate('/cloudnote/starred') },
-    { key: 'shares', label: '我的分享', icon: <ShareAltOutlined />, active: false, onClick: () => navigate('/cloudnote/shares') },
+    { key: 'myshares', label: '我的分享', icon: <ShareAltOutlined />, active: false, onClick: () => navigate('/cloudnote/myshares') },
     { key: 'notebooks', label: '笔记本', icon: <FolderOutlined />, active: true, onClick: () => navigate('/cloudnote/notebooks') },
     { key: 'recyclebin', label: '回收站', icon: <DeleteOutlined />, active: false, onClick: () => navigate('/cloudnote/recyclebin') },
   ]
@@ -230,8 +242,8 @@ function NotebookManagePage() {
         <Tag color="blue" style={{ borderRadius: 999 }}>网格视图</Tag>
       </div>
 
-      <Spin spinning={isLoading}>
-        {notebooks.length === 0 && !isLoading ? (
+      <Spin spinning={isLoading || isBootstrapping}>
+        {notebooks.length === 0 && !isLoading && !isBootstrapping ? (
           <Empty description={t('notebook.empty')} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: '48px 0' }} />
         ) : (
           <div style={{

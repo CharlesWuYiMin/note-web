@@ -1,7 +1,8 @@
 ﻿﻿import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Empty, Pagination, Spin, Typography } from 'antd'
+import { Pagination, Spin, Typography } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
+import EmptyState from '@/components/common/EmptyState'
 import SearchResultToolbar from '@/components/search/SearchResultToolbar'
 import SearchResultList from '@/components/search/SearchResultList'
 import searchService from '@/services/searchService'
@@ -21,13 +22,14 @@ const SearchResultPage = () => {
       : status === 'star'
         ? '/cloudnote/starred'
         : status === 'share'
-          ? '/cloudnote/shares'
+          ? '/cloudnote/myshares'
           : '/cloudnote/recent'
   ), [status])
 
   const [results, setResults] = useState([])
   const [recentSearches, setRecentSearches] = useState([])
   const [loading, setLoading] = useState(false)
+  const [isBootstrapping, setIsBootstrapping] = useState(true)
   const [sort, setSort] = useState(DEFAULT_SEARCH_SORT)
   const [page, setPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
@@ -56,11 +58,25 @@ const SearchResultPage = () => {
     if (!query) {
       setResults([])
       setTotalCount(0)
+      setIsBootstrapping(false)
       return
     }
 
-    performSearch(query, page)
-    loadRecentSearches()
+    let active = true
+    setIsBootstrapping(true)
+
+    Promise.all([
+      performSearch(query, page),
+      loadRecentSearches(),
+    ]).finally(() => {
+      if (active) {
+        setIsBootstrapping(false)
+      }
+    })
+
+    return () => {
+      active = false
+    }
   }, [query, page, status])
 
   const performSearch = async (searchQuery, currentPage) => {
@@ -102,12 +118,12 @@ const SearchResultPage = () => {
 
   if (!query) {
     return (
-      <div style={{ padding: 32, textAlign: 'center' }}>
-        <Empty
-          description="请输入搜索关键词"
-          image={<SearchOutlined style={{ fontSize: 64, color: '#bfbfbf' }} />}
-        />
-      </div>
+      <EmptyState
+        title="请输入搜索关键词"
+        description="按标题、内容或笔记本快速查找。"
+        icon={<SearchOutlined style={{ fontSize: 64, color: '#bfbfbf' }} />}
+        style={{ padding: 32 }}
+      />
     )
   }
 
@@ -138,11 +154,12 @@ const SearchResultPage = () => {
 
         <SearchResultToolbar total={totalCount} sort={sort} onSortChange={updateSort} />
 
-        <Spin spinning={loading} data-testid="search-results-loading">
+        <Spin spinning={loading || isBootstrapping} data-testid="search-results-loading">
           <SearchResultList
             query={query}
             results={sortedResults}
             recentSearches={recentSearches}
+            isLoading={loading || isBootstrapping}
             onRecentSearchClick={(keyword) => {
               navigate(`/cloudnote/search?q=${encodeURIComponent(keyword)}&status=${status}`)
             }}

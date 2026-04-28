@@ -96,6 +96,42 @@ describe('ShareService', () => {
     })
   })
 
+  describe('searchUsers', () => {
+    it('should call GET /v1/note/user with query params', async () => {
+      const mockResponse = {
+        data: {
+          total: 1,
+          page: 1,
+          size: 10,
+          data: [
+            {
+              oneAccessUserId: 'oa-1',
+              userName: 'chengang',
+              nickName: '陈刚',
+              lowestDept: '研发部',
+            },
+          ],
+        },
+      }
+      mockGet.mockResolvedValue(mockResponse)
+
+      const result = await shareService.searchUsers({
+        searchText: '陈',
+        page: 1,
+        pageSize: 10,
+      })
+
+      expect(mockGet).toHaveBeenCalledWith('/user', {
+        params: {
+          searchText: '陈',
+          page: 1,
+          pageSize: 10,
+        },
+      })
+      expect(result).toEqual(mockResponse.data)
+    })
+  })
+
   describe('deleteShare', () => {
     it('should call DELETE endpoint for removing share', async () => {
       mockDelete.mockResolvedValue({ success: true })

@@ -14,9 +14,27 @@ import useAuth from '@/hooks/useAuth'
 import useLanguage from '@/hooks/useLanguage'
 import ImportTaskDialog from '@/components/layout/ImportTaskDialog'
 
+const headerPanelStyle = {
+  borderRadius: 20,
+  border: '1px solid rgba(15,23,42,0.08)',
+  background: '#fff',
+  boxShadow: 'var(--shadow-md)',
+}
+
+const headerActionButtonStyle = {
+  position: 'relative',
+  width: 40,
+  height: 40,
+  borderRadius: 14,
+  background: '#fff',
+  border: '1px solid rgba(15,23,42,0.08)',
+  boxShadow: 'var(--shadow-sm)',
+}
+
 function Header({
   onToggleAIPanel,
   onOpenSearch,
+  onSearchSubmit,
   searchValue,
   onSearchChange,
   searchPanel,
@@ -94,33 +112,58 @@ function Header({
   }, [profileOpen])
 
   return (
-    <header
-      style={{
-        height: 56,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 6px 0 4px',
-        flexShrink: 0,
-        background: 'transparent',
-      }}
-    >
+    <>
+      <style>{`
+        .cloudnote-header-search-shell:focus-within {
+          border-color: rgba(10,89,247,0.28);
+          box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+        }
+
+        .cloudnote-header-profile-card .ant-btn {
+          border-radius: 12px;
+        }
+
+        .cloudnote-header-profile-card .ant-btn:hover,
+        .cloudnote-header-profile-card .ant-btn:focus {
+          background: rgba(10, 89, 247, 0.08) !important;
+          color: #10223a !important;
+        }
+
+        .cloudnote-header-profile-card .ant-btn-dangerous:hover,
+        .cloudnote-header-profile-card .ant-btn-dangerous:focus {
+          background: rgba(239, 68, 68, 0.08) !important;
+          color: #dc2626 !important;
+        }
+      `}</style>
+      <header
+        style={{
+          height: 60,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 8px 0 6px',
+          flexShrink: 0,
+          background: 'transparent',
+        }}
+      >
       <div style={{ flex: 1 }} />
 
       <Space size={10}>
-        <div style={{ width: 380, position: 'relative' }}>
+        <div style={{ width: 392, maxWidth: 'min(46vw, 392px)', position: 'relative' }}>
           <div
+            className="cloudnote-header-search-shell"
             style={{
               width: '100%',
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
-              padding: '0 12px',
-              height: 42,
-              borderRadius: 16,
-              background: 'rgba(255,255,255,0.94)',
-              border: '1px solid rgba(226,232,240,0.92)',
-              boxShadow: '0 6px 14px rgba(16,34,58,0.08)',
+              gap: 10,
+              padding: '0 14px',
+              height: 44,
+              borderRadius: 18,
+              background: '#fff',
+              border: '1px solid rgba(15,23,42,0.08)',
+              boxShadow: 'var(--shadow-sm)',
+              transition: 'border-color 160ms ease, box-shadow 160ms ease',
             }}
           >
             <SearchOutlined
@@ -141,6 +184,7 @@ function Header({
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault()
+                  onSearchSubmit?.(searchValue || '')
                   onOpenSearch?.(searchValue || '')
                 }
               }}
@@ -148,9 +192,10 @@ function Header({
               size="middle"
               variant="borderless"
               style={{
-                height: 40,
+                height: 42,
                 background: 'transparent',
                 boxShadow: 'none',
+                fontSize: 14,
               }}
             />
           </div>
@@ -162,15 +207,8 @@ function Header({
           icon={<RobotOutlined style={{ fontSize: 18, color: 'var(--primary)' }} />}
           onClick={onToggleAIPanel}
           aria-label={t('ai.title', { defaultValue: 'AI 助手' })}
-          style={{
-            position: 'relative',
-            width: 36,
-            height: 36,
-            borderRadius: 12,
-            background: 'rgba(255,255,255,0.82)',
-            border: '1px solid rgba(226,232,240,0.92)',
-            boxShadow: '0 6px 14px rgba(16,34,58,0.08)',
-          }}
+          className="cloudnote-icon-action-btn cloudnote-icon-action-btn--toolbar"
+          style={headerActionButtonStyle}
         >
           <span
             style={{
@@ -198,13 +236,11 @@ function Header({
               }}
             >
               <div
+                className="cloudnote-header-profile-card"
                 style={{
-                  width: 250,
-                  padding: 16,
-                  borderRadius: 18,
-                  boxShadow: '0 14px 36px rgba(16,34,58,0.14)',
-                  border: '1px solid rgba(226,232,240,0.88)',
-                  background: 'rgba(255,255,255,0.98)',
+                  width: 264,
+                  padding: 18,
+                  ...headerPanelStyle,
                 }}
               >
                 <div
@@ -212,9 +248,9 @@ function Header({
                     display: 'flex',
                     alignItems: 'center',
                     gap: 14,
-                    paddingBottom: 14,
+                    paddingBottom: 16,
                     marginBottom: 14,
-                    borderBottom: '1px solid rgba(226,232,240,0.9)',
+                    borderBottom: '1px solid rgba(15,23,42,0.08)',
                   }}
                 >
                   <Avatar
@@ -231,7 +267,7 @@ function Header({
                         ? '#fff'
                         : 'linear-gradient(135deg, #60a5fa, #2563eb)',
                       color: '#fff',
-                      boxShadow: '0 8px 18px rgba(0,97,164,0.18)',
+                      boxShadow: '0 8px 18px rgba(15,23,42,0.10)',
                     }}
                   />
                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -275,10 +311,10 @@ function Header({
                         bottom: 0,
                         right: 'calc(100% + 14px)',
                         width: 210,
-                        borderRadius: 16,
-                        background: 'rgba(248,250,252,0.98)',
-                        border: '1px solid rgba(226,232,240,0.92)',
-                        boxShadow: '0 14px 32px rgba(16,34,58,0.12)',
+                        borderRadius: 18,
+                        background: '#fff',
+                        border: '1px solid rgba(15,23,42,0.08)',
+                        boxShadow: 'var(--shadow-md)',
                         overflow: 'hidden',
                         display: 'flex',
                         flexDirection: 'column',
@@ -302,7 +338,7 @@ function Header({
                           fontWeight: 700,
                           color: isChinese ? '#2563eb' : '#10223a',
                           background: isChinese ? 'rgba(37,99,235,0.08)' : 'transparent',
-                          borderBottom: '1px solid rgba(226,232,240,0.82)',
+                          borderBottom: '1px solid rgba(15,23,42,0.08)',
                           cursor: 'pointer',
                         }}
                       >
@@ -347,8 +383,8 @@ function Header({
                       setImportTaskOpen(true)
                     }}
                     style={{
-                      height: 42,
-                      paddingInline: 2,
+                      height: 44,
+                      paddingInline: 8,
                       justifyContent: 'flex-start',
                       borderRadius: 12,
                       color: '#0f172a',
@@ -367,8 +403,8 @@ function Header({
                     icon={<GlobalOutlined style={{ fontSize: 18, color: '#0f172a' }} />}
                     onClick={() => setLanguageMenuOpen((open) => !open)}
                     style={{
-                      height: 42,
-                      paddingInline: 2,
+                      height: 44,
+                      paddingInline: 8,
                       justifyContent: 'space-between',
                       borderRadius: 12,
                       color: '#0f172a',
@@ -395,11 +431,11 @@ function Header({
                     icon={<LogoutOutlined style={{ fontSize: 18, color: '#0f172a' }} />}
                     onClick={logout}
                     style={{
-                      height: 42,
-                      paddingInline: 2,
+                      height: 44,
+                      paddingInline: 8,
                       justifyContent: 'flex-start',
                       borderRadius: 12,
-                      color: '#0f172a',
+                      color: '#dc2626',
                       fontSize: 14,
                       fontWeight: 600,
                     }}
@@ -424,10 +460,10 @@ function Header({
             style={{
               cursor: 'pointer',
               border: '2px solid #fff',
-              boxShadow: '0 6px 14px rgba(16,34,58,0.10)',
-              background: resolvedAvatar
-                ? '#fff'
-                : 'linear-gradient(135deg, #60a5fa, #2563eb)',
+            boxShadow: 'var(--shadow-sm)',
+            background: resolvedAvatar
+              ? '#fff'
+              : 'linear-gradient(135deg, #60a5fa, #2563eb)',
             }}
           />
         </Dropdown>
@@ -436,7 +472,8 @@ function Header({
         open={importTaskOpen}
         onClose={() => setImportTaskOpen(false)}
       />
-    </header>
+      </header>
+    </>
   )
 }
 

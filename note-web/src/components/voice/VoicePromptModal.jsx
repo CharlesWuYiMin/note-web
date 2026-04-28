@@ -20,40 +20,6 @@ function VoicePromptModal({
   ]
 
   return (
-    <>
-      <style>{`\
-        .voice-prompt-modal-root .ant-modal-content {\
-          border-radius: 22px;\
-          overflow: hidden;\
-          background: #fff;\
-          box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);\
-          transform-origin: center center;\
-          animation: voice-prompt-pop-in 180ms cubic-bezier(0.22, 1, 0.36, 1);\
-        }\
-\
-        .voice-prompt-modal-root .ant-modal-mask {\
-          background: rgba(15, 23, 42, 0.42);\
-          backdrop-filter: blur(3px);\
-          animation: voice-prompt-mask-in 180ms cubic-bezier(0.22, 1, 0.36, 1);\
-        }\
-\
-        @keyframes voice-prompt-pop-in {\
-          from {\
-            opacity: 0;\
-            transform: translateY(12px) scale(0.98);\
-          }\
-          to {\
-            opacity: 1;\
-            transform: translateY(0) scale(1);\
-          }\
-        }\
-\
-        @keyframes voice-prompt-mask-in {\
-          from { opacity: 0; }\
-          to { opacity: 1; }\
-        }\
-      `}</style>
-
       <Modal
         open={open}
         onCancel={onCancel}
@@ -70,10 +36,11 @@ function VoicePromptModal({
             borderRadius: 22,
             overflow: 'hidden',
             background: '#fff',
+            border: '1px solid rgba(15,23,42,0.08)',
+            boxShadow: 'var(--shadow-md)',
           },
           mask: {
-            background: 'rgba(15, 23, 42, 0.42)',
-            backdropFilter: 'blur(3px)',
+            background: 'rgba(15, 23, 42, 0.32)',
           },
         }}
       >
@@ -92,22 +59,22 @@ function VoicePromptModal({
                   type="button"
                   onClick={() => onSelectLanguage?.(option.key)}
                   style={{
-                    flex: 1,
-                    minHeight: 84,
-                    borderRadius: 16,
-                    border: selected ? '2px solid rgba(2,86,210,0.65)' : '1px solid rgba(226,232,240,0.95)',
-                    background: selected ? 'rgba(2,86,210,0.08)' : '#fff',
-                    color: selected ? 'var(--primary)' : '#111827',
-                    fontSize: 17,
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    boxShadow: selected ? '0 10px 24px rgba(2,86,210,0.10)' : 'none',
+                  flex: 1,
+                  minHeight: 84,
+                  borderRadius: 16,
+                  border: selected ? '1px solid rgba(10,89,247,0.28)' : '1px solid rgba(15,23,42,0.08)',
+                  background: selected ? 'var(--primary-soft)' : '#fff',
+                  color: selected ? 'var(--primary)' : '#111827',
+                  fontSize: 17,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: selected ? 'var(--shadow-sm)' : 'none',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'center',
                     alignItems: 'center',
                     gap: 0,
-                    transition: 'border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease',
+                    transition: 'border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease',
                   }}
                 >
                   <div>{option.label}</div>
@@ -116,7 +83,7 @@ function VoicePromptModal({
             })}
           </div>
 
-          <div style={{ borderRadius: 16, background: 'rgba(248,250,252,0.96)', padding: '14px 16px 12px', marginBottom: 14 }}>
+          <div style={{ borderRadius: 16, background: '#fff', border: '1px solid rgba(15,23,42,0.08)', padding: '14px 16px 12px', marginBottom: 14 }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: '#111827', marginBottom: 8 }}>
               {t('voice.promptNoticeTitle', { defaultValue: '注意事项' })}
             </div>
@@ -133,18 +100,17 @@ function VoicePromptModal({
             style={{
               height: 48,
               borderRadius: 13,
-              background: 'linear-gradient(135deg, #0057d7 0%, #1f4fff 100%)',
-              border: 'none',
+              background: 'var(--primary)',
+              border: '1px solid rgba(10,89,247,0.12)',
               fontWeight: 800,
               fontSize: 15,
-              boxShadow: '0 12px 22px rgba(2,86,210,0.20)',
+              boxShadow: 'var(--shadow-sm)',
             }}
           >
             {resolvedConfirmText}
           </Button>
         </div>
       </Modal>
-    </>
   )
 }
 

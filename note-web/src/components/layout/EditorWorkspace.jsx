@@ -1,7 +1,7 @@
 ﻿﻿import React, { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Button, Dropdown, Empty, Input, Modal, Spin } from 'antd'
+import { Button, Dropdown, Input, Modal, Spin, Tooltip } from 'antd'
 import { message } from 'antd'
 import {
   DeleteOutlined,
@@ -14,6 +14,7 @@ import {
   StarOutlined,
 } from '@ant-design/icons'
 import { CompressOutlined } from '@ant-design/icons'
+import EmptyState from '@/components/common/EmptyState'
 import UxIcon from '@/components/common/UxIcon'
 import EditorFactory from '@/components/editors/EditorFactory'
 import HistorySidebar from '@/components/history/HistorySidebar'
@@ -22,14 +23,7 @@ import { useMemo } from 'react'
 import { useRef } from 'react'
 import SharePanelDialog from '@/components/share/SharePanelDialog'
 import VoicePromptModal from '@/components/voice/VoicePromptModal'
-
-function normalizeEditorValue(content) {
-  if (content == null) {
-    return ''
-  }
-
-  return typeof content === 'string' ? content : JSON.stringify(content)
-}
+import { trackEvent } from '@/utils/observability'
 
 function hasVoiceRecords(note) {
   if (!note) {
@@ -60,7 +54,7 @@ function getWorkspaceSectionItems(pathname, { notes, starredNotes, myShares, del
     return starredNotes
   }
 
-  if (pathname.startsWith('/cloudnote/shares')) {
+  if (pathname.startsWith('/cloudnote/myshares')) {
     return myShares
   }
 
@@ -71,16 +65,36 @@ function getWorkspaceSectionItems(pathname, { notes, starredNotes, myShares, del
   return notes
 }
 
+function getWorkspaceSectionKey(pathname) {
+  if (pathname.startsWith('/cloudnote/starred') || pathname.startsWith('/cloudnote/star')) {
+    return 'starred'
+  }
+
+  if (pathname.startsWith('/cloudnote/myshares')) {
+    return 'myshares'
+  }
+
+  if (pathname.startsWith('/cloudnote/recyclebin')) {
+    return 'recyclebin'
+  }
+
+  if (pathname.startsWith('/cloudnote/notebooks')) {
+    return 'notebooks'
+  }
+
+  return 'recent'
+}
+
 function getWorkspaceEmptyState(pathname, hasRouteId, t) {
-  if (pathname.startsWith('/cloudnote/shares')) {
+  if (pathname.startsWith('/cloudnote/myshares')) {
     return hasRouteId
       ? {
-          title: t('workspace.empty.shares.missingTitle', { defaultValue: '未找到分享对应的笔记' }),
-          description: t('workspace.empty.shares.missingDescription', { defaultValue: '这条分享记录已经不存在或暂时无法访问。' }),
+          title: t('workspace.empty.myshares.missingTitle', { defaultValue: '未找到分享对应的笔记' }),
+          description: t('workspace.empty.myshares.missingDescription', { defaultValue: '这条分享记录已经不存在或暂时无法访问。' }),
         }
       : {
-          title: t('workspace.empty.shares.title', { defaultValue: '我的分享' }),
-          description: t('workspace.empty.shares.description', { defaultValue: '当前还没有分享记录，创建分享后会显示在这里。' }),
+          title: t('workspace.empty.myshares.title', { defaultValue: '我的分享' }),
+          description: t('workspace.empty.myshares.description', { defaultValue: '当前还没有分享记录，创建分享后会显示在这里。' }),
         }
   }
 
@@ -131,6 +145,60 @@ function getWorkspaceEmptyState(pathname, hasRouteId, t) {
       }
 }
 
+function normalizeWorkspaceNote(note) {
+  if (!note) {
+    return null
+  }
+
+  if (note.noteId && !note.id) {
+    return {
+      ...note,
+      id: note.noteId,
+    }
+  }
+
+  return note
+}
+
+function getWorkspaceDetailPath(section, note) {
+  if (section === 'starred') {
+    return `/cloudnote/starred/${note.id}`
+  }
+
+  if (section === 'myshares') {
+    return `/cloudnote/myshares/${note.id}`
+  }
+
+  if (section === 'notebooks') {
+    const notebookId = note?.notebookId || note?.notebook?.id || note?.notebook?.notebookId
+    if (notebookId) {
+      return `/cloudnote/notebooks/${notebookId}/${note.id}`
+    }
+
+    return `/cloudnote/notebooks`
+  }
+
+  if (section === 'recyclebin') {
+    return `/cloudnote/recyclebin/${note.id}`
+  }
+
+  return `/cloudnote/recent/${note.id}`
+}
+
+function getAdjacentWorkspaceNote(notes, currentNoteId) {
+  const normalizedCurrentId = String(currentNoteId || '').trim()
+  if (!normalizedCurrentId) {
+    return null
+  }
+
+  const index = notes.findIndex((note) => String(note?.id || '').trim() === normalizedCurrentId)
+  if (index < 0) {
+    return null
+  }
+
+  return notes[index + 1] || notes[index - 1] || null
+}
+
 function WorkspaceStateView({ title, description, loading = false }) {
   return (
     <section
@@ -157,22 +225,11 @@ function WorkspaceStateView({ title, description, loading = false }) {
         {loading ? (
           <Spin />
         ) : (
-          <div
-            style={{
-              width: '100%',
-              maxWidth: 420,
-              padding: '12px 20px',
-              textAlign: 'center',
-            }}
-          >
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={null} />
-            <div style={{ marginTop: 8, fontSize: 18, fontWeight: 800, color: '#10223a' }}>
-              {title}
-            </div>
-            <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.8, color: 'rgba(16,34,58,0.58)' }}>
-              {description}
-            </div>
-          </div>
+          <EmptyState
+            title={title}
+            description={description}
+            style={{ padding: 0 }}
+          />
         )}
       </div>
     </section>
@@ -181,7 +238,7 @@ function WorkspaceStateView({ title, description, loading = false }) {
 
 function EditorWorkspace() {
   const params = useParams()
-  const id = params.id
+  const routeNoteId = params.noteId || params.id || null
   const location = useLocation()
   const navigate = useNavigate()
   const { t } = useTranslation()
@@ -190,14 +247,18 @@ function EditorWorkspace() {
     currentNote,
     starredNotes,
     isLoading,
+    hasLoadedNotes,
+    hasLoadedStarredNotes,
+    hasLoadedMyShares,
+    hasLoadedDeletedNotes,
     error,
     loadNoteById,
     myShares,
     deletedNotes,
     fetchMyShares,
+    syncNoteShareState,
     toggleStar,
     updateName,
-    updateContent,
     deleteNote,
     restoreNote,
     permanentDeleteNote,
@@ -213,7 +274,6 @@ function EditorWorkspace() {
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteConfirmMode, setDeleteConfirmMode] = useState('delete')
-  const [editorValue, setEditorValue] = useState('')
   const [voicePromptOpen, setVoicePromptOpen] = useState(false)
   const [voicePromptChoice, setVoicePromptChoice] = useState('zh-CN')
   const [forcedVoiceEditorNoteId, setForcedVoiceEditorNoteId] = useState(null)
@@ -222,19 +282,17 @@ function EditorWorkspace() {
   const titleEditorRef = useRef(null)
   const titleMeasureRef = useRef(null)
   const titleInputRef = useRef(null)
-  const editorBaselineRef = useRef('')
   const [titleEditorWidth, setTitleEditorWidth] = useState(null)
   const routeNotePreview = location.state?.note || null
-  const currentRouteNote = currentNote?.id === id ? currentNote : null
+  const currentRouteNote = currentNote?.id === routeNoteId ? currentNote : null
   const notePreview = useMemo(() => {
     const preview = routeNotePreview
-    const collectionMatch = [currentNote, ...notes, ...starredNotes, ...deletedNotes].find((item) => item?.id === id)
-      || myShares.find((item) => item?.noteId === id || item?.id === id)
+    const collectionMatch = [currentNote, ...notes, ...starredNotes, ...deletedNotes].find((item) => item?.id === routeNoteId)
 
-    const previewMatch = preview?.id === id
+    const previewMatch = preview?.id === routeNoteId
       ? preview
-      : preview?.noteId === id
-        ? { ...preview, id }
+      : preview?.noteId === routeNoteId
+        ? { ...preview, id: routeNoteId }
         : null
 
     const resolvedNote = collectionMatch || previewMatch
@@ -250,7 +308,7 @@ function EditorWorkspace() {
         }
       : resolvedNote
 
-    if (currentRouteNote?.id === id) {
+    if (currentRouteNote?.id === routeNoteId) {
       return {
         ...normalizedResolvedNote,
         ...currentRouteNote,
@@ -258,25 +316,18 @@ function EditorWorkspace() {
     }
 
     return normalizedResolvedNote
-  }, [currentNote, deletedNotes, id, myShares, notes, routeNotePreview, starredNotes])
+  }, [currentNote, deletedNotes, notes, routeNoteId, routeNotePreview, starredNotes])
   const noteForRender = notePreview || currentRouteNote || null
-  const noteId = noteForRender?.id || id || null
-  const sharedNoteIdSet = useMemo(
-    () => new Set(
-      myShares
-        .map((item) => String(item?.noteId || item?.id || '').trim())
-        .filter(Boolean)
-    ),
-    [myShares]
-  )
+  const noteId = noteForRender?.id || routeNoteId || null
   const isStarred = Boolean(noteForRender?.isStarred)
-  const isShared = noteId ? sharedNoteIdSet.has(String(noteId)) : false
+  const isShared = Boolean(noteForRender?.isShared)
   const isRecycleBinRoute = location.pathname.startsWith('/cloudnote/recyclebin')
   const isDeletedNote = isRecycleBinRoute || noteForRender?.status === 'deleted'
   const hasVoiceMaterials = hasVoiceRecords(noteForRender)
   const showVoiceEditor = forcedVoiceEditorNoteId === noteId || hasVoiceMaterials
   const useVoiceShell = Boolean(noteForRender) && showVoiceEditor
   const showVoiceTrigger = Boolean(noteForRender) && !isDeletedNote && (showVoiceEditor || noteForRender?.type === 'text')
+  const editorReadOnly = isDeletedNote && !isDeletePending
   const sectionItems = useMemo(
     () => getWorkspaceSectionItems(location.pathname, {
       notes,
@@ -286,32 +337,44 @@ function EditorWorkspace() {
     }),
     [deletedNotes, location.pathname, myShares, notes, starredNotes]
   )
+  const sectionNotes = useMemo(
+    () => sectionItems
+      .map((item) => normalizeWorkspaceNote(item))
+      .filter(Boolean),
+    [sectionItems]
+  )
+  const currentSection = getWorkspaceSectionKey(location.pathname)
   const hasSectionItems = sectionItems.length > 0
   const sectionEmptyState = getWorkspaceEmptyState(location.pathname, false, t)
-  const emptyState = getWorkspaceEmptyState(location.pathname, Boolean(id), t)
+  const emptyState = getWorkspaceEmptyState(location.pathname, Boolean(routeNoteId), t)
   const untitledLabel = t('note.untitled', { defaultValue: '未命名笔记' })
-  const displayTitle = noteForRender?.title || (id ? untitledLabel : emptyState.title)
-  const isTransitioningNote = Boolean(id) && !noteForRender && !error
+  const displayTitle = noteForRender?.title || (routeNoteId ? untitledLabel : emptyState.title)
+  const isTransitioningNote = Boolean(routeNoteId) && !noteForRender && !error
   const showEmptyState = !noteForRender && !isLoading && Boolean(error)
-  const showSectionEmptyState = !isLoading && !hasSectionItems
-  const showSectionLoadingState = isLoading && !hasSectionItems
+  const isSectionLoaded = currentSection === 'starred'
+    ? hasLoadedStarredNotes
+    : currentSection === 'myshares'
+      ? hasLoadedMyShares
+      : currentSection === 'recyclebin'
+        ? hasLoadedDeletedNotes
+        : hasLoadedNotes
+  const showSectionEmptyState = isSectionLoaded && !isLoading && !hasSectionItems
+  const showSectionLoadingState = !isSectionLoaded || (isLoading && !hasSectionItems)
   const [title, setTitle] = useState(displayTitle)
 
   useEffect(() => {
-    setEditorValue('')
-    editorBaselineRef.current = ''
     setForcedVoiceEditorNoteId(null)
     setVoiceAutoStartToken(null)
     setVoicePanelVisible(true)
-    setTitle(notePreview?.title || (id ? untitledLabel : emptyState.title))
+    setTitle(notePreview?.title || (routeNoteId ? untitledLabel : emptyState.title))
     setIsTitleEditing(false)
 
-    if (!id) {
+    if (!routeNoteId) {
       return
     }
 
-    loadNoteById(id).catch(() => {})
-  }, [emptyState.title, id, loadNoteById, notePreview?.title, untitledLabel])
+    loadNoteById(routeNoteId).catch(() => {})
+  }, [emptyState.title, loadNoteById, notePreview?.title, routeNoteId, untitledLabel])
 
   useEffect(() => {
     if (noteForRender?.title) {
@@ -343,6 +406,10 @@ function EditorWorkspace() {
       return
     }
 
+    trackEvent('voice_prompt_open', {
+      noteId: String(noteId || ''),
+      source: 'route_state',
+    })
     setVoicePromptChoice('zh-CN')
     setVoicePromptOpen(true)
     navigate(location.pathname, { replace: true, state: null })
@@ -353,6 +420,10 @@ function EditorWorkspace() {
       return
     }
 
+    trackEvent('share_dialog_open', {
+      noteId: String(noteId || ''),
+      source: 'route_state',
+    })
     setShareDialogOpen(true)
     navigate(location.pathname, { replace: true, state: null })
   }, [location.pathname, location.state, navigate, noteId])
@@ -363,6 +434,10 @@ function EditorWorkspace() {
       if (!noteId || eventNoteId !== String(noteId)) {
         return
       }
+      trackEvent('share_dialog_open', {
+        noteId: String(noteId || ''),
+        source: 'custom_event',
+      })
       setShareDialogOpen(true)
     }
 
@@ -500,16 +575,27 @@ function EditorWorkspace() {
     }
 
     setIsDeletePending(true)
+    let nextRoute = null
+    let nextRouteState = null
     try {
+      const nextNote = getAdjacentWorkspaceNote(sectionNotes, noteId)
       await deleteNote(noteId)
-      message.success(t('note.deleteSuccess', { defaultValue: '笔记已移入回收站' }))
-      navigate('/cloudnote/recyclebin')
+      nextRoute = nextNote
+        ? getWorkspaceDetailPath(currentSection, nextNote)
+        : `/cloudnote/${currentSection}`
+      nextRouteState = nextNote ? { note: nextNote } : null
       return true
     } catch (error) {
       message.error(error?.message || t('note.deleteError', { defaultValue: '删除失败，请稍后重试' }))
       return false
     } finally {
       setIsDeletePending(false)
+      if (nextRoute) {
+        navigate(nextRoute, {
+          replace: true,
+          ...(nextRouteState ? { state: nextRouteState } : {}),
+        })
+      }
     }
   }
 
@@ -536,40 +622,45 @@ function EditorWorkspace() {
     }
 
     setIsDeletePending(true)
+    let nextRoute = null
+    let nextRouteState = null
     try {
+      const nextNote = getAdjacentWorkspaceNote(sectionNotes, noteId)
       await permanentDeleteNote(noteId)
-      message.success(t('recycleBin.deleteSuccess', { defaultValue: '笔记已永久删除' }))
-      navigate('/cloudnote/recyclebin')
+      nextRoute = nextNote
+        ? getWorkspaceDetailPath('recyclebin', nextNote)
+        : '/cloudnote/recyclebin'
+      nextRouteState = nextNote ? { note: nextNote } : null
       return true
     } catch (error) {
       message.error(error?.message || t('recycleBin.deleteError', { defaultValue: '永久删除失败，请稍后重试' }))
       return false
     } finally {
       setIsDeletePending(false)
-    }
-  }
-
-  const handleEditorSave = async (nextContent) => {
-    if (!noteId || isDeletedNote) {
-      return
-    }
-
-    const normalizedContent = normalizeEditorValue(nextContent)
-    if (normalizedContent === editorBaselineRef.current) {
-      return
-    }
-
-    try {
-      await updateContent(noteId, normalizedContent)
-      editorBaselineRef.current = normalizedContent
-    } catch (error) {
-      message.error(error?.message || t('note.saveError', { defaultValue: '内容保存失败，请稍后重试' }))
+      if (nextRoute) {
+        navigate(nextRoute, {
+          replace: true,
+          ...(nextRouteState ? { state: nextRouteState } : {}),
+        })
+      }
     }
   }
 
   const moreMenuItems = [
-    { key: 'history', icon: <UxIcon name="history" size={16} color="rgba(16,34,58,0.72)" />, label: t('note.history', { defaultValue: '历史版本' }) },
-    { key: 'details', icon: <UxIcon name="info" size={16} color="rgba(16,34,58,0.72)" />, label: t('note.details', { defaultValue: '笔记详情' }) },
+    {
+      key: 'more-title',
+      label: (
+        <span style={{ color: 'rgba(16,34,58,0.72)', cursor: 'default' }}>
+          {t('note.moreActions', { defaultValue: '更多操作' })}
+        </span>
+      ),
+      disabled: true,
+    },
+    {
+      key: 'history',
+      icon: <UxIcon name="history" size={16} color="rgba(16,34,58,0.72)" />,
+      label: t('note.history', { defaultValue: '历史版本' }),
+    },
   ]
 
   const handleMoreMenuClick = ({ key }) => {
@@ -577,13 +668,15 @@ function EditorWorkspace() {
       setHistoryPanelOpen(true)
       return
     }
-
-    if (key === 'details') {
-      message.info(t('note.details', { defaultValue: '笔记详情' }))
-    }
   }
 
-  const handleToggleVoicePanel = () => {
+  const handleToggleVoicePanel = (source = 'toolbar') => {
+    trackEvent('voice_panel_toggle', {
+      noteId: String(noteId || ''),
+      showVoiceEditor,
+      nextVisible: !voicePanelVisible,
+      source,
+    })
     setVoicePanelVisible((value) => !value)
   }
 
@@ -620,10 +713,14 @@ function EditorWorkspace() {
     }
 
     if (showVoiceEditor) {
-      handleToggleVoicePanel()
+      handleToggleVoicePanel('header_button')
       return
     }
 
+    trackEvent('voice_prompt_open', {
+      noteId: String(noteId || ''),
+      source: 'header_button',
+    })
     setVoicePromptChoice('zh-CN')
     setVoicePromptOpen(true)
   }
@@ -633,6 +730,11 @@ function EditorWorkspace() {
     setForcedVoiceEditorNoteId(noteId || null)
     setVoicePanelVisible(true)
     setVoiceAutoStartToken((token) => (typeof token === 'number' ? token + 1 : 1))
+    trackEvent('voice_prompt_confirm', {
+      noteId: String(noteId || ''),
+      language: voicePromptChoice,
+      autoStart: true,
+    })
     message.success(t('voice.startedRealtime', { defaultValue: '已开启语音转录' }))
   }
 
@@ -659,10 +761,10 @@ function EditorWorkspace() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          minHeight: 58,
-          padding: '0 18px 0 16px',
+          minHeight: 60,
+          padding: '0 20px 0 18px',
           borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
-          background: '#fff',
+          background: 'rgba(255,255,255,0.98)',
           flexShrink: 0,
           gap: 16,
         }}
@@ -680,10 +782,11 @@ function EditorWorkspace() {
                 maxWidth: 'min(360px, 100%)',
                 width: titleEditorWidth ? `${titleEditorWidth}px` : 'auto',
                 height: 46,
-                padding: '0 8px',
-                border: '2px solid #5b8def',
-                borderRadius: 2,
+                padding: '0 10px',
+                border: '1px solid rgba(10,89,247,0.32)',
+                borderRadius: 12,
                 background: '#fff',
+                boxShadow: '0 4px 12px rgba(15,23,42,0.04)',
                 boxSizing: 'border-box',
               }}
             >
@@ -716,7 +819,7 @@ function EditorWorkspace() {
                   height: 40,
                   lineHeight: '40px',
                   fontSize: 18,
-                  color: '#6b7280',
+                  color: '#10223a',
                   paddingInline: 0,
                   fontWeight: 700,
                   minWidth: 0,
@@ -725,7 +828,7 @@ function EditorWorkspace() {
               />
             </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
               <button
                 type="button"
                 onClick={() => {
@@ -735,14 +838,14 @@ function EditorWorkspace() {
                 }}
                 aria-label="编辑笔记标题"
                 style={{
-                  height: 40,
+                  minHeight: 40,
                   lineHeight: '40px',
                   fontSize: 18,
-                  color: '#6b7280',
+                  color: '#10223a',
                   padding: 0,
                   fontWeight: 700,
                   minWidth: 0,
-                  maxWidth: 300,
+                  maxWidth: 320,
                   border: 'none',
                   background: 'transparent',
                   textAlign: 'left',
@@ -769,7 +872,7 @@ function EditorWorkspace() {
                     padding: '0 8px',
                     borderRadius: 999,
                     color: 'var(--primary)',
-                    background: 'rgba(2,86,210,0.08)',
+                    background: 'var(--primary-soft)',
                     fontWeight: 700,
                     fontSize: 11,
                     lineHeight: '18px',
@@ -777,7 +880,6 @@ function EditorWorkspace() {
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 4,
-                    marginBottom: 2,
                     flexShrink: 0,
                   }}
                 >
@@ -793,18 +895,32 @@ function EditorWorkspace() {
             title={isFullscreen
               ? t('note.exitFullscreen', { defaultValue: '退出全屏' })
               : t('note.fullscreen', { defaultValue: '全屏' })}
+            tooltipTitle={isFullscreen
+              ? t('note.exitFullscreen', { defaultValue: '退出全屏' })
+              : t('note.enterFullscreen', { defaultValue: '进入全屏' })}
             icon={isFullscreen ? <CompressOutlined /> : <ExpandOutlined />}
             onClick={handleToggleFullscreen}
+            active={isFullscreen}
           />
           <ToolbarIconButton
             title={t('note.share', { defaultValue: '分享' })}
+            tooltipTitle={t('note.shareNote', { defaultValue: '分享笔记' })}
             icon={<ShareAltOutlined />}
-            onClick={() => setShareDialogOpen(true)}
+            onClick={() => {
+              trackEvent('share_dialog_open', {
+                noteId: String(noteId || ''),
+                source: 'toolbar_button',
+              })
+              setShareDialogOpen(true)
+            }}
             disabled={!noteId || isDeletedNote}
             active={isShared}
           />
           <ToolbarIconButton
             title={isStarred ? t('note.unstar', { defaultValue: '取消收藏' }) : t('note.star', { defaultValue: '收藏' })}
+            tooltipTitle={isStarred
+              ? t('note.unstarNote', { defaultValue: '取消收藏' })
+              : t('note.starNote', { defaultValue: '收藏笔记' })}
             icon={isStarred ? <StarFilled /> : <StarOutlined />}
             onClick={handleToggleStar}
             loading={isStarPending}
@@ -816,6 +932,7 @@ function EditorWorkspace() {
             <>
               <ToolbarIconButton
                 title={t('recycleBin.restore', { defaultValue: '还原' })}
+                tooltipTitle={t('note.restoreNoteAction', { defaultValue: '还原笔记' })}
                 icon={<RollbackOutlined />}
                 onClick={handleRestoreNote}
                 loading={isRestorePending}
@@ -823,6 +940,7 @@ function EditorWorkspace() {
               />
               <ToolbarIconButton
                 title={t('recycleBin.permanentDelete', { defaultValue: '永久删除' })}
+                tooltipTitle={t('note.permanentDeleteNoteAction', { defaultValue: '永久删除笔记' })}
                 icon={<DeleteOutlined />}
                 danger
                 loading={isDeletePending}
@@ -833,6 +951,7 @@ function EditorWorkspace() {
           ) : (
             <ToolbarIconButton
               title={t('note.delete', { defaultValue: '删除' })}
+              tooltipTitle={t('note.deleteNoteAction', { defaultValue: '删除笔记' })}
               icon={<DeleteOutlined />}
               danger
               loading={isDeletePending}
@@ -844,14 +963,16 @@ function EditorWorkspace() {
             <Button
               type="text"
               aria-label={t('note.more', { defaultValue: '更多' })}
+              title={t('note.moreActions', { defaultValue: '更多操作' })}
               icon={<MoreOutlined />}
               disabled={!noteId}
+              className="cloudnote-icon-action-btn cloudnote-icon-action-btn--toolbar"
               style={{
                 minWidth: 'auto',
-                width: 'auto',
-                height: 'auto',
+                width: 32,
+                height: 32,
                 padding: 0,
-                borderRadius: 0,
+                borderRadius: 10,
                 color: '#64748b',
                 fontSize: 16,
                 lineHeight: 1,
@@ -890,48 +1011,26 @@ function EditorWorkspace() {
             }}
           >
             {noteForRender ? (
-              <EditorFactory
-                key={noteId || 'text-editor'}
-                type={useVoiceShell ? 'voice' : (noteForRender?.type || 'text')}
-                note={noteForRender}
-                value={editorValue}
-                onChange={setEditorValue}
-                onSave={handleEditorSave}
-                onNoteRefresh={noteId ? () => loadNoteById(noteId).catch(() => {}) : null}
-                readOnly={isDeletedNote}
-                voicePanelVisible={useVoiceShell ? voicePanelVisible : false}
-                onVoicePanelToggle={handleToggleVoicePanel}
-                autoStartRecordingKey={useVoiceShell ? voiceAutoStartToken : null}
-                autoStartLanguage={useVoiceShell ? voicePromptChoice : null}
-              />
+            <EditorFactory
+              key={noteId || 'text-editor'}
+              type={useVoiceShell ? 'voice' : (noteForRender?.type || 'text')}
+              note={noteForRender}
+              onNoteRefresh={noteId ? () => loadNoteById(noteId).catch(() => {}) : null}
+              readOnly={editorReadOnly}
+              voicePanelVisible={useVoiceShell ? voicePanelVisible : false}
+              onVoicePanelToggle={handleToggleVoicePanel}
+              autoStartRecordingKey={useVoiceShell ? voiceAutoStartToken : null}
+              autoStartLanguage={useVoiceShell ? voicePromptChoice : null}
+            />
             ) : showEmptyState ? (
-              <div
+              <EmptyState
+                title={emptyState.title}
+                description={emptyState.description}
                 style={{
                   flex: 1,
                   minHeight: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '48px 24px',
                 }}
-              >
-                <div
-                  style={{
-                    width: '100%',
-                    maxWidth: 420,
-                    padding: '12px 20px',
-                    textAlign: 'center',
-                  }}
-                >
-                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={null} />
-                  <div style={{ marginTop: 8, fontSize: 18, fontWeight: 800, color: '#10223a' }}>
-                    {emptyState.title}
-                  </div>
-                  <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.8, color: 'rgba(16,34,58,0.58)' }}>
-                    {emptyState.description}
-                  </div>
-                </div>
-              </div>
+              />
             ) : isTransitioningNote ? (
               <div
                 style={{
@@ -958,8 +1057,7 @@ function EditorWorkspace() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 zIndex: 3,
-                background: 'rgba(255,255,255,0.56)',
-                backdropFilter: 'blur(6px)',
+                background: 'rgba(255,255,255,0.72)',
               }}
             >
               <Spin />
@@ -984,9 +1082,33 @@ function EditorWorkspace() {
         noteId={noteId}
         onClose={() => {
           setShareDialogOpen(false)
-          fetchMyShares().catch(() => {})
         }}
-        onShareChanged={() => fetchMyShares().catch(() => {})}
+        onShareStateLoaded={({ noteId: changedNoteId, isShared, shareDetail, shareCode, shareUrl }) => {
+          const targetNoteId = changedNoteId || noteId
+          if (!targetNoteId) {
+            return
+          }
+
+          syncNoteShareState(targetNoteId, isShared, {
+            ...shareDetail,
+            shareCode,
+            shareUrl,
+          })
+        }}
+        onShareChanged={async ({ noteId: changedNoteId, isShared, shareDetail, shareCode, shareUrl }) => {
+          const targetNoteId = changedNoteId || noteId
+          if (!targetNoteId) {
+            return
+          }
+
+          syncNoteShareState(targetNoteId, isShared, {
+            ...shareDetail,
+            shareCode,
+            shareUrl,
+          })
+
+          await fetchMyShares().catch(() => {})
+        }}
       />
 
       <VoicePromptModal
@@ -1012,10 +1134,46 @@ function EditorWorkspace() {
           ? t('common.delete', { defaultValue: '删除' })
           : t('common.confirm', { defaultValue: '确认' })}
         cancelText={t('common.cancel', { defaultValue: '取消' })}
-        okButtonProps={{ danger: true, loading: isDeletePending }}
+        okButtonProps={{
+          danger: true,
+          loading: isDeletePending,
+          style: {
+            height: 40,
+            borderRadius: 12,
+            fontWeight: 700,
+            boxShadow: 'none',
+          },
+        }}
+        cancelButtonProps={{
+          style: {
+            height: 40,
+            borderRadius: 12,
+            borderColor: 'rgba(15,23,42,0.08)',
+            color: '#10223a',
+            fontWeight: 600,
+            boxShadow: 'none',
+          },
+        }}
         onOk={handleConfirmDelete}
         onCancel={closeDeleteConfirm}
         destroyOnHidden
+        styles={{
+          content: {
+            borderRadius: 22,
+            border: '1px solid rgba(15,23,42,0.08)',
+            boxShadow: 'var(--shadow-md)',
+            overflow: 'hidden',
+          },
+          header: {
+            paddingBottom: 8,
+          },
+          body: {
+            paddingTop: 4,
+          },
+          mask: {
+            background: 'rgba(15, 23, 42, 0.32)',
+          },
+        }}
       >
         <div style={{ color: '#475569', lineHeight: 1.7 }}>
           {deleteConfirmMode === 'permanent'
@@ -1027,27 +1185,50 @@ function EditorWorkspace() {
   )
 }
 
-function ToolbarIconButton({ title, icon, onClick, danger = false, loading = false, disabled = false, active = false, activeColor }) {
+function ToolbarIconButton({
+  title,
+  tooltipTitle,
+  icon,
+  onClick,
+  danger = false,
+  loading = false,
+  disabled = false,
+  active = false,
+  activeColor,
+}) {
   return (
-    <Button
-      type="text"
-      aria-label={title}
-      icon={icon}
-      onClick={onClick}
-      loading={loading}
-      disabled={disabled}
-      style={{
-        minWidth: 'auto',
-        width: 'auto',
-        height: 'auto',
-        padding: 0,
-        borderRadius: 0,
-        color: danger ? '#ef4444' : active ? (activeColor || '#2563eb') : '#64748b',
-        background: 'transparent',
-        fontSize: 16,
-        lineHeight: 1,
-      }}
-    />
+    <Tooltip
+      title={tooltipTitle || title}
+      placement="bottom"
+      color="#2f3136"
+      mouseEnterDelay={0.1}
+      mouseLeaveDelay={0.05}
+    >
+      <Button
+        type="text"
+        aria-label={title}
+        icon={icon}
+        onClick={onClick}
+        loading={loading}
+        disabled={disabled}
+        className={[
+          'cloudnote-icon-action-btn',
+          'cloudnote-icon-action-btn--toolbar',
+          danger ? 'cloudnote-icon-action-btn--danger' : '',
+          active ? 'cloudnote-icon-action-btn--active' : '',
+        ].filter(Boolean).join(' ')}
+        style={{
+          minWidth: 40,
+          width: 40,
+          height: 40,
+          padding: 0,
+          borderRadius: 12,
+          color: danger ? '#ef4444' : active ? (activeColor || '#2563eb') : '#64748b',
+          fontSize: 16,
+          lineHeight: 1,
+        }}
+      />
+    </Tooltip>
   )
 }
 

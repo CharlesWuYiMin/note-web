@@ -1,6 +1,7 @@
 import React from 'react'
 import { Result, Button } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
+import { logger, trackEvent } from '@/utils/observability'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -13,7 +14,15 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo)
+    logger.error('ErrorBoundary caught an error', error, {
+      componentStack: errorInfo?.componentStack || '',
+    })
+
+    trackEvent('error_boundary_caught', {
+      errorName: error?.name || 'Error',
+      errorMessage: error?.message || '',
+      componentStack: errorInfo?.componentStack || '',
+    })
     
     this.setState({ errorInfo })
     

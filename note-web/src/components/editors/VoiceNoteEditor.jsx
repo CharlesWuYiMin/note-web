@@ -4,8 +4,8 @@ import { Button, Dropdown, Modal, Popover, Slider, message } from 'antd'
 import {
   CloseOutlined,
   DownOutlined,
+  DeleteOutlined,
   LoadingOutlined,
-  MoreOutlined,
   PauseOutlined,
   PlayCircleFilled,
   StopOutlined,
@@ -17,6 +17,7 @@ import authService from '@/services/authService'
 import aiService from '@/services/aiService'
 import noteService from '@/services/noteService'
 import voiceRealtimeService from '@/services/voiceRealtimeService'
+import { reportTiming, trackEvent } from '@/utils/observability'
 
 function WaveMark({ active = false, height = 12 }) {
   return (
@@ -62,6 +63,17 @@ function MicIcon({ size = 18, color = 'currentColor' }) {
       />
       <path d="M12 18v3" stroke={color} strokeWidth="2" strokeLinecap="round" />
       <path d="M8 21h8" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function PlayGlyph({ size = 18, color = 'currentColor' }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" aria-hidden="true">
+      <path
+        d="M8 6.8c0-1.02 1.12-1.64 1.98-1.09l8.33 5.2a1.3 1.3 0 0 1 0 2.2l-8.33 5.2A1.3 1.3 0 0 1 8 17.2V6.8Z"
+        fill={color}
+      />
     </svg>
   )
 }
@@ -209,15 +221,28 @@ function getTranscriptStatusLabel(status) {
   return statusMap[status] || i18n.t('voice.status.default', { defaultValue: '语音' })
 }
 
+function getLiveRecordingMetaLabel(recordingState) {
+  if (recordingState === 'uploading') {
+    return i18n.t('voice.processing', { defaultValue: '处理中' })
+  }
+
+  if (recordingState === 'paused') {
+    return i18n.t('voice.status.paused', { defaultValue: '已暂停' })
+  }
+
+  return i18n.t('voice.status.processing', { defaultValue: '转写中' })
+}
+
 function normalizeRealtimeLanguage(language) {
   return language === 'en-US' ? 'en_US' : 'zh_CN'
 }
 
 function createLiveRecordingCard({ key, language, title = '', sessionId = null }) {
+  const fallbackIndex = String(key || '').padStart(2, '0')
   return {
     code: `RECORDING ${key}`,
     key,
-    title: title || i18n.t('voice.realtimeTitle', { defaultValue: '{{language}}实时转写', language: getLanguageLabel(language) }),
+    title: title || i18n.t('voice.fileLabel', { defaultValue: '语音文件 {{index}}', index: fallbackIndex }),
     duration: i18n.t('voice.status.processing', { defaultValue: '转写中' }),
     durationMs: 0,
     time: i18n.t('voice.justNow', { defaultValue: '刚刚' }),
@@ -305,6 +330,22 @@ function getNextRecordingKey(recordings = []) {
   }, 0)
 
   return String(maxIndex + 1).padStart(2, '0')
+}
+
+function getAdjacentRecordingKey(recordings = [], currentKey = null) {
+  const normalizedKey = String(currentKey || '').trim()
+  if (!normalizedKey) {
+    return recordings[0]?.key || null
+  }
+
+  const currentIndex = recordings.findIndex((item) => String(item?.key || '').trim() === normalizedKey)
+  if (currentIndex < 0) {
+    return recordings[0]?.key || null
+  }
+
+  return recordings[currentIndex + 1]?.key
+    || recordings[currentIndex - 1]?.key
+    || null
 }
 
 function getRealtimeStatusMeta(recordingState) {
@@ -428,6 +469,14 @@ function getSessionSummaryStatus(session = {}) {
   return session?.status || 'processing'
 }
 
+function shouldRenderStandaloneSessionCard(session = {}) {
+  const status = String(session?.status || '').trim().toLowerCase()
+
+  // Historical realtime sessions belong to the persisted voice file card.
+  // Keep standalone cards only for sessions that are still in progress.
+  return status === 'opened' || status === 'streaming' || status === 'paused'
+}
+
 function resolveDurationMs(...values) {
   for (const value of values) {
     const numericValue = Number(value)
@@ -483,15 +532,127 @@ function normalizeTranscriptCards(cards = [], fallbackName = i18n.t('voice.segme
   return normalizedCards
 }
 
-function buildVoiceTranscriptGroups({ fileVoice, session } = {}) {
-  const sessionCards = Array.isArray(session?.cards) ? session.cards : []
-  return normalizeTranscriptCards(sessionCards)
+function createFallbackTranscriptEntries(fileVoice = {}, fallbackName = i18n.t('voice.segment', { defaultValue: '分段' })) {
+  const transcript = normalizeTranscriptText(fileVoice?.transcript || fileVoice?.finalTranscript || '')
+  if (!transcript) {
+    return []
+  }
+
+  return [createTranscriptEntry({
+    avatar: 'C01',
+    name: `${fallbackName} 01`,
+    time: formatVoiceCardTime(fileVoice?.createdAt || fileVoice?.updatedAt),
+    text: transcript,
+    active: true,
+  })]
 }
 
-function buildVoiceStateFromNote(note = {}) {
+function buildVoiceTranscriptGroups({ fileVoice, session } = {}) {
+  const sessionCards = Array.isArray(session?.cards) ? session.cards : []
+  const normalizedCards = normalizeTranscriptCards(sessionCards)
+  if (normalizedCards.length > 0) {
+    return normalizedCards
+  }
+
+  return createFallbackTranscriptEntries(fileVoice).length > 0
+    ? createFallbackTranscriptEntries(fileVoice)
+    : createFallbackTranscriptEntries(session)
+}
+
+function resolveStableRecordingKey({ fileId, voiceId, sessionId, kind = 'file', fallbackIndex = 0 }) {
+  if (kind === 'session') {
+    return sessionId ? `session:${sessionId}` : `session:fallback:${fallbackIndex}`
+  }
+
+  if (fileId) {
+    return `file:${fileId}`
+  }
+
+  if (voiceId) {
+    return `voice:${voiceId}`
+  }
+
+  if (sessionId) {
+    return `file-session:${sessionId}`
+  }
+
+  return `file:fallback:${fallbackIndex}`
+}
+
+function resolveDisplayOrder(recordingKey, orderContext) {
+  if (!orderContext || !recordingKey) {
+    return null
+  }
+
+  const existing = orderContext.orderByKey.get(recordingKey)
+  if (existing) {
+    return existing
+  }
+
+  const nextOrder = orderContext.nextOrderRef.current
+  orderContext.orderByKey.set(recordingKey, nextOrder)
+  orderContext.nextOrderRef.current += 1
+  return nextOrder
+}
+
+function extractVoiceFileSequence(fileName) {
+  if (typeof fileName !== 'string') {
+    return null
+  }
+
+  const match = fileName.trim().match(/(\d+)\s*$/)
+  if (!match) {
+    return null
+  }
+
+  const parsed = Number.parseInt(match[1], 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function formatVoiceFileName(index, translator = i18n) {
+  const displayIndex = String(index).padStart(2, '0')
+  return translator.t('voice.fileLabel', {
+    defaultValue: '语音文件 {{index}}',
+    index: displayIndex,
+  })
+}
+
+function getNextVoiceFileName(note, translator = i18n) {
+  const voiceNotes = Array.isArray(note?.voiceNote) ? note.voiceNote.filter(Boolean) : []
+  const maxExistingIndex = voiceNotes.reduce((maxValue, item, index) => {
+    const namedIndex = extractVoiceFileSequence(item?.fileName)
+    const fallbackIndex = index + 1
+    return Math.max(maxValue, namedIndex || fallbackIndex)
+  }, 0)
+
+  return formatVoiceFileName(maxExistingIndex + 1, translator)
+}
+
+function resolveVoiceSortTimestamp(item = {}, session = null) {
+  const candidates = [
+    item?.createdAt,
+    item?.updatedAt,
+    session?.finishedAt,
+    session?.updatedAt,
+    session?.startedAt,
+  ]
+
+  for (const candidate of candidates) {
+    const value = Date.parse(candidate || '')
+    if (Number.isFinite(value)) {
+      return value
+    }
+  }
+
+  return 0
+}
+
+function buildVoiceStateFromNote(note = {}, options = {}) {
   const voiceNotes = Array.isArray(note?.voiceNote) ? note.voiceNote.filter(Boolean) : []
   const voiceRealtimeSessions = Array.isArray(note?.voiceRealtimeSessions) ? note.voiceRealtimeSessions.filter(Boolean) : []
+  const orderContext = options.orderContext || null
   const sessionById = new Map()
+  const fallbackVoiceIndexByRef = new Map()
   let preferredSelectedKey = null
 
   voiceRealtimeSessions.forEach((session) => {
@@ -500,12 +661,39 @@ function buildVoiceStateFromNote(note = {}) {
     }
   })
 
+  voiceNotes.forEach((voice, index) => {
+    fallbackVoiceIndexByRef.set(voice, index + 1)
+  })
+
   const recordings = []
   const transcriptGroups = {}
   const usedSessionIds = new Set()
 
-  voiceNotes.forEach((voice, index) => {
-    const key = String(index + 1).padStart(2, '0')
+  const sortedVoiceNotes = [...voiceNotes].sort((left, right) => {
+    const leftSession = left?.sessionId ? sessionById.get(left.sessionId) || null : null
+    const rightSession = right?.sessionId ? sessionById.get(right.sessionId) || null : null
+    const timestampDiff = resolveVoiceSortTimestamp(right, rightSession) - resolveVoiceSortTimestamp(left, leftSession)
+    if (timestampDiff !== 0) {
+      return timestampDiff
+    }
+
+    const leftIndex = voiceNotes.indexOf(left)
+    const rightIndex = voiceNotes.indexOf(right)
+    return leftIndex - rightIndex
+  })
+
+  sortedVoiceNotes.forEach((voice, index) => {
+    const stableKey = resolveStableRecordingKey({
+      fileId: voice?.fileId,
+      voiceId: voice?.id,
+      sessionId: voice?.sessionId,
+      kind: 'file',
+      fallbackIndex: index + 1,
+    })
+    const displayOrder = resolveDisplayOrder(stableKey, orderContext) || (index + 1)
+    const displayIndex = String(displayOrder).padStart(2, '0')
+    const fallbackVoiceIndex = fallbackVoiceIndexByRef.get(voice) || (index + 1)
+    const fallbackVoiceLabelIndex = String(fallbackVoiceIndex).padStart(2, '0')
     const session = voice?.sessionId ? sessionById.get(voice.sessionId) || null : null
     if (session?.sessionId) {
       usedSessionIds.add(session.sessionId)
@@ -514,11 +702,13 @@ function buildVoiceStateFromNote(note = {}) {
     const transcriptStatus = voice?.transcriptStatus || (voice?.transcript ? 'completed' : getSessionSummaryStatus(session) || 'pending')
 
     recordings.push({
-      code: `FILE ${key}`,
-      key,
-      title: session?.sessionId
-        ? i18n.t('voice.fileLabel', { defaultValue: '语音文件 {{index}}', index: key })
-        : i18n.t('voice.cardFileLabel', { defaultValue: '语音卡片 {{index}}', index: key }),
+      code: `FILE ${displayIndex}`,
+      key: stableKey,
+      title: voice?.fileName || (
+        session?.sessionId
+          ? i18n.t('voice.fileLabel', { defaultValue: '语音文件 {{index}}', index: fallbackVoiceLabelIndex })
+          : i18n.t('voice.cardFileLabel', { defaultValue: '语音卡片 {{index}}', index: fallbackVoiceLabelIndex })
+      ),
       duration: getTranscriptStatusLabel(transcriptStatus),
       durationMs: resolveAudioDurationMs(voice, session),
       time: formatVoiceCardTime(voice?.createdAt || voice?.updatedAt || session?.finishedAt || session?.startedAt),
@@ -534,11 +724,15 @@ function buildVoiceStateFromNote(note = {}) {
       kind: 'file',
     })
 
-    transcriptGroups[key] = buildVoiceTranscriptGroups({ fileVoice: voice, session })
+    transcriptGroups[stableKey] = buildVoiceTranscriptGroups({ fileVoice: voice, session })
   })
 
   voiceRealtimeSessions.forEach((session) => {
     if (!session?.sessionId || usedSessionIds.has(session.sessionId)) {
+      return
+    }
+
+    if (!shouldRenderStandaloneSessionCard(session)) {
       return
     }
 
@@ -552,12 +746,19 @@ function buildVoiceStateFromNote(note = {}) {
       return
     }
 
-    const key = String(recordings.length + 1).padStart(2, '0')
+    const stableKey = resolveStableRecordingKey({
+      sessionId: session?.sessionId,
+      voiceId: session?.id,
+      kind: 'session',
+      fallbackIndex: recordings.length + 1,
+    })
+    const displayOrder = resolveDisplayOrder(stableKey, orderContext) || (recordings.length + 1)
+    const displayIndex = String(displayOrder).padStart(2, '0')
 
     recordings.push({
-      code: `SESSION ${key}`,
-      key,
-      title: i18n.t('voice.realtimeSessionLabel', { defaultValue: '实时会话 {{index}}', index: key }),
+      code: `SESSION ${displayIndex}`,
+      key: stableKey,
+      title: i18n.t('voice.realtimeSessionLabel', { defaultValue: '实时会话 {{index}}', index: displayIndex }),
       duration: getTranscriptStatusLabel(getSessionSummaryStatus(session)),
       durationMs: resolveAudioDurationMs({}, session),
       time: formatVoiceCardTime(session?.startedAt || session?.finishedAt || session?.updatedAt),
@@ -573,7 +774,7 @@ function buildVoiceStateFromNote(note = {}) {
       kind: 'session',
     })
 
-    transcriptGroups[key] = buildVoiceTranscriptGroups({ session })
+    transcriptGroups[stableKey] = buildVoiceTranscriptGroups({ session })
 
     if (!preferredSelectedKey) {
       const hasCards = Array.isArray(session?.cards) && session.cards.length > 0
@@ -581,7 +782,7 @@ function buildVoiceStateFromNote(note = {}) {
       const isActiveSession = session?.status === 'streaming' || session?.status === 'opened'
 
       if (isActiveSession || hasCards || hasTranscript) {
-        preferredSelectedKey = key
+        preferredSelectedKey = stableKey
       }
     }
   })
@@ -596,24 +797,56 @@ function buildVoiceStateFromNote(note = {}) {
   }
 }
 
-function RecordingCard({ active, code, title, duration, time, language, onClick }) {
+function RecordingCard({
+  active,
+  code,
+  title,
+  duration,
+  time,
+  language,
+  fileId,
+  deleting = false,
+  onClick,
+  onDelete,
+  t,
+}) {
+  const [isHovered, setIsHovered] = useState(false)
   const metaParts = [duration, time, language ? getLanguageLabel(language) : ''].filter(Boolean)
+  const canDelete = Boolean(fileId && onDelete)
+  const showActions = isHovered || active || deleting
+  const deleteLabel = t?.('voice.deleteVoiceCard', { defaultValue: '删除语音卡片' }) || '删除语音卡片'
 
   return (
     <div
       onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
-        minWidth: 174,
-        padding: '14px 14px 12px',
+        minWidth: 156,
+        padding: '13px 12px 12px',
         borderRadius: 16,
-        border: active ? '2px solid rgba(2,86,210,0.96)' : '1px solid rgba(226,232,240,0.98)',
-        background: active ? 'rgba(2,86,210,0.06)' : '#edf2f7',
-        boxShadow: active ? '0 10px 26px rgba(2,86,210,0.10)' : 'none',
+        border: active
+          ? '1px solid rgba(10,89,247,0.10)'
+          : isHovered
+            ? '1px solid rgba(10,89,247,0.10)'
+            : '1px solid rgba(15,23,42,0.08)',
+        background: active
+          ? 'var(--primary-soft)'
+          : isHovered
+            ? 'rgba(248,250,252,1)'
+            : '#ffffff',
+        boxShadow: active
+          ? '0 6px 16px rgba(10,89,247,0.08)'
+          : isHovered
+            ? '0 4px 12px rgba(15,23,42,0.05)'
+            : 'none',
         textAlign: 'left',
         cursor: 'pointer',
         flexShrink: 0,
         position: 'relative',
         userSelect: 'none',
+        transition: 'border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease',
+        transform: active ? 'translateY(-1px)' : 'translateY(0)',
       }}
       role="button"
       tabIndex={0}
@@ -624,15 +857,79 @@ function RecordingCard({ active, code, title, duration, time, language, onClick 
         }
       }}
     >
-      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.04em', color: active ? 'var(--primary)' : '#94a3b8' }}>
-        {code}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          minWidth: 0,
+          paddingRight: 28,
+        }}
+      >
+        <div
+          style={{
+            minWidth: 0,
+            flex: 1,
+            fontSize: 13,
+            fontWeight: 700,
+            color: '#10223a',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {title}
+        </div>
       </div>
-      <div style={{ marginTop: 8, fontSize: 13, fontWeight: 800, color: active ? 'var(--primary)' : '#334155', paddingRight: 22 }}>
-        {title}
-      </div>
-      <div style={{ marginTop: 10, fontSize: 11, color: active ? 'rgba(2,86,210,0.58)' : '#94a3b8', paddingRight: 22 }}>
+      <div
+        style={{
+          marginTop: 10,
+          fontSize: 11,
+          color: active ? 'rgba(37,99,235,0.72)' : 'rgba(100,116,139,0.82)',
+          paddingRight: 28,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
         {metaParts.join(' - ')}
       </div>
+      {canDelete ? (
+        <button
+          type="button"
+          title={deleteLabel}
+          aria-label={deleteLabel}
+          disabled={deleting}
+          onMouseDown={(event) => {
+            event.stopPropagation()
+          }}
+          onClick={(event) => {
+            event.stopPropagation()
+            void onDelete?.()
+          }}
+          style={{
+            position: 'absolute',
+            top: 9,
+            right: 8,
+            width: 22,
+            height: 22,
+            zIndex: 2,
+            border: '1px solid rgba(239,68,68,0.10)',
+            borderRadius: 8,
+            background: 'rgba(254,242,242,0.98)',
+            color: '#ef4444',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: deleting ? 'not-allowed' : 'pointer',
+            opacity: showActions ? 1 : 0,
+            pointerEvents: showActions ? 'auto' : 'none',
+            transition: 'opacity 160ms ease, transform 160ms ease, background 160ms ease',
+            transform: showActions ? 'translateY(0)' : 'translateY(-2px)',
+          }}
+        >
+          {deleting ? <LoadingOutlined style={{ fontSize: 12 }} /> : <DeleteOutlined style={{ fontSize: 12 }} />}
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -647,25 +944,25 @@ function RecorderButton({ title, onClick, children, active = false, danger = fal
       onClick={onClick}
       disabled={disabled}
       style={{
-        width: 44,
-        height: 44,
+        width: 42,
+        height: 42,
         borderRadius: '50%',
         border: danger
-          ? '1px solid rgba(239,68,68,0.24)'
+          ? '1px solid rgba(239,68,68,0.14)'
           : isAccent
-            ? '1px solid rgba(185,208,255,0.92)'
-            : '1px solid rgba(226,232,240,0.94)',
+            ? '1px solid rgba(10,89,247,0.12)'
+            : '1px solid rgba(15,23,42,0.08)',
         background: danger
-          ? 'rgba(239,68,68,0.08)'
+          ? 'rgba(254,242,242,0.98)'
           : isAccent
             ? active
               ? 'linear-gradient(180deg, #2f6fff 0%, #1f57e7 100%)'
-              : 'rgba(232,241,255,0.96)'
+              : 'var(--primary-soft)'
             : active
-              ? 'rgba(47,111,255,0.08)'
+              ? 'var(--primary-soft)'
               : '#ffffff',
         color: danger ? '#ef4444' : isAccent ? (active ? '#ffffff' : 'var(--primary)') : active ? 'var(--primary)' : '#64748b',
-        boxShadow: isAccent ? '0 8px 18px rgba(47,111,255,0.12)' : '0 8px 18px rgba(16,34,58,0.06)',
+        boxShadow: active ? '0 6px 16px rgba(15,23,42,0.05)' : '0 4px 12px rgba(15,23,42,0.04)',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -757,47 +1054,19 @@ function RecordingWaveStrip({ active = false, paused = false, tick = 0 }) {
   )
 }
 
-function TranscriptItem({ avatar, name, time, text, active }) {
-  const waveHeights = active
-    ? [8, 14, 22, 12, 18, 8, 14, 10, 18, 12, 20, 8, 12, 14, 8]
-    : [6, 12, 10, 16, 8, 12, 14, 8, 10, 12, 8, 16, 8, 12, 10]
-
+function TranscriptItem({ name, time, text, active }) {
   return (
-    <div style={{ borderRadius: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: active ? 'rgba(2,86,210,0.12)' : 'rgba(148,163,184,0.16)',
-              color: active ? 'var(--primary)' : '#64748b',
-              fontSize: 10,
-              fontWeight: 800,
-            }}
-          >
-            {avatar}
-          </div>
-          <span style={{ fontSize: 12, fontWeight: 800, color: '#475569' }}>{name}</span>
-          <span style={{ fontSize: 11, color: '#94a3b8' }}>{time}</span>
-        </div>
-        <Button type="text" icon={<MoreOutlined />} style={{ width: 24, height: 24, padding: 0, color: '#94a3b8' }} />
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 10, paddingLeft: 4 }}>
-        {waveHeights.map((height, index) => (
-          <WaveMark key={`${name}-${index}`} active={active && index < 5} height={height} />
-        ))}
+    <div style={{ borderRadius: 14, border: '1px solid rgba(15,23,42,0.06)', background: '#ffffff', padding: '12px 14px', boxShadow: active ? '0 4px 12px rgba(15,23,42,0.04)' : 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, fontWeight: 800, color: active ? 'var(--primary)' : '#475569' }}>{name}</span>
+        <span style={{ fontSize: 11, color: '#94a3b8' }}>{time}</span>
       </div>
       <div
         style={{
           fontSize: 14,
           lineHeight: 1.7,
           color: '#334155',
-          background: 'rgba(248,250,252,0.82)',
+          background: 'rgba(248,250,252,0.92)',
           borderRadius: 14,
           padding: '10px 12px',
         }}
@@ -830,10 +1099,10 @@ function VoiceNoteEditor({
   const [playbackState, setPlaybackState] = useState('idle')
   const [playbackPositionMs, setPlaybackPositionMs] = useState(0)
   const [playbackDurationMs, setPlaybackDurationMs] = useState(0)
-  const [playbackPulseTick, setPlaybackPulseTick] = useState(0)
   const [playbackVolume, setPlaybackVolume] = useState(1)
   const [playbackRate, setPlaybackRate] = useState(1)
   const [volumePopoverOpen, setVolumePopoverOpen] = useState(false)
+  const [deletingRecordingKey, setDeletingRecordingKey] = useState(null)
   const [isPlaybackControlsCompact, setIsPlaybackControlsCompact] = useState(false)
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
   const [liveTranscriptSegments, setLiveTranscriptSegments] = useState([])
@@ -841,6 +1110,7 @@ function VoiceNoteEditor({
   const [extractionText, setExtractionText] = useState('')
   const [extractionError, setExtractionError] = useState('')
   const [isExtracting, setIsExtracting] = useState(false)
+  const [isRecordingStripDragging, setIsRecordingStripDragging] = useState(false)
 
   const mediaRecorderRef = useRef(null)
   const mediaStreamRef = useRef(null)
@@ -875,11 +1145,16 @@ function VoiceNoteEditor({
   const localPreviewUrlsRef = useRef(new Set())
   const playbackAudioRef = useRef(null)
   const playbackObjectUrlRef = useRef('')
+  const playbackProgressFrameRef = useRef(null)
+  const playbackUiStateRef = useRef({ positionMs: 0, durationMs: 0, updatedAt: 0 })
   const playbackVolumeRef = useRef(1)
   const playbackLastVolumeRef = useRef(1)
   const playbackRateRef = useRef(1)
   const recordingStateRef = useRef('idle')
   const playbackStateRef = useRef('idle')
+  const voiceRecordingStartAtRef = useRef(0)
+  const recordingDisplayOrderRef = useRef(new Map())
+  const nextRecordingDisplayOrderRef = useRef(1)
   const recordingsRef = useRef(recordings)
   const liveTranscriptSegmentsRef = useRef([])
   const transcriptSourceKeyRef = useRef('01')
@@ -888,6 +1163,14 @@ function VoiceNoteEditor({
   const autoStartRecordingInFlightRef = useRef(null)
   const autoStartRecordingTimerRef = useRef(null)
   const extractionAbortRef = useRef(null)
+  const recordingsStripRef = useRef(null)
+  const recordingsStripDragRef = useRef({
+    active: false,
+    moved: false,
+    pointerId: null,
+    startX: 0,
+    startScrollLeft: 0,
+  })
 
   const voicePanelVisible = typeof controlledVisible === 'boolean' ? controlledVisible : localVoicePanelVisible
   const liveRecordingKey = realtimeDraftKeyRef.current
@@ -904,12 +1187,71 @@ function VoiceNoteEditor({
     || (Number.isFinite(playbackAudioRef.current?.duration) ? Math.floor(playbackAudioRef.current.duration * 1000) : 0)
     || selectedRecordingData?.durationMs
     || 0
+  const activeLiveRecordingTitle = recordings.find((item) => item.key === liveRecordingKey)?.title || getNextVoiceFileName(note, i18nInstance)
   const toggleVoicePanel = onVoicePanelToggle || (() => setLocalVoicePanelVisible((value) => !value))
   const autoStartRecordingRef = useRef(null)
+  const recordingOrderContext = {
+    orderByKey: recordingDisplayOrderRef.current,
+    nextOrderRef: nextRecordingDisplayOrderRef,
+  }
+
+  const handleRecordingStripMouseDown = (event) => {
+    if (event.button !== 0 || !recordingsStripRef.current) {
+      return
+    }
+
+    recordingsStripDragRef.current = {
+      active: true,
+      moved: false,
+      pointerId: event.pointerId || null,
+      startX: event.clientX,
+      startScrollLeft: recordingsStripRef.current.scrollLeft,
+    }
+    setIsRecordingStripDragging(true)
+  }
+
+  const handleRecordingStripMouseMove = (event) => {
+    if (!recordingsStripDragRef.current.active || !recordingsStripRef.current) {
+      return
+    }
+
+    const deltaX = event.clientX - recordingsStripDragRef.current.startX
+    if (Math.abs(deltaX) > 4) {
+      recordingsStripDragRef.current.moved = true
+    }
+
+    recordingsStripRef.current.scrollLeft = recordingsStripDragRef.current.startScrollLeft - deltaX
+  }
+
+  const stopRecordingStripDragging = () => {
+    if (!recordingsStripDragRef.current.active) {
+      return
+    }
+
+    recordingsStripDragRef.current.active = false
+    window.setTimeout(() => {
+      recordingsStripDragRef.current.moved = false
+    }, 0)
+    setIsRecordingStripDragging(false)
+  }
+
+  const handleRecordingStripClickCapture = (event) => {
+    if (!recordingsStripDragRef.current.moved) {
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+  }
 
   useEffect(() => {
     recordingsRef.current = recordings
   }, [recordings])
+
+  useEffect(() => {
+    recordingDisplayOrderRef.current.clear()
+    nextRecordingDisplayOrderRef.current = 1
+  }, [note?.id])
 
   useEffect(() => {
     liveTranscriptSegmentsRef.current = liveTranscriptSegments
@@ -1167,7 +1509,7 @@ function VoiceNoteEditor({
       return
     }
 
-    const nextState = buildVoiceStateFromNote(note)
+    const nextState = buildVoiceStateFromNote(note, { orderContext: recordingOrderContext })
     setRecordings(nextState.recordings)
     setTranscriptGroups(nextState.transcriptGroups)
     setSelectedRecording((current) => (
@@ -1191,6 +1533,7 @@ function VoiceNoteEditor({
       cleanupRealtimeRecording({ abort: true, silent: true })
 
       if (playbackAudioRef.current) {
+        stopPlaybackProgressLoop()
         playbackAudioRef.current.pause()
         playbackAudioRef.current.src = ''
         playbackAudioRef.current = null
@@ -1240,6 +1583,7 @@ function VoiceNoteEditor({
   }
 
   const stopPlayback = () => {
+    stopPlaybackProgressLoop()
     if (playbackAudioRef.current) {
       playbackAudioRef.current.pause()
       playbackAudioRef.current.currentTime = 0
@@ -1248,9 +1592,9 @@ function VoiceNoteEditor({
       URL.revokeObjectURL(playbackObjectUrlRef.current)
       playbackObjectUrlRef.current = ''
     }
+    playbackUiStateRef.current = { positionMs: 0, durationMs: 0, updatedAt: 0 }
     setPlaybackPositionMs(0)
     setPlaybackDurationMs(0)
-    setPlaybackPulseTick(0)
     setPlaybackState('idle')
     playbackStateRef.current = 'idle'
   }
@@ -1488,6 +1832,13 @@ function VoiceNoteEditor({
             recorderState: recorder.state,
             abort: realtimeAbortRef.current,
             stopIntent,
+          })
+          trackEvent('voice_record_stopped', {
+            noteId: String(note?.id || ''),
+            sessionId: realtimeSessionIdRef.current || '',
+            stopIntent,
+            abort: realtimeAbortRef.current,
+            elapsedMs: Date.now() - (voiceRecordingStartAtRef.current || Date.now()),
           })
 
           if (stopIntent === 'pause') {
@@ -1956,10 +2307,19 @@ function VoiceNoteEditor({
     return true
   }
 
-  const syncVoiceCardsFromNote = (refreshedNote, preferred = {}) => {
-    const nextState = buildVoiceStateFromNote(refreshedNote || {})
+  const syncVoiceCardsFromNote = (refreshedNote, preferred = {}, options = {}) => {
+    const nextState = buildVoiceStateFromNote(refreshedNote || {}, { orderContext: recordingOrderContext })
 
     if (nextState.recordings.length === 0) {
+      if (options.allowEmpty) {
+        setRecordings([])
+        setTranscriptGroups({})
+        setSelectedRecording(null)
+        transcriptSourceKeyRef.current = null
+        sourceRecordingKeyRef.current = null
+        return true
+      }
+
       return false
     }
 
@@ -1981,10 +2341,84 @@ function VoiceNoteEditor({
     return true
   }
 
+  const removeVoiceRecordingLocally = (deletedKey, nextSelectedKey = null) => {
+    const resolvedNextSelectedKey = nextSelectedKey || getAdjacentRecordingKey(recordingsRef.current, deletedKey)
+
+    setRecordings((current) => current.filter((item) => item.key !== deletedKey))
+    setTranscriptGroups((current) => {
+      if (!current[deletedKey]) {
+        return current
+      }
+
+      const nextGroups = { ...current }
+      delete nextGroups[deletedKey]
+      return nextGroups
+    })
+
+    if (selectedRecording === deletedKey) {
+      stopPlayback()
+    }
+
+    setSelectedRecording((current) => {
+      if (current !== deletedKey) {
+        return current
+      }
+
+      return resolvedNextSelectedKey
+    })
+
+    if (transcriptSourceKeyRef.current === deletedKey) {
+      transcriptSourceKeyRef.current = resolvedNextSelectedKey
+    }
+
+    if (sourceRecordingKeyRef.current === deletedKey) {
+      sourceRecordingKeyRef.current = resolvedNextSelectedKey
+    }
+
+    if (!resolvedNextSelectedKey) {
+      transcriptSourceKeyRef.current = null
+      sourceRecordingKeyRef.current = null
+    }
+
+    return resolvedNextSelectedKey
+  }
+
+  const handleDeleteVoiceRecording = async (recording) => {
+    const fileId = recording?.fileId
+    if (!note?.id || !fileId || deletingRecordingKey) {
+      return
+    }
+
+    setDeletingRecordingKey(recording.key)
+    try {
+      await noteService.deleteVoiceNoteCard(note.id, fileId)
+      const nextSelectedKey = removeVoiceRecordingLocally(recording.key)
+      try {
+        const refreshedNote = await onNoteRefresh?.()
+        if (refreshedNote) {
+          syncVoiceCardsFromNote(refreshedNote, {
+            recordingKey: nextSelectedKey,
+          }, {
+            allowEmpty: true,
+          })
+        }
+      } catch {
+        // keep local deletion result if refresh fails
+      }
+      message.success(t('voice.deleteVoiceCardSuccess', { defaultValue: '语音卡片已删除' }))
+    } catch (error) {
+      message.error(error?.message || t('voice.deleteVoiceCardError', { defaultValue: '删除语音卡片失败，请稍后重试' }))
+      throw error
+    } finally {
+      setDeletingRecordingKey(null)
+    }
+  }
+
   const registerLiveRecordingCard = (language, title = '') => {
     const key = getNextRecordingKey(recordingsRef.current)
     realtimeDraftKeyRef.current = key
-    setRecordings((current) => [createLiveRecordingCard({ key, language, title, sessionId: realtimeSessionIdRef.current }), ...current])
+    const resolvedTitle = title || getNextVoiceFileName(note, i18nInstance)
+    setRecordings((current) => [createLiveRecordingCard({ key, language, title: resolvedTitle, sessionId: realtimeSessionIdRef.current }), ...current])
     setSelectedRecording(key)
     seedLiveTranscriptCards()
     return key
@@ -2250,9 +2684,11 @@ function VoiceNoteEditor({
 
       if (audioBlob && audioBlob.size > 0 && note?.id) {
         try {
+          const fileName = getNextVoiceFileName(note, i18nInstance)
           uploadedVoice = await noteService.uploadVoiceFile(note.id, audioBlob, {
             sessionId,
             duration: uploadDurationSeconds,
+            fileName,
           })
         } catch (error) {
           preserveInterruptedRecordingDraft(error?.message || '音频上传失败')
@@ -2264,6 +2700,7 @@ function VoiceNoteEditor({
         updateLiveRecordingCard((card) => ({
           ...card,
           fileId: uploadedVoice.fileId || card.fileId,
+          title: uploadedVoice.fileName || card.title,
           url: uploadedVoice.url || card.url,
           duration: uploadedVoice.duration != null ? `${uploadedVoice.duration}s` : card.duration,
           durationMs: Number.isFinite(uploadedVoice.duration) ? uploadedVoice.duration * 1000 : card.durationMs,
@@ -2341,10 +2778,7 @@ function VoiceNoteEditor({
         updateLiveTranscriptCards(payload.transcript || '', payload?.segmentIndex)
         updateLiveRecordingCard((card) => ({
           ...card,
-          title: t('voice.realtimeTitle', {
-            defaultValue: '{{language}}实时转写',
-            language: getLanguageLabel(pendingLanguage),
-          }),
+          duration: getLiveRecordingMetaLabel(recordingStateRef.current),
         }))
         break
       case 'transcript.segment': {
@@ -2356,7 +2790,7 @@ function VoiceNoteEditor({
         commitLiveTranscriptCard(payload?.segmentTranscript || '', payload?.segmentIndex, false)
         updateLiveRecordingCard((card) => ({
           ...card,
-          duration: '转写中',
+          duration: getLiveRecordingMetaLabel(recordingStateRef.current),
         }))
         break
       case 'session.resumed':
@@ -2377,7 +2811,7 @@ function VoiceNoteEditor({
         }
         updateLiveRecordingCard((card) => ({
           ...card,
-          duration: '转写中',
+          duration: getLiveRecordingMetaLabel(recordingStateRef.current),
         }))
         break
       case 'session.finished':
@@ -2483,6 +2917,13 @@ function VoiceNoteEditor({
 
   const closeVolumePopover = () => setVolumePopoverOpen(false)
 
+  const stopPlaybackProgressLoop = () => {
+    if (playbackProgressFrameRef.current != null) {
+      window.cancelAnimationFrame(playbackProgressFrameRef.current)
+      playbackProgressFrameRef.current = null
+    }
+  }
+
   const handlePlaybackRateSelect = (rate) => {
     setPlaybackRate(rate)
     if (playbackAudioRef.current) {
@@ -2496,17 +2937,63 @@ function VoiceNoteEditor({
       return
     }
 
-    const nextDuration = Number.isFinite(audio.duration) ? Math.floor(audio.duration * 1000) : 0
+    const now = typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now()
+    const fallbackDurationMs = Number.isFinite(Number(audio.__fallbackDurationMs))
+      ? Number(audio.__fallbackDurationMs)
+      : 0
+    const nextDuration = Number.isFinite(audio.duration) && audio.duration > 0
+      ? Math.floor(audio.duration * 1000)
+      : fallbackDurationMs
     const nextPosition = Number.isFinite(audio.currentTime) ? Math.floor(audio.currentTime * 1000) : 0
-    setPlaybackDurationMs(nextDuration)
-    setPlaybackPositionMs(nextPosition)
+    const previous = playbackUiStateRef.current
+    const reachedEdge = nextPosition === 0
+      || (nextDuration > 0 && Math.abs(nextDuration - nextPosition) <= 120)
+    const durationChanged = previous.durationMs !== nextDuration
+    const positionChanged = previous.positionMs !== nextPosition
+    const shouldCommitPosition = positionChanged && (
+      reachedEdge
+      || Math.abs(nextPosition - previous.positionMs) >= 80
+      || now - previous.updatedAt >= 120
+    )
 
-    if (playbackStateRef.current === 'playing') {
-      setPlaybackPulseTick((tick) => tick + 1)
+    if (durationChanged) {
+      setPlaybackDurationMs(nextDuration)
+      previous.durationMs = nextDuration
+    }
+
+    if (shouldCommitPosition || (reachedEdge && positionChanged)) {
+      setPlaybackPositionMs(nextPosition)
+      previous.positionMs = nextPosition
+      previous.updatedAt = now
     }
   }
 
+  const startPlaybackProgressLoop = () => {
+    stopPlaybackProgressLoop()
+
+    const tick = () => {
+      if (!playbackAudioRef.current) {
+        playbackProgressFrameRef.current = null
+        return
+      }
+
+      syncPlaybackProgress()
+
+      if (playbackStateRef.current === 'playing') {
+        playbackProgressFrameRef.current = window.requestAnimationFrame(tick)
+      } else {
+        playbackProgressFrameRef.current = null
+      }
+    }
+
+    playbackProgressFrameRef.current = window.requestAnimationFrame(tick)
+  }
+
   const handlePlaybackEnded = () => {
+    stopPlaybackProgressLoop()
+    playbackUiStateRef.current = { positionMs: 0, durationMs: playbackUiStateRef.current.durationMs, updatedAt: 0 }
     setPlaybackPositionMs(0)
     setPlaybackState('idle')
     playbackStateRef.current = 'idle'
@@ -2537,12 +3024,17 @@ function VoiceNoteEditor({
       audio.preload = 'metadata'
       audio.currentTime = 0
       audio.__sourceKey = playbackKey
+      audio.__fallbackDurationMs = Number(recording?.durationMs) || 0
+      playbackUiStateRef.current = { positionMs: 0, durationMs: audio.__fallbackDurationMs, updatedAt: 0 }
       audio.load()
+    } else {
+      audio.__fallbackDurationMs = Number(recording?.durationMs) || audio.__fallbackDurationMs || 0
     }
 
     audio.onloadedmetadata = syncPlaybackProgress
     audio.ondurationchange = syncPlaybackProgress
     audio.ontimeupdate = syncPlaybackProgress
+    audio.onseeked = syncPlaybackProgress
     audio.onplay = () => {
       setPlaybackState('playing')
       playbackStateRef.current = 'playing'
@@ -2550,8 +3042,10 @@ function VoiceNoteEditor({
       audio.playbackRate = playbackRateRef.current
       audio.muted = playbackVolumeRef.current <= 0
       syncPlaybackProgress()
+      startPlaybackProgressLoop()
     }
     audio.onpause = () => {
+      stopPlaybackProgressLoop()
       if (playbackStateRef.current === 'playing') {
         setPlaybackState('paused')
         playbackStateRef.current = 'paused'
@@ -2559,6 +3053,12 @@ function VoiceNoteEditor({
     }
     audio.onended = handlePlaybackEnded
     audio.onerror = () => {
+      trackEvent('voice_playback_failed', {
+        noteId: String(note?.id || ''),
+        recordingKey: String(recording?.key || ''),
+        sessionId: recording?.sessionId || '',
+        reason: 'audio_error',
+      })
       message.error('语音播放失败')
       handlePlaybackEnded()
     }
@@ -2587,8 +3087,20 @@ function VoiceNoteEditor({
       }
 
       await audio.play()
+      trackEvent('voice_playback_started', {
+        noteId: String(note?.id || ''),
+        recordingKey: String(recording?.key || ''),
+        sessionId: recording?.sessionId || '',
+      })
       syncPlaybackProgress()
     } catch (error) {
+      trackEvent('voice_playback_failed', {
+        noteId: String(note?.id || ''),
+        recordingKey: String(recording?.key || ''),
+        sessionId: recording?.sessionId || '',
+        reason: 'play_promise_rejected',
+        errorName: error?.name || 'Error',
+      })
       message.error(error?.message || '语音播放失败')
       handlePlaybackEnded()
     }
@@ -2596,15 +3108,21 @@ function VoiceNoteEditor({
 
   const handlePlaybackSeek = async (event) => {
     const audio = playbackAudioRef.current
-    if (!audio || !getRecordingPlaybackKey(selectedRecordingData) || !playbackDurationMs) {
+    const totalDurationMs = resolvedPlaybackTotalMs
+    if (!audio || !getRecordingPlaybackKey(selectedRecordingData) || !totalDurationMs) {
       return
     }
 
     const rect = event.currentTarget.getBoundingClientRect()
     const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
-    const nextTime = ratio * audio.duration
+    const durationSeconds = Number.isFinite(audio.duration) && audio.duration > 0
+      ? audio.duration
+      : totalDurationMs / 1000
+    const nextTime = ratio * durationSeconds
     audio.currentTime = nextTime
-    setPlaybackPositionMs(Math.floor(nextTime * 1000))
+    const nextPositionMs = Math.floor(nextTime * 1000)
+    playbackUiStateRef.current.positionMs = nextPositionMs
+    setPlaybackPositionMs(nextPositionMs)
   }
 
   const volumePopoverContent = (
@@ -2797,6 +3315,13 @@ function VoiceNoteEditor({
       return false
     }
 
+    const startAt = Date.now()
+    voiceRecordingStartAtRef.current = startAt
+    trackEvent('voice_record_start_attempt', {
+      noteId: String(note.id || ''),
+      language: normalizeRealtimeLanguage(language),
+    })
+
     try {
       const session = await voiceRealtimeService.createVoiceRealtimeSession(
         note.id,
@@ -2890,6 +3415,19 @@ function VoiceNoteEditor({
         preferredMimeType,
         websocketPath: resolvedSession.websocketPath,
       })
+      reportTiming('voice_record_start', Date.now() - startAt, {
+        status: 'success',
+        noteId: String(note.id || ''),
+        language: normalizeRealtimeLanguage(language),
+        sessionId: resolvedSession.sessionId,
+        mimeType: preferredMimeType,
+      })
+      trackEvent('voice_record_started', {
+        noteId: String(note.id || ''),
+        language: normalizeRealtimeLanguage(language),
+        sessionId: resolvedSession.sessionId,
+        mimeType: preferredMimeType,
+      })
       message.success(t('voice.realtimeStartedWithLanguage', {
         defaultValue: '已开始{{language}}实时转写',
         language: getLanguageLabel(language),
@@ -2905,6 +3443,17 @@ function VoiceNoteEditor({
       discardLiveRecordingCard()
       cleanupRealtimeRecording({ abort: true })
       resetRecordingSession()
+      reportTiming('voice_record_start', Date.now() - startAt, {
+        status: 'error',
+        noteId: String(note?.id || ''),
+        language: normalizeRealtimeLanguage(language),
+        errorName: error?.name || 'Error',
+      })
+      trackEvent('voice_record_start_failed', {
+        noteId: String(note?.id || ''),
+        language: normalizeRealtimeLanguage(language),
+        errorName: error?.name || 'Error',
+      })
       message.error(error?.message || '无法访问麦克风')
       return false
     }
@@ -2946,11 +3495,21 @@ function VoiceNoteEditor({
     const recorder = mediaRecorderRef.current
     const recorderState = recorder?.state
 
+    trackEvent('voice_record_stop_requested', {
+      noteId: String(note?.id || ''),
+      recordingState: recordingStateRef.current,
+      recorderState: recorderState || 'missing',
+    })
+
     if (!recorder || recorderState === 'inactive') {
       if (recordingStateRef.current === 'paused') {
         stopElapsedTimer()
         setRecordingState('uploading')
         recordingStateRef.current = 'uploading'
+        updateLiveRecordingCard((card) => ({
+          ...card,
+          duration: getLiveRecordingMetaLabel('uploading'),
+        }))
         realtimeAbortRef.current = false
         realtimeClosingRef.current = true
         void finalizeRealtimeRecording()
@@ -2966,6 +3525,10 @@ function VoiceNoteEditor({
     stopElapsedTimer()
     setRecordingState('uploading')
     recordingStateRef.current = 'uploading'
+    updateLiveRecordingCard((card) => ({
+      ...card,
+      duration: getLiveRecordingMetaLabel('uploading'),
+    }))
     realtimeAbortRef.current = false
 
     try {
@@ -2975,6 +3538,10 @@ function VoiceNoteEditor({
       discardLiveRecordingCard()
       cleanupRealtimeRecording({ abort: true })
       resetRecordingSession()
+      trackEvent('voice_record_stop_failed', {
+        noteId: String(note?.id || ''),
+        errorName: error?.name || 'Error',
+      })
       message.error(error?.message || '停止录音失败')
     }
   }
@@ -2994,7 +3561,7 @@ function VoiceNoteEditor({
     >
       <Modal
         open={stopConfirmOpen}
-        title="停止录制"
+        title="停止录音"
         centered
         okText="停止"
         cancelText="取消"
@@ -3009,7 +3576,7 @@ function VoiceNoteEditor({
         destroyOnHidden
       >
         <div style={{ color: '#475569', lineHeight: 1.7 }}>
-          确认停止语音转录吗？停止后会生成当前语音卡片，并保留音频作为回放文件。
+          确认停止语音转录吗？停止后会生成当前语音文件“{activeLiveRecordingTitle}”，并保留音频作为回放文件。
         </div>
       </Modal>
 
@@ -3063,10 +3630,10 @@ function VoiceNoteEditor({
         .voice-playback-rate-menu .ant-dropdown-menu {
           min-width: 176px;
           padding: 8px;
-          border-radius: 18px;
-          background: rgba(247,250,255,0.98);
-          box-shadow: 0 14px 28px rgba(47,111,255,0.10);
-          border: 1px solid rgba(191,214,255,0.78);
+          border-radius: 16px;
+          background: #ffffff;
+          box-shadow: 0 10px 28px rgba(15,23,42,0.08);
+          border: 1px solid rgba(15,23,42,0.08);
         }
 
         .voice-playback-rate-menu .ant-dropdown-menu-item {
@@ -3110,7 +3677,7 @@ function VoiceNoteEditor({
             flexDirection: 'column',
             overflow: 'hidden',
             background: '#ffffff',
-            borderRight: '1px solid rgba(226,232,240,0.8)',
+            borderRight: '1px solid rgba(15,23,42,0.08)',
             position: 'relative',
             opacity: voicePanelVisible ? 1 : 0,
             transform: voicePanelVisible ? 'translateX(0)' : 'translateX(-12px)',
@@ -3122,7 +3689,7 @@ function VoiceNoteEditor({
           <div
             style={{
               padding: '14px 16px',
-              borderBottom: '1px solid rgba(226,232,240,0.65)',
+              borderBottom: '1px solid rgba(15,23,42,0.08)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -3140,9 +3707,9 @@ function VoiceNoteEditor({
                 style={{
                   border: 'none',
                   background: 'transparent',
-                  color: voiceContentView === 'transcript' ? '#1e3a8a' : '#475569',
+                  color: voiceContentView === 'transcript' ? 'var(--primary)' : '#475569',
                   fontSize: 15,
-                  fontWeight: 800,
+                  fontWeight: 700,
                   cursor: 'pointer',
                   padding: 0,
                   whiteSpace: 'nowrap',
@@ -3157,9 +3724,9 @@ function VoiceNoteEditor({
                 style={{
                   border: 'none',
                   background: 'transparent',
-                  color: voiceContentView === 'extraction' ? '#1e3a8a' : '#475569',
+                  color: voiceContentView === 'extraction' ? 'var(--primary)' : '#475569',
                   fontSize: 15,
-                  fontWeight: 800,
+                  fontWeight: 700,
                   cursor: 'pointer',
                   padding: 0,
                   whiteSpace: 'nowrap',
@@ -3176,22 +3743,35 @@ function VoiceNoteEditor({
                 icon={<CloseOutlined />}
                 onClick={toggleVoicePanel}
                 style={{
-                  width: 30,
-                  height: 30,
+                  width: 32,
+                  height: 32,
                   padding: 0,
-                  color: '#94a3b8',
+                  color: '#64748b',
+                  borderRadius: 10,
                 }}
               />
             </div>
           </div>
 
           <div
+            ref={recordingsStripRef}
+            className="no-scrollbar"
+            onMouseDown={handleRecordingStripMouseDown}
+            onMouseMove={handleRecordingStripMouseMove}
+            onMouseUp={stopRecordingStripDragging}
+            onMouseLeave={stopRecordingStripDragging}
+            onClickCapture={handleRecordingStripClickCapture}
             style={{
               display: 'flex',
               gap: 12,
               overflowX: 'auto',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
               padding: '12px 16px 14px',
               flexShrink: 0,
+              borderBottom: recordings.length > 0 ? '1px solid rgba(15,23,42,0.06)' : 'none',
+              cursor: isRecordingStripDragging ? 'grabbing' : 'grab',
+              userSelect: isRecordingStripDragging ? 'none' : 'auto',
             }}
           >
             {recordings.length > 0 ? (
@@ -3199,8 +3779,11 @@ function VoiceNoteEditor({
                 <RecordingCard
                   key={key}
                   active={selectedRecording === key}
+                  deleting={deletingRecordingKey === key}
                   {...recording}
+                  t={t}
                   onClick={() => handleSelectRecording(key)}
+                  onDelete={() => handleDeleteVoiceRecording({ key, ...recording })}
                 />
               ))
             ) : (
@@ -3214,7 +3797,8 @@ function VoiceNoteEditor({
                   color: '#94a3b8',
                   fontSize: 13,
                   borderRadius: 16,
-                  background: 'linear-gradient(180deg, rgba(248,250,252,0.7), rgba(255,255,255,0.2))',
+                  border: '1px solid rgba(15,23,42,0.06)',
+                  background: 'rgba(248,250,252,0.72)',
                 }}
               >
                 {t('voice.emptyCards', { defaultValue: '暂无语音卡片，开始录音后会在这里生成' })}
@@ -3248,10 +3832,9 @@ function VoiceNoteEditor({
                     flex: 1,
                     minHeight: 0,
                     overflowY: 'auto',
-                    borderRadius: 24,
-                    background: 'linear-gradient(180deg, rgba(237,246,255,0.95), rgba(248,252,255,0.98))',
-                    border: '1px solid rgba(147,197,253,0.58)',
-                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.72)',
+                    borderRadius: 20,
+                    background: '#ffffff',
+                    border: '1px solid rgba(15,23,42,0.06)',
                     padding: '18px 18px 20px',
                   }}
                 >
@@ -3299,9 +3882,9 @@ function VoiceNoteEditor({
                     style={{
                       width: '100%',
                       flex: 1,
-                      borderRadius: 24,
-                      background: 'linear-gradient(180deg, rgba(248,250,252,0.78), rgba(255,255,255,0.42))',
-                      border: '1px solid rgba(226,232,240,0.55)',
+                      borderRadius: 20,
+                      background: 'rgba(248,250,252,0.76)',
+                      border: '1px solid rgba(15,23,42,0.06)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -3322,12 +3905,12 @@ function VoiceNoteEditor({
               style={{
                 flexShrink: 0,
                 padding: recordingState === 'idle' ? '14px 18px 16px' : 0,
-                borderRadius: recordingState === 'idle' ? 24 : 0,
-                border: recordingState === 'idle' ? '1px solid rgba(191,214,255,0.80)' : 'none',
+                borderRadius: recordingState === 'idle' ? 20 : 0,
+                border: recordingState === 'idle' ? '1px solid rgba(15,23,42,0.08)' : 'none',
                 background: recordingState === 'idle'
-                  ? 'linear-gradient(180deg, rgba(247,250,255,0.98), rgba(255,255,255,0.98))'
+                  ? '#ffffff'
                   : 'transparent',
-                boxShadow: recordingState === 'idle' ? '0 14px 28px rgba(47,111,255,0.08)' : 'none',
+                boxShadow: recordingState === 'idle' ? '0 8px 24px rgba(15,23,42,0.05)' : 'none',
                 zIndex: 2,
               }}
             >
@@ -3339,8 +3922,16 @@ function VoiceNoteEditor({
                     disabled={!getRecordingPlaybackKey(selectedRecordingData)}
                     active={isPlaying}
                     tone="accent"
+                    style={{
+                      background: !getRecordingPlaybackKey(selectedRecordingData)
+                        ? 'linear-gradient(180deg, rgba(148,163,184,0.82) 0%, rgba(148,163,184,0.92) 100%)'
+                        : 'linear-gradient(180deg, #2f6fff 0%, #1f57e7 100%)',
+                      border: '1px solid rgba(10,89,247,0.12)',
+                      color: '#ffffff',
+                      boxShadow: '0 8px 20px rgba(47,111,255,0.18)',
+                    }}
                   >
-                    {isPlaying ? <PauseOutlined style={{ fontSize: 16 }} /> : <PlayCircleFilled style={{ fontSize: 16 }} />}
+                    {isPlaying ? <PauseOutlined style={{ fontSize: 16 }} /> : <PlayGlyph size={18} color="currentColor" />}
                   </RecorderButton>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 68, color: '#64748b', fontSize: 12, fontFamily: 'monospace', fontWeight: 700, lineHeight: 1.15, flexShrink: 0 }}>
@@ -3365,14 +3956,14 @@ function VoiceNoteEditor({
                         alignItems: 'center',
                       }}
                     >
-                      <div style={{ width: '100%', height: 4, borderRadius: 999, background: '#dbeafe', overflow: 'hidden' }}>
+                      <div style={{ width: '100%', height: 4, borderRadius: 999, background: 'rgba(191,214,255,0.72)', overflow: 'hidden' }}>
                         <div
                           style={{
-                            width: `${playbackDurationMs > 0 ? Math.min(100, (playbackPositionMs / playbackDurationMs) * 100) : 0}%`,
+                            width: `${resolvedPlaybackTotalMs > 0 ? Math.min(100, (playbackPositionMs / resolvedPlaybackTotalMs) * 100) : 0}%`,
                             height: '100%',
                             borderRadius: 999,
                             background: 'linear-gradient(90deg, #2f6fff 0%, #7aa8ff 100%)',
-                            transition: 'width 120ms linear',
+                            transition: 'width 80ms linear',
                           }}
                         />
                       </div>
@@ -3443,15 +4034,14 @@ function VoiceNoteEditor({
                           aria-label="调整倍速"
                             style={{
                               border: 'none',
-                              background: 'rgba(232,241,255,0.96)',
+                              background: 'var(--primary-soft)',
                               color: '#334155',
                               fontSize: 12,
                               fontWeight: 700,
                               cursor: 'pointer',
                               padding: '5px 10px',
                               borderRadius: 999,
-                              backgroundImage: 'linear-gradient(180deg, rgba(243,248,255,0.98), rgba(232,241,255,0.88))',
-                              boxShadow: 'inset 0 0 0 1px rgba(191,214,255,0.9)',
+                              boxShadow: 'inset 0 0 0 1px rgba(10,89,247,0.10)',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 4,
@@ -3476,10 +4066,10 @@ function VoiceNoteEditor({
                     width: '100%',
                     minHeight: 86,
                     padding: '14px 16px',
-                    borderRadius: 28,
-                    border: '1px solid rgba(191,214,255,0.80)',
-                    background: 'linear-gradient(180deg, rgba(247,250,255,0.98), rgba(255,255,255,0.98))',
-                    boxShadow: '0 14px 28px rgba(47,111,255,0.08)',
+                    borderRadius: 20,
+                    border: '1px solid rgba(15,23,42,0.08)',
+                    background: '#ffffff',
+                    boxShadow: '0 8px 24px rgba(15,23,42,0.05)',
                     flexWrap: 'nowrap',
                   }}
                 >
@@ -3505,8 +4095,8 @@ function VoiceNoteEditor({
                           gap: 8,
                           padding: '8px 12px',
                           borderRadius: 999,
-                          background: 'rgba(232,241,255,0.96)',
-                          boxShadow: 'inset 0 0 0 1px rgba(191,214,255,0.9)',
+                          background: 'var(--primary-soft)',
+                          boxShadow: 'inset 0 0 0 1px rgba(10,89,247,0.10)',
                           color: 'var(--primary)',
                           fontSize: 12,
                           fontWeight: 800,

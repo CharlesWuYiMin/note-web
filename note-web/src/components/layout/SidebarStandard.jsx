@@ -15,7 +15,7 @@ function SidebarStandard({ collapsed, onToggle, onNavigate, currentPath }) {
   const navItems = [
     { key: 'recent', icon: <HistoryOutlined />, label: '近期笔记', path: '/cloudnote/recent' },
     { key: 'starred', icon: <StarOutlined />, label: '星标笔记', path: '/cloudnote/starred' },
-    { key: 'shares', icon: <ShareAltOutlined />, label: '我的分享', path: '/cloudnote/shares' },
+    { key: 'myshares', icon: <ShareAltOutlined />, label: '我的分享', path: '/cloudnote/myshares' },
     { key: 'notebooks', icon: <FolderOutlined />, label: '笔记本', path: '/cloudnote/notebooks' },
     { key: 'recyclebin', icon: <DeleteOutlined />, label: '回收站', path: '/cloudnote/recyclebin' },
   ]

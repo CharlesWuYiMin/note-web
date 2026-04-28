@@ -59,6 +59,12 @@ describe('useNoteStore', () => {
     vi.clearAllMocks()
     useNoteStore.setState({
       notes: [],
+      notesPagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        hasMore: false,
+      },
       currentNote: null,
       starredNotes: [],
       starredNotesPagination: {
@@ -68,8 +74,24 @@ describe('useNoteStore', () => {
         hasMore: false,
       },
       myShares: [],
+      mySharesPagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        hasMore: false,
+      },
+      deletedNotes: [],
+      deletedNotesPagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        hasMore: false,
+      },
       isLoading: false,
+      isNotesLoadingMore: false,
       isStarredNotesLoadingMore: false,
+      isMySharesLoadingMore: false,
+      isDeletedNotesLoadingMore: false,
       error: null,
     })
   })
@@ -112,7 +134,54 @@ describe('useNoteStore', () => {
 
       await useNoteStore.getState().fetchNotes({ field: 'updatedAt', order: 'desc' })
 
-      expect(mockGetNotes).toHaveBeenCalledWith({ field: 'updatedAt', order: 'desc' })
+      expect(mockGetNotes).toHaveBeenCalledWith({ field: 'updatedAt', order: 'desc', page: 1, pageSize: 20 })
+    })
+
+    it('stores note pagination from paged responses', async () => {
+      mockGetNotes.mockResolvedValue({
+        items: mockNotes,
+        total: 38,
+        page: 1,
+        size: 20,
+      })
+
+      await useNoteStore.getState().fetchNotes()
+
+      expect(useNoteStore.getState().notesPagination).toEqual({
+        page: 1,
+        pageSize: 20,
+        total: 38,
+        hasMore: true,
+      })
+    })
+
+    it('loads the next page when appending notes', async () => {
+      mockGetNotes
+        .mockResolvedValueOnce({
+          items: [mockNotes[0]],
+          total: 38,
+          page: 1,
+          size: 20,
+        })
+        .mockResolvedValueOnce({
+          items: [mockNotes[1]],
+          total: 38,
+          page: 2,
+          size: 20,
+        })
+
+      await useNoteStore.getState().fetchNotes()
+      await useNoteStore.getState().loadMoreNotes()
+
+      expect(mockGetNotes).toHaveBeenNthCalledWith(1, { page: 1, pageSize: 20 })
+      expect(mockGetNotes).toHaveBeenNthCalledWith(2, { page: 2, pageSize: 20 })
+      expect(useNoteStore.getState().notes.map((item) => item.id)).toEqual(['1', '2'])
+      expect(useNoteStore.getState().notesPagination).toEqual({
+        page: 2,
+        pageSize: 20,
+        total: 38,
+        hasMore: false,
+      })
     })
   })
 
@@ -359,6 +428,87 @@ describe('useNoteStore', () => {
       await useNoteStore.getState().fetchDeletedNotes()
 
       expect(useNoteStore.getState().deletedNotes).toEqual([{ id: 'deleted-1', title: '已删除笔记' }])
+    })
+    it('stores my share pagination from paged responses', async () => {
+      mockGetMyShares.mockResolvedValue({
+        items: [{ id: 'share-1', noteId: '1', title: 'shared note' }],
+        total: 26,
+        page: 1,
+        size: 20,
+      })
+
+      await useNoteStore.getState().fetchMyShares()
+
+      expect(useNoteStore.getState().mySharesPagination).toEqual({
+        page: 1,
+        pageSize: 20,
+        total: 26,
+        hasMore: true,
+      })
+    })
+
+    it('loads the next page of my shares', async () => {
+      mockGetMyShares
+        .mockResolvedValueOnce({
+          items: [{ id: 'share-1', noteId: '1', title: 'shared note 1' }],
+          total: 26,
+          page: 1,
+          size: 20,
+        })
+        .mockResolvedValueOnce({
+          items: [{ id: 'share-2', noteId: '2', title: 'shared note 2' }],
+          total: 26,
+          page: 2,
+          size: 20,
+        })
+
+      await useNoteStore.getState().fetchMyShares()
+      await useNoteStore.getState().loadMoreMyShares()
+
+      expect(mockGetMyShares).toHaveBeenNthCalledWith(1, { page: 1, pageSize: 20 })
+      expect(mockGetMyShares).toHaveBeenNthCalledWith(2, { page: 2, pageSize: 20 })
+      expect(useNoteStore.getState().myShares.map((item) => item.id)).toEqual(['share-1', 'share-2'])
+    })
+
+    it('stores recycle bin pagination from paged responses', async () => {
+      mockGetDeletedNotes.mockResolvedValue({
+        items: [{ id: 'deleted-1', title: 'deleted note' }],
+        total: 39,
+        page: 1,
+        size: 20,
+      })
+
+      await useNoteStore.getState().fetchDeletedNotes()
+
+      expect(useNoteStore.getState().deletedNotesPagination).toEqual({
+        page: 1,
+        pageSize: 20,
+        total: 39,
+        hasMore: true,
+      })
+    })
+
+    it('loads the next page of recycle bin notes', async () => {
+      mockGetDeletedNotes
+        .mockResolvedValueOnce({
+          items: [{ id: 'deleted-1', title: 'deleted note 1' }],
+          total: 39,
+          page: 1,
+          size: 20,
+        })
+        .mockResolvedValueOnce({
+          items: [{ id: 'deleted-2', title: 'deleted note 2' }],
+          total: 39,
+          page: 2,
+          size: 20,
+        })
+
+      await useNoteStore.getState().fetchDeletedNotes()
+      await useNoteStore.getState().loadMoreDeletedNotes()
+
+      expect(mockGetDeletedNotes).toHaveBeenNthCalledWith(1, { page: 1, pageSize: 20 })
+      expect(mockGetDeletedNotes).toHaveBeenNthCalledWith(2, { page: 2, pageSize: 20 })
+      expect(useNoteStore.getState().deletedNotes.map((item) => item.id)).toEqual(['deleted-1', 'deleted-2'])
     })
   })
 })

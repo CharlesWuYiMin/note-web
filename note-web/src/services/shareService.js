@@ -40,6 +40,18 @@ const shareService = {
     return request.get(`/shares/${shareCode}`)
   },
 
+  getShareDetail: async (noteId) => {
+    return request.get(`/share/detail/${noteId}`)
+  },
+
+  searchUsers: async (params = {}) => {
+    const response = await request.get('/user', {
+      params,
+    })
+
+    return extractPayload(response)
+  },
+
   listMyShares: async () => {
     const response = await request.get('/myshare/notes')
     return normalizeCollection(extractPayload(response))

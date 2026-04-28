@@ -12,7 +12,7 @@ import useNotebook from '@/hooks/useNotebook'
 import authService from '@/services/authService'
 import shareService from '@/services/shareService'
 import noteService from '@/services/noteService'
-import { rememberPostLoginRedirect } from '@/utils/authNavigation'
+import { trackEvent } from '@/utils/observability'
 
 function SharedNoteViewerPage() {
   const { id } = useParams()
@@ -114,14 +114,29 @@ function SharedNoteViewerPage() {
       && String(sharedNote.ownerUserId) === String(currentUserId)
   )
 
+  const trackSharedNoteEvent = (eventName, payload = {}) => {
+    trackEvent(eventName, {
+      noteId: String(sharedNote?.id || id || ''),
+      isAuthenticated: authService.isAuthenticated(),
+      isShareOwner,
+      ...payload,
+    })
+  }
+
   const handleToggleStar = async () => {
     if (!sharedNote?.id || isStarPending || isShareOwner) {
       return
     }
 
+    trackSharedNoteEvent('shared_note_star_click', {
+      isStarred: Boolean(sharedNote.isStarred),
+    })
+
     if (!authService.isAuthenticated()) {
-      rememberPostLoginRedirect(`/cloudnote/shares/${id}`)
-      navigate('/login', { replace: true, state: { from: `/cloudnote/shares/${id}` } })
+      trackSharedNoteEvent('shared_note_star_redirect_idaas', {
+        redirectTo: `/cloudnote/shares/${id}`,
+      })
+      authService.redirectToIdaas(`/cloudnote/shares/${id}`)
       return
     }
 
@@ -131,9 +146,17 @@ function SharedNoteViewerPage() {
     try {
       if (nextIsStarred) {
         await noteService.starNote(sharedNote.id)
+        trackSharedNoteEvent('shared_note_star_success', {
+          action: 'star',
+          nextIsStarred,
+        })
         message.success('已加入星标笔记')
       } else {
         await noteService.unstarNote(sharedNote.id)
+        trackSharedNoteEvent('shared_note_star_success', {
+          action: 'unstar',
+          nextIsStarred,
+        })
         message.success('已取消星标')
       }
 
@@ -144,6 +167,10 @@ function SharedNoteViewerPage() {
       ))
     } catch (starError) {
       message.error(starError?.message || '星标操作失败')
+      trackSharedNoteEvent('shared_note_star_failed', {
+        action: nextIsStarred ? 'star' : 'unstar',
+        errorName: starError?.name || 'Error',
+      })
     } finally {
       setIsStarPending(false)
     }
@@ -154,9 +181,13 @@ function SharedNoteViewerPage() {
       return
     }
 
+    trackSharedNoteEvent('shared_note_save_click')
+
     if (!authService.isAuthenticated()) {
-      rememberPostLoginRedirect(`/cloudnote/shares/${id}`)
-      navigate('/login', { replace: true, state: { from: `/cloudnote/shares/${id}` } })
+      trackSharedNoteEvent('shared_note_save_redirect_idaas', {
+        redirectTo: `/cloudnote/shares/${id}`,
+      })
+      authService.redirectToIdaas(`/cloudnote/shares/${id}`)
       return
     }
 
@@ -169,16 +200,28 @@ function SharedNoteViewerPage() {
       return
     }
 
+    trackSharedNoteEvent('shared_note_save_confirm', {
+      targetNotebookId: String(targetNotebookId),
+    })
+
     setIsSavePending(true)
     try {
       const copied = await noteService.copyNote(sharedNote.id, targetNotebookId)
       message.success('笔记已保存到你的空间')
+      trackSharedNoteEvent('shared_note_save_success', {
+        targetNotebookId: String(targetNotebookId),
+        copiedNoteId: String(copied?.id || ''),
+      })
       setSaveDialogOpen(false)
       if (copied?.id) {
         navigate(`/cloudnote/recent/${copied.id}`)
       }
     } catch (saveError) {
       message.error(saveError?.message || '保存笔记失败')
+      trackSharedNoteEvent('shared_note_save_failed', {
+        targetNotebookId: String(targetNotebookId),
+        errorName: saveError?.name || 'Error',
+      })
     } finally {
       setIsSavePending(false)
     }

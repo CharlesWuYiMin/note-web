@@ -1,7 +1,9 @@
 ﻿import React, { useEffect } from 'react'
-import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import VoiceNoteEditor from '@/components/editors/VoiceNoteEditor'
+import noteService from '@/services/noteService'
 
 const pageEditorMountMock = vi.fn()
 const pageEditorUnmountMock = vi.fn()
@@ -144,5 +146,299 @@ describe('VoiceNoteEditor', () => {
     )
 
     expect(screen.queryByRole('button', { name: /追加/ })).not.toBeInTheDocument()
+  })
+
+  it('prefers backend fileName for uploaded voice files', () => {
+    const note = {
+      id: 'note-file-name-1',
+      title: '文件名测试',
+      type: 'voice',
+      voiceNote: [
+        {
+          fileId: 'file-name-1',
+          fileName: '语音文件01',
+          audioUrl: '/files/file-name-1',
+          createdAt: '2026-04-14T10:00:00.000Z',
+        },
+      ],
+      voiceRealtimeSessions: [],
+    }
+
+    render(
+      <VoiceNoteEditor
+        note={note}
+        value=""
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        voicePanelVisible
+      />
+    )
+
+    expect(screen.getByText('语音文件01')).toBeInTheDocument()
+  })
+
+  it('renders fallback transcript content from each voice file', async () => {
+    const user = userEvent.setup()
+    const note = {
+      id: 'note-transcript-fallback-1',
+      title: '转写回退测试',
+      type: 'voice',
+      voiceNote: [
+        {
+          fileId: 'file-a',
+          sessionId: 'session-a',
+          audioUrl: '/files/file-a',
+          createdAt: '2026-04-24T09:41:24.000Z',
+        },
+        {
+          fileId: 'file-b',
+          sessionId: 'session-b',
+          audioUrl: '/files/file-b',
+          createdAt: '2026-04-24T10:41:24.000Z',
+        },
+      ],
+      voiceRealtimeSessions: [
+        {
+          sessionId: 'session-a',
+          status: 'finished',
+          language: 'zh_CN',
+          createdAt: '2026-04-24T09:41:24.000Z',
+          updatedAt: '2026-04-24T09:42:24.000Z',
+          finalTranscript: '第一条转写内容',
+          cards: [],
+        },
+        {
+          sessionId: 'session-b',
+          status: 'finished',
+          language: 'zh_CN',
+          createdAt: '2026-04-24T10:41:24.000Z',
+          updatedAt: '2026-04-24T10:42:24.000Z',
+          finalTranscript: '第二条转写内容',
+          cards: [],
+        },
+      ],
+    }
+
+    render(
+      <VoiceNoteEditor
+        note={note}
+        value=""
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        voicePanelVisible
+      />
+    )
+
+    expect(screen.getByText('第二条转写内容')).toBeInTheDocument()
+    expect(screen.queryByText('第一条转写内容')).not.toBeInTheDocument()
+    await user.click(screen.getByText('语音文件 01'))
+    expect(await screen.findByText('第一条转写内容')).toBeInTheDocument()
+    expect(screen.queryByText('第二条转写内容')).not.toBeInTheDocument()
+  })
+
+  it('does not render finished standalone sessions after voice files are removed', () => {
+    const note = {
+      id: 'note-finished-session-1',
+      title: '会话清理测试',
+      type: 'voice',
+      voiceNote: [],
+      voiceRealtimeSessions: [
+        {
+          sessionId: 'session-finished-1',
+          status: 'finished',
+          language: 'zh_CN',
+          startedAt: '2026-04-24T17:40:00.000Z',
+          finishedAt: '2026-04-24T17:42:00.000Z',
+          finalTranscript: '历史转写内容',
+          cards: [
+            {
+              id: 1,
+              segmentIndex: 1,
+              startOffsetMs: 0,
+              transcript: '历史转写内容',
+              createdAt: '2026-04-24T17:41:00.000Z',
+            },
+          ],
+        },
+      ],
+    }
+
+    render(
+      <VoiceNoteEditor
+        note={note}
+        value=""
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        voicePanelVisible
+      />
+    )
+
+    expect(screen.queryByText(/SESSION/i)).not.toBeInTheDocument()
+    expect(screen.getAllByText('暂无语音卡片，开始录音后会在这里生成').length).toBeGreaterThan(0)
+  })
+
+  it('deletes a voice file from the recording card and refreshes the note', async () => {
+    const user = userEvent.setup()
+    const deleteVoiceNoteCardMock = vi.spyOn(noteService, 'deleteVoiceNoteCard').mockResolvedValue({ success: true })
+    const onNoteRefresh = vi.fn().mockResolvedValue({
+      id: 'note-delete-1',
+      title: '删除测试',
+      type: 'voice',
+      voiceNote: [],
+      voiceRealtimeSessions: [],
+    })
+    const note = {
+      id: 'note-delete-1',
+      title: '删除测试',
+      type: 'voice',
+      voiceNote: [
+        {
+          fileId: 'file-delete-1',
+          audioUrl: '/files/file-delete-1',
+          createdAt: '2026-04-24T09:41:24.000Z',
+          transcript: 'hello',
+        },
+      ],
+      voiceRealtimeSessions: [],
+    }
+
+    render(
+      <VoiceNoteEditor
+        note={note}
+        value=""
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        onNoteRefresh={onNoteRefresh}
+        voicePanelVisible
+      />
+    )
+
+    expect(screen.getByText(/语音(文件|卡片) 01/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '删除语音卡片' }))
+
+    await waitFor(() => {
+      expect(deleteVoiceNoteCardMock).toHaveBeenCalledWith('note-delete-1', 'file-delete-1')
+    })
+    await waitFor(() => {
+      expect(onNoteRefresh).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(screen.queryByText(/语音(文件|卡片) 01/)).not.toBeInTheDocument()
+    })
+
+    deleteVoiceNoteCardMock.mockRestore()
+  })
+
+  it('keeps the remaining recording transcript and display index after deleting an earlier file', async () => {
+    const user = userEvent.setup()
+    const deleteVoiceNoteCardMock = vi.spyOn(noteService, 'deleteVoiceNoteCard').mockResolvedValue({ success: true })
+    const onNoteRefresh = vi.fn().mockResolvedValue({
+      id: 'note-delete-stable-1',
+      title: '删除稳定性测试',
+      type: 'voice',
+      voiceNote: [
+        {
+          fileId: 'file-2',
+          fileName: '语音文件 02',
+          sessionId: 'session-2',
+          audioUrl: '/files/file-2',
+          createdAt: '2026-04-24T09:45:24.000Z',
+        },
+      ],
+      voiceRealtimeSessions: [
+        {
+          sessionId: 'session-1',
+          status: 'finished',
+          language: 'zh_CN',
+          createdAt: '2026-04-24T09:41:24.000Z',
+          updatedAt: '2026-04-24T09:42:24.000Z',
+          finalTranscript: '第一个文件的转写',
+          cards: [],
+        },
+        {
+          sessionId: 'session-2',
+          status: 'finished',
+          language: 'zh_CN',
+          createdAt: '2026-04-24T09:45:24.000Z',
+          updatedAt: '2026-04-24T09:46:24.000Z',
+          finalTranscript: '第二个文件的转写',
+          cards: [],
+        },
+      ],
+    })
+    const note = {
+      id: 'note-delete-stable-1',
+      title: '删除稳定性测试',
+      type: 'voice',
+      voiceNote: [
+        {
+          fileId: 'file-1',
+          fileName: '语音文件 01',
+          sessionId: 'session-1',
+          audioUrl: '/files/file-1',
+          createdAt: '2026-04-24T09:41:24.000Z',
+        },
+        {
+          fileId: 'file-2',
+          fileName: '语音文件 02',
+          sessionId: 'session-2',
+          audioUrl: '/files/file-2',
+          createdAt: '2026-04-24T09:45:24.000Z',
+        },
+      ],
+      voiceRealtimeSessions: [
+        {
+          sessionId: 'session-1',
+          status: 'finished',
+          language: 'zh_CN',
+          createdAt: '2026-04-24T09:41:24.000Z',
+          updatedAt: '2026-04-24T09:42:24.000Z',
+          finalTranscript: '第一个文件的转写',
+          cards: [],
+        },
+        {
+          sessionId: 'session-2',
+          status: 'finished',
+          language: 'zh_CN',
+          createdAt: '2026-04-24T09:45:24.000Z',
+          updatedAt: '2026-04-24T09:46:24.000Z',
+          finalTranscript: '第二个文件的转写',
+          cards: [],
+        },
+      ],
+    }
+
+    render(
+      <VoiceNoteEditor
+        note={note}
+        value=""
+        onChange={vi.fn()}
+        onSave={vi.fn()}
+        onNoteRefresh={onNoteRefresh}
+        voicePanelVisible
+      />
+    )
+
+    expect(screen.getByText('语音文件 01')).toBeInTheDocument()
+    expect(screen.getByText('语音文件 02')).toBeInTheDocument()
+    await user.click(screen.getByText('语音文件 01'))
+    const selectedCard = screen.getByText('语音文件 01').closest('[role="button"]')
+    await user.click(within(selectedCard).getByRole('button', { name: '删除语音卡片' }))
+
+    await waitFor(() => {
+      expect(deleteVoiceNoteCardMock).toHaveBeenCalledWith('note-delete-stable-1', 'file-1')
+    })
+    await waitFor(() => {
+      expect(onNoteRefresh).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(screen.queryByText('语音文件 01')).not.toBeInTheDocument()
+    })
+
+    expect(screen.getByText('语音文件 02')).toBeInTheDocument()
+    expect(screen.getByText('第二个文件的转写')).toBeInTheDocument()
+    expect(screen.queryByText('第一个文件的转写')).not.toBeInTheDocument()
+
+    deleteVoiceNoteCardMock.mockRestore()
   })
 })

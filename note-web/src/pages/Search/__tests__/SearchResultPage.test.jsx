@@ -112,7 +112,7 @@ describe('SearchResultPage', () => {
 
     renderPage()
 
-    expect(screen.getByTestId('search-results-loading')).toBeInTheDocument()
+    expect(screen.getAllByTestId('search-results-loading').length).toBeGreaterThan(0)
   })
 
   it('falls back to an empty list when search request fails', async () => {

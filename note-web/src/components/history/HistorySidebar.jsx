@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { Avatar, Button, Empty, Spin, Tag, Typography, message } from 'antd'
+import { Button, Empty, Spin, Tag, Typography, message } from 'antd'
 import {
   ClockCircleOutlined,
   CloseOutlined,
   RollbackOutlined,
-  UserOutlined,
 } from '@ant-design/icons'
 import historyService from '@/services/historyService'
 
@@ -27,15 +26,6 @@ function formatHistoryTime(value) {
   }
 
   return `${date.getFullYear()}/${pad2(date.getMonth() + 1)}/${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`
-}
-
-function getHistoryUserLabel(item) {
-  return item?.userName || item?.nickName || item?.userId || '未知用户'
-}
-
-function getHistoryAvatarLabel(item) {
-  const label = getHistoryUserLabel(item).trim()
-  return label ? label.slice(0, 1).toUpperCase() : 'U'
 }
 
 function normalizeHistoryItems(response) {
@@ -195,7 +185,6 @@ function HistorySidebar({ open, noteId, onClose, onRestored }) {
             {historyList.map((item, index) => {
               const historyVersion = item?.version
               const historyTime = formatHistoryTime(item?.createdAt || item?.updatedAt || item?.time)
-              const historyUserLabel = getHistoryUserLabel(item)
               const isCurrentVersion = index === 0
 
               return (
@@ -222,58 +211,32 @@ function HistorySidebar({ open, noteId, onClose, onRestored }) {
                       gap: 12,
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                      <Avatar
-                        size={30}
-                        src={item?.profileUrl || item?.avatarUrl}
-                        style={{
-                          background: item?.profileUrl || item?.avatarUrl
-                            ? undefined
-                            : 'linear-gradient(135deg, #93c5fd, #3b82f6)',
-                          color: '#fff',
-                          flexShrink: 0,
-                        }}
-                        icon={<UserOutlined />}
-                      >
-                        {getHistoryAvatarLabel(item)}
-                      </Avatar>
-                      <div style={{ minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 16,
-                            fontWeight: 500,
-                            color: '#111827',
-                            lineHeight: 1.3,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {historyUserLabel}
-                        </div>
-                        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            版本 {historyVersion ?? '--'}
-                          </Text>
-                          {isCurrentVersion ? (
-                            <Tag color="blue" style={{ marginInlineEnd: 0, borderRadius: 999 }}>
-                              当前版本
-                            </Tag>
-                          ) : null}
-                        </div>
-                      </div>
+                    <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      {isCurrentVersion ? (
+                        <Tag color="blue" style={{ marginInlineEnd: 0, borderRadius: 999 }}>
+                          当前版本
+                        </Tag>
+                      ) : null}
                     </div>
 
                     <Button
                       type="text"
-                      aria-label={historyVersion != null ? `恢复版本 ${historyVersion}` : '恢复版本'}
-                      icon={<RollbackOutlined />}
+                      aria-label={historyVersion != null ? `恢复此版本 ${historyVersion}` : '恢复此版本'}
+                      icon={<RollbackOutlined style={{ fontSize: 18 }} />}
                       onClick={() => handleRestore(historyVersion)}
                       loading={restoringVersion === historyVersion}
                       disabled={historyVersion == null}
                       style={{
-                        color: '#cbd5e1',
+                        color: '#2563eb',
                         flexShrink: 0,
+                        width: 38,
+                        height: 38,
+                        borderRadius: 12,
+                        background: 'rgba(37,99,235,0.1)',
+                        border: '1px solid rgba(37,99,235,0.16)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     />
                   </div>

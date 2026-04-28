@@ -1,23 +1,34 @@
 import request from '@/utils/request'
 import { getAppConfig } from '@/utils/config'
 import { rememberPostLoginRedirect } from '@/utils/authNavigation'
+import { getEditorSection } from '@/utils/editorRuntimeConfig'
 
 class AuthService {
   constructor() {
     this.config = getAppConfig()
     this.userStorageKey = 'cloud_doc_user'
+    this.editorJwtRequestCache = new Map()
+  }
+
+  getEditorConfig(editorKind = 'page') {
+    if (!editorKind || typeof editorKind !== 'string') {
+      return {}
+    }
+
+    return getEditorSection(editorKind) || {}
   }
 
   getEditorPageConfig() {
-    return this.config.editor?.page || {}
+    return this.getEditorConfig('page')
   }
 
-  getEditorAuthConfig() {
-    const pageConfig = this.getEditorPageConfig()
+  getEditorAuthConfig(editorKind = 'page') {
+    const editorConfig = this.getEditorConfig(editorKind)
     return {
-      appId: pageConfig.auth?.appId || pageConfig.appId || this.getAppId() || 'stub-editor-app-id',
-      signKey: pageConfig.auth?.signKey || pageConfig.signKey || 'stub-editor-sign-key',
-      expiresInMs: pageConfig.auth?.expiresInMs || 5 * 60 * 1000,
+      enabled: Boolean(editorConfig.auth?.enabled),
+      appId: editorConfig.auth?.appId || editorConfig.appId || this.getAppId() || 'stub-editor-app-id',
+      signKey: editorConfig.auth?.signKey || editorConfig.signKey || 'stub-editor-sign-key',
+      expiresInMs: editorConfig.auth?.expiresInMs || 5 * 60 * 1000,
     }
   }
 
@@ -58,24 +69,54 @@ class AuthService {
   }
 
   async requestEditorAccessToken({ documentId }) {
-    const response = await request.post('/api/accesstoken/jwt', {
-      documentId: documentId || '',
-    })
-
-    const token = response?.data?.token || response?.token || ''
-    if (!token) {
-      throw new Error('empty editor jwt token')
+    const cacheKey = String(documentId || '').trim() || '__empty__'
+    const cachedRequest = this.editorJwtRequestCache.get(cacheKey)
+    if (cachedRequest) {
+      return cachedRequest
     }
 
-    return token
+    const requestPromise = request.post('/api/accesstoken/jwt', {
+      documentId: documentId || '',
+    }).then((response) => {
+      const token = response?.data?.token || response?.token || ''
+      if (!token) {
+        throw new Error('empty editor jwt token')
+      }
+
+      return token
+    }).finally(() => {
+      this.editorJwtRequestCache.delete(cacheKey)
+    })
+
+    this.editorJwtRequestCache.set(cacheKey, requestPromise)
+    return requestPromise
   }
 
-  createEditorAuth({ documentId, user, userId, appId, readOnly = false }) {
-    const editorAuthConfig = this.getEditorAuthConfig()
+  createEditorAuth({ documentId, user, userId, appId, readOnly = false, editorKind = 'page' }) {
+    const editorAuthConfig = this.getEditorAuthConfig(editorKind)
     const resolvedUserId = user?.id || user?.userId || userId || this.getUserId() || 'unknown'
     const resolvedUserName = user?.name || user?.realName || user?.nickName || resolvedUserId
     const resolvedAppId = editorAuthConfig.appId || appId || this.getAppId() || 'stub-editor-app-id'
     const resolvedAuthType = readOnly ? 'READ' : 'EDIT'
+    const legacyAuth = {
+      appId: resolvedAppId,
+      userId: resolvedUserId,
+      user: {
+        id: resolvedUserId,
+        name: resolvedUserName,
+        realName: user?.realName || user?.name || resolvedUserName,
+        avatar: user?.avatar || user?.avatarUrl || user?.picture || '',
+      },
+      token: this.getToken() || '',
+      extraData: {
+        documentId: documentId || '',
+      },
+    }
+
+    if (!editorAuthConfig.enabled) {
+      return legacyAuth
+    }
+
     const tokenPromise = this.requestEditorAccessToken({
       documentId,
     }).catch((error) => {
@@ -471,7 +512,8 @@ class AuthService {
     } catch (error) {
       console.warn('Failed to clear stored user profile', error)
     }
-    window.location.href = '/login'
+    const idaasUrl = this.getIdaasAuthUrl('')
+    window.location.replace(idaasUrl || '/login')
   }
 }
 

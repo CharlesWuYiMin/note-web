@@ -1,205 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Spin } from 'antd'
 import useAuth from '@/hooks/useAuth'
 import authService from '@/services/authService'
-import { getAppConfig } from '@/utils/config'
+import { getEditorDocumentType } from '@/utils/editorRuntimeConfig'
+import { reportTiming } from '@/utils/observability'
 
-const THIRD_BLOCK_EDITOR_NAMES = {
-  board: 'blockHuaBan',
-  draw: 'blockliuCheng',
-  mind: 'blocksiWeiDao',
-}
-
-let thirdBlockEditorConfigPromise = null
-
-function normalizeAbsoluteUrl(url) {
-  const normalizedUrl = String(url || '').trim()
-  if (!normalizedUrl) {
-    return ''
-  }
-
-  try {
-    return new URL(normalizedUrl, window.location.origin).toString()
-  } catch {
-    return normalizedUrl
-  }
-}
-
-function ensureTrailingSlash(url) {
-  return url.endsWith('/') ? url : `${url}/`
-}
-
-function stripTrailingSlash(url) {
-  return url.endsWith('/') ? url.slice(0, -1) : url
-}
-
-function stripApiSuffix(url) {
-  return stripTrailingSlash(url).replace(/\/api$/u, '')
-}
-
-async function loadThirdBlockEditorConfig(contentServerUrl) {
-  const normalizedContentServerUrl = normalizeAbsoluteUrl(contentServerUrl)
-  if (!normalizedContentServerUrl) {
-    return {}
-  }
-
-  if (!thirdBlockEditorConfigPromise) {
-    thirdBlockEditorConfigPromise = (async () => {
-      try {
-        const endpoint = new URL('/api/content/sysconfig/all', normalizedContentServerUrl).toString()
-        const response = await fetch(endpoint, {
-          credentials: 'include',
-        })
-
-        if (!response.ok) {
-          throw new Error(`failed to load third block config: ${response.status}`)
-        }
-
-        const payload = await response.json()
-        const allConfigs = Array.isArray(payload?.data) ? payload.data : []
-        const targetConfig = allConfigs.find((item) => item?.configKey === 'webDisplayThirdBlock')
-        const thirdBlocks = JSON.parse(targetConfig?.configValue || '[]')
-
-        return thirdBlocks.reduce((result, item) => {
-          const key = Object.entries(THIRD_BLOCK_EDITOR_NAMES).find(([, name]) => name === item?.name)?.[0]
-          if (!key || !item?.editUrl) {
-            return result
-          }
-
-          return {
-            ...result,
-            [key]: normalizeAbsoluteUrl(item.editUrl),
-          }
-        }, {})
-      } catch (error) {
-        if (import.meta.env.DEV) {
-          console.debug('[CloudDiagramEditor] failed to load third block config', error)
-        }
-        return {}
-      }
-    })()
-  }
-
-  return thirdBlockEditorConfigPromise
-}
-
-function resolveEditorUrl(editorConfig, editorKind) {
-  const customConfig = editorConfig?.[editorKind] || {}
-  if (customConfig?.editorUrl) {
-    return normalizeAbsoluteUrl(customConfig.editorUrl)
-  }
-
-  if (editorKind === 'draw' && editorConfig?.page?.flowDiagramUrl) {
-    return normalizeAbsoluteUrl(editorConfig.page.flowDiagramUrl)
-  }
-
-  if (editorKind === 'board') {
-    const boardPageUrl =
-      editorConfig?.page?.boardEditorUrl ||
-      editorConfig?.page?.boardUrl ||
-      editorConfig?.page?.mindboardUrl ||
-      editorConfig?.page?.handwrittenEditorUrl
-
-    if (boardPageUrl) {
-      return normalizeAbsoluteUrl(boardPageUrl)
-    }
-  }
-
-  const pageEditorUrl = normalizeAbsoluteUrl(editorConfig?.page?.editorUrl)
-  if (!pageEditorUrl) {
-    return ''
-  }
-
-  if (/\/editor\/[^/]+\/?$/u.test(pageEditorUrl)) {
-    return ensureTrailingSlash(pageEditorUrl)
-  }
-
-  const editorBaseUrl = ensureTrailingSlash(pageEditorUrl)
-  try {
-    return new URL(`${editorKind}editor/`, editorBaseUrl).toString()
-  } catch {
-    return `${editorBaseUrl}${editorKind}editor/`
-  }
-}
-
-function resolveCollaborationUrl(editorConfig, editorKind) {
-  const customConfig = editorConfig?.[editorKind] || {}
-  return customConfig?.collaborationUrl || editorConfig?.page?.collaborationUrl || ''
-}
-
-function resolveApiUrl(editorConfig, apiConfig, editorKind) {
-  const customConfig = editorConfig?.[editorKind] || {}
-  if (customConfig?.apiUrl) {
-    return normalizeAbsoluteUrl(customConfig.apiUrl)
-  }
-
-  if (editorConfig?.page?.apiUrl) {
-    return normalizeAbsoluteUrl(editorConfig.page.apiUrl)
-  }
-
-  const contentServerUrl = normalizeAbsoluteUrl(apiConfig?.contentServer)
-  if (contentServerUrl) {
-    try {
-      return new URL('/api', contentServerUrl).toString()
-    } catch {
-      return `${stripTrailingSlash(contentServerUrl)}/api`
-    }
-  }
-
-  return apiConfig?.baseUrl || ''
-}
-
-function resolveServiceBaseUrl(editorConfig, apiConfig, editorKind) {
-  const customConfig = editorConfig?.[editorKind] || {}
-  const explicitServiceBaseUrl =
-    customConfig?.serviceBaseUrl ||
-    customConfig?.baseURL ||
-    customConfig?.service?.baseURL
-
-  if (explicitServiceBaseUrl) {
-    return normalizeAbsoluteUrl(explicitServiceBaseUrl)
-  }
-
-  const contentServerUrl = normalizeAbsoluteUrl(apiConfig?.contentServer)
-  if (contentServerUrl) {
-    return stripTrailingSlash(contentServerUrl)
-  }
-
-  const apiUrl = resolveApiUrl(editorConfig, apiConfig, editorKind)
-  return apiUrl ? stripApiSuffix(normalizeAbsoluteUrl(apiUrl)) : ''
-}
-
-function resolveObsPrefix(editorConfig, editorKind) {
-  const customConfig = editorConfig?.[editorKind] || {}
-  return customConfig?.obsPrefix || editorConfig?.page?.obsPrefix || ''
-}
-
-function serializeEditorPayload(payload) {
-  if (payload == null) {
-    return ''
-  }
-
-  if (typeof payload === 'string') {
-    return payload
-  }
-
-  const persistablePayload = payload?.data ?? payload
-
-  try {
-    return JSON.stringify(persistablePayload)
-  } catch {
-    return String(persistablePayload)
-  }
-}
-
-function formatEditorInitError(error, runtimeConfig, alternateEditorUrl = '') {
+function formatEditorInitError(error, editorProps) {
   const message = error?.message || 'Editor initialization failed'
   const details = [
-    runtimeConfig?.editorUrl ? `editorUrl=${runtimeConfig.editorUrl}` : '',
-    runtimeConfig?.apiUrl ? `apiUrl=${runtimeConfig.apiUrl}` : '',
-    runtimeConfig?.serviceBaseUrl ? `serviceBaseUrl=${runtimeConfig.serviceBaseUrl}` : '',
-    runtimeConfig?.collaborationUrl ? `collaborationUrl=${runtimeConfig.collaborationUrl}` : '',
-    alternateEditorUrl ? `alternateEditorUrl=${alternateEditorUrl}` : '',
+    editorProps?.url ? `url=${editorProps.url}` : '',
+    editorProps?.editorUrl ? `editorUrl=${editorProps.editorUrl}` : '',
+    editorProps?.apiUrl ? `apiUrl=${editorProps.apiUrl}` : '',
+    editorProps?.service?.baseURL ? `service.baseURL=${editorProps.service.baseURL}` : '',
+    editorProps?.collabOptions?.server ? `collabOptions.server=${editorProps.collabOptions.server}` : '',
     typeof navigator !== 'undefined' ? `online=${navigator.onLine}` : '',
   ].filter(Boolean)
 
@@ -210,84 +23,83 @@ function formatEditorInitError(error, runtimeConfig, alternateEditorUrl = '') {
   return details.length > 0 ? `${message} (${details.join(', ')})` : message
 }
 
+function createLegacyAuthentication({ documentId, user, userId, appId }) {
+  const resolvedUserId = user?.id || user?.userId || userId || authService.getUserId() || 'unknown'
+  const resolvedUserName =
+    user?.name || user?.realName || user?.nickName || resolvedUserId
+
+  return {
+    appId: appId || authService.getAppId() || 'stub-editor-app-id',
+    userId: resolvedUserId,
+    token: authService.getToken() || '',
+    analyzeToken: authService.getToken() || '',
+    user: {
+      id: resolvedUserId,
+      name: resolvedUserName,
+      realName: user?.realName || user?.name || resolvedUserName,
+      avatar: user?.avatar || user?.avatarUrl || user?.picture || '',
+    },
+    extraData: {
+      documentId: documentId || '',
+    },
+  }
+}
+
 function CloudDiagramEditor({
   EditorComponent,
-  FallbackComponent = null,
-  fallbackMessage = '',
   editorKind,
+  editorProps = {},
+  documentData = null,
+  useServerAuth = true,
   note,
-  onChange,
-  onSave,
   readOnly = false,
   placeholder,
 }) {
-  const { api, editor } = getAppConfig()
   const { user, userId, appId } = useAuth()
-  const saveTimerRef = useRef(null)
+  const mountRef = useRef(null)
   const editorWatchdogRef = useRef(null)
-  const lastSerializedRef = useRef('')
-  const onChangeRef = useRef(onChange)
-  const onSaveRef = useRef(onSave)
+  const initStartedAtRef = useRef(0)
   const [authentication, setAuthentication] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [editorLoading, setEditorLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [isFallbackActive, setIsFallbackActive] = useState(false)
+  const [mountSize, setMountSize] = useState({ width: 0, height: 0 })
 
-  useEffect(() => {
-    onChangeRef.current = onChange
-  }, [onChange])
-
-  useEffect(() => {
-    onSaveRef.current = onSave
-  }, [onSave])
-
-  const fallbackRuntimeConfig = useMemo(
-    () => ({
-      editorUrl: resolveEditorUrl(editor, editorKind),
-      apiUrl: resolveApiUrl(editor, api, editorKind),
-      serviceBaseUrl: resolveServiceBaseUrl(editor, api, editorKind),
-      collaborationUrl: resolveCollaborationUrl(editor, editorKind),
-      obsPrefix: resolveObsPrefix(editor, editorKind),
-    }),
-    [api, editor, editorKind]
-  )
-  const [thirdBlockEditorUrl, setThirdBlockEditorUrl] = useState('')
-  const [runtimeConfigReady, setRuntimeConfigReady] = useState(false)
-  const alternateEditorUrl =
-    thirdBlockEditorUrl && thirdBlockEditorUrl !== fallbackRuntimeConfig.editorUrl
-      ? thirdBlockEditorUrl
-      : ''
-  const runtimeConfigCandidates = useMemo(
-    () => [fallbackRuntimeConfig],
-    [fallbackRuntimeConfig]
-  )
-  const [runtimeConfigIndex, setRuntimeConfigIndex] = useState(0)
-  const runtimeConfig = runtimeConfigCandidates[runtimeConfigIndex] || fallbackRuntimeConfig
-  const iframeReadyTimeoutMs = FallbackComponent ? 5000 : 12000
+  const documentType = getEditorDocumentType(editorKind)
+  const mountReady = mountSize.width > 0 && mountSize.height > 0
   const loading = authLoading || editorLoading
+  const editorKey = editorProps.url || editorProps.editorUrl || editorKind || 'editor'
 
-  useEffect(() => {
-    setThirdBlockEditorUrl('')
-    setRuntimeConfigReady(false)
-  }, [fallbackRuntimeConfig.editorUrl, editorKind])
-
-  useEffect(() => {
-    setRuntimeConfigIndex(0)
-  }, [runtimeConfigCandidates])
-
-  const documentConfig = useMemo(
-    () => ({
+  const documentConfig = useMemo(() => {
+    const nextDocument = {
       docId: note?.id || '',
-      docType: 'document',
+      docType: documentType,
       lang: 'zh-CN',
+      traceId: note?.traceId || note?.id || '',
+      createuserId: userId || authService.getUserId() || '',
+      createUserId: userId || authService.getUserId() || '',
       orgId: note?.orgId || note?.organizationId || note?.tenantId || undefined,
-    }),
-    [note?.id, note?.orgId, note?.organizationId, note?.tenantId]
-  )
+    }
+
+    if (documentData != null) {
+      nextDocument.data = documentData
+    }
+
+    return nextDocument
+  }, [documentData, documentType, note?.id, note?.orgId, note?.organizationId, note?.tenantId, note?.traceId, userId])
 
   const loadAuthentication = useCallback(async () => {
+    if (!useServerAuth) {
+      return createLegacyAuthentication({
+        documentId: note?.id,
+        user,
+        userId: userId || authService.getUserId(),
+        appId,
+      })
+    }
+
     const auth = authService.createEditorAuth({
+      editorKind,
       documentId: note?.id,
       user,
       userId: userId || authService.getUserId(),
@@ -304,21 +116,75 @@ function CloudDiagramEditor({
       user: auth.user,
       extraData: auth.extraData,
     }
-  }, [appId, note?.id, readOnly, user, userId])
+  }, [appId, editorKind, note?.id, readOnly, useServerAuth, user, userId])
 
-  useEffect(() => {
-    if (!runtimeConfigReady) {
-      setAuthLoading(true)
-      setEditorLoading(true)
+  useLayoutEffect(() => {
+    const node = mountRef.current
+
+    if (!node) {
       return undefined
     }
 
+    let frameId = null
+    let resizeObserver = null
+
+    const updateSize = () => {
+      const rect = node.getBoundingClientRect()
+      const nextSize = {
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }
+
+      setMountSize((current) => (
+        current.width === nextSize.width && current.height === nextSize.height
+          ? current
+          : nextSize
+      ))
+    }
+
+    const scheduleUpdate = () => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId)
+      }
+
+      frameId = window.requestAnimationFrame(updateSize)
+    }
+
+    scheduleUpdate()
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(scheduleUpdate)
+      resizeObserver.observe(node)
+    } else {
+      window.addEventListener('resize', scheduleUpdate)
+    }
+
+    return () => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId)
+      }
+
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+      } else {
+        window.removeEventListener('resize', scheduleUpdate)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (!documentConfig.docId) {
       setAuthentication(null)
       setAuthLoading(false)
       setEditorLoading(false)
       setErrorMessage('Missing document id')
-      setIsFallbackActive(Boolean(FallbackComponent))
+      reportTiming('cloud_editor_init', 0, {
+        status: 'error',
+        editorKind,
+        noteId: note?.id || '',
+        documentType,
+        errorName: 'MissingDocumentId',
+      })
       return undefined
     }
 
@@ -326,7 +192,7 @@ function CloudDiagramEditor({
     setAuthLoading(true)
     setEditorLoading(true)
     setErrorMessage('')
-    setIsFallbackActive(false)
+    initStartedAtRef.current = Date.now()
 
     loadAuthentication()
       .then((nextAuthentication) => {
@@ -345,47 +211,23 @@ function CloudDiagramEditor({
         setAuthentication(null)
         setAuthLoading(false)
         setEditorLoading(false)
-        setErrorMessage(formatEditorInitError(error, runtimeConfig, alternateEditorUrl))
-        setIsFallbackActive(Boolean(FallbackComponent))
+        setErrorMessage(formatEditorInitError(error, editorProps))
+        reportTiming('cloud_editor_init', Date.now() - initStartedAtRef.current, {
+          status: 'error',
+          editorKind,
+          noteId: note?.id || '',
+          documentType,
+          errorName: error?.name || 'Error',
+        })
       })
 
     return () => {
       cancelled = true
     }
-  }, [alternateEditorUrl, documentConfig.docId, loadAuthentication, runtimeConfigReady, runtimeConfig])
-
-  useEffect(() => {
-    let cancelled = false
-
-    loadThirdBlockEditorConfig(api.contentServer)
-      .then((thirdBlockEditors) => {
-        if (cancelled) {
-          return
-        }
-
-        const overriddenEditorUrl = thirdBlockEditors?.[editorKind]
-        setThirdBlockEditorUrl(overriddenEditorUrl || '')
-        setRuntimeConfigReady(true)
-      })
-      .catch(() => {
-        if (cancelled) {
-          return
-        }
-        setRuntimeConfigReady(true)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [api.contentServer, editorKind])
+  }, [documentConfig.docId, editorProps, loadAuthentication])
 
   useEffect(
     () => () => {
-      if (saveTimerRef.current) {
-        window.clearTimeout(saveTimerRef.current)
-        saveTimerRef.current = null
-      }
-
       if (editorWatchdogRef.current) {
         window.clearTimeout(editorWatchdogRef.current)
         editorWatchdogRef.current = null
@@ -395,7 +237,7 @@ function CloudDiagramEditor({
   )
 
   useEffect(() => {
-    if (!authentication || !runtimeConfigReady) {
+    if (!authentication || !mountReady) {
       return undefined
     }
 
@@ -406,11 +248,15 @@ function CloudDiagramEditor({
 
     editorWatchdogRef.current = window.setTimeout(() => {
       setEditorLoading(false)
-      setErrorMessage(
-        formatEditorInitError(new Error('wait iframe ready timeout'), runtimeConfig, alternateEditorUrl)
-      )
-      setIsFallbackActive(Boolean(FallbackComponent))
-    }, iframeReadyTimeoutMs)
+      setErrorMessage(formatEditorInitError(new Error('wait iframe ready timeout'), editorProps))
+      reportTiming('cloud_editor_init', Date.now() - initStartedAtRef.current, {
+        status: 'error',
+        editorKind,
+        noteId: note?.id || '',
+        documentType,
+        errorName: 'TimeoutError',
+      })
+    }, 12000)
 
     return () => {
       if (editorWatchdogRef.current) {
@@ -418,27 +264,7 @@ function CloudDiagramEditor({
         editorWatchdogRef.current = null
       }
     }
-  }, [alternateEditorUrl, authentication, iframeReadyTimeoutMs, runtimeConfig, runtimeConfigReady])
-
-  const handleEditorPayload = useCallback((payload) => {
-    const nextContent = serializeEditorPayload(payload)
-    if (!nextContent || nextContent === lastSerializedRef.current) {
-      return { success: true }
-    }
-
-    lastSerializedRef.current = nextContent
-    onChangeRef.current?.(nextContent)
-
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current)
-    }
-
-    saveTimerRef.current = window.setTimeout(() => {
-      onSaveRef.current?.(nextContent)
-    }, 500)
-
-    return { success: true }
-  }, [])
+  }, [authentication, editorProps, mountReady])
 
   const handleLoaded = useCallback(async (payload) => {
     if (editorWatchdogRef.current) {
@@ -448,15 +274,15 @@ function CloudDiagramEditor({
 
     setEditorLoading(false)
     setErrorMessage('')
-
-    const nextContent = serializeEditorPayload(payload)
-    if (nextContent) {
-      lastSerializedRef.current = nextContent
-      onChangeRef.current?.(nextContent)
-    }
+    reportTiming('cloud_editor_init', Date.now() - initStartedAtRef.current, {
+      status: 'success',
+      editorKind,
+      noteId: note?.id || '',
+      documentType,
+    })
 
     return { success: true }
-  }, [])
+  }, [documentType, editorKind, note?.id])
 
   const handleRefreshToken = useCallback(async () => {
     const nextAuthentication = await loadAuthentication()
@@ -479,7 +305,7 @@ function CloudDiagramEditor({
     >
       {errorMessage ? (
         <Alert
-          type={isFallbackActive ? 'warning' : 'error'}
+          type="error"
           showIcon
           style={{
             flexShrink: 0,
@@ -487,16 +313,13 @@ function CloudDiagramEditor({
             borderLeft: 'none',
             borderRight: 'none',
           }}
-          message={isFallbackActive ? 'Diagram editor unavailable, fallback enabled' : 'Editor initialization failed'}
-          description={
-            isFallbackActive
-              ? `${fallbackMessage || 'The dedicated diagram editor is currently unreachable, so PageEditor compatibility mode is being used.'} ${errorMessage}`.trim()
-              : (errorMessage || placeholder || 'Please check the SDK and runtime config.')
-          }
+          message="Editor initialization failed"
+          description={errorMessage || placeholder || 'Please check the SDK and runtime config.'}
         />
       ) : null}
 
       <div
+        ref={mountRef}
         style={{
           flex: '1 1 auto',
           minWidth: 0,
@@ -523,37 +346,12 @@ function CloudDiagramEditor({
 
         {authentication && !errorMessage ? (
           <EditorComponent
-            key={`${editorKind}:${documentConfig.docId}:${runtimeConfigIndex}:${runtimeConfig.editorUrl}`}
+            key={`${editorKind}:${documentConfig.docId}:${editorKey}`}
+            {...editorProps}
             document={documentConfig}
             authentication={authentication}
-            url={runtimeConfig.editorUrl}
-            collabOptions={{
-              disable: true,
-              server: runtimeConfig.collaborationUrl,
-            }}
-            scene={{
-              mode: readOnly ? 'reader' : 'editor',
-            }}
-            editorConfig={{
-              theme: 'light',
-            }}
-            service={{
-              baseURL: runtimeConfig.serviceBaseUrl,
-              imgPrefix: runtimeConfig.obsPrefix,
-            }}
             onLoadedHandle={handleLoaded}
-            onEditorDataChangeHandle={handleEditorPayload}
             onRefreshToken={handleRefreshToken}
-          />
-        ) : null}
-
-        {isFallbackActive && FallbackComponent ? (
-          <FallbackComponent
-            note={note}
-            onChange={onChange}
-            onSave={onSave}
-            readOnly={readOnly}
-            placeholder={placeholder}
           />
         ) : null}
       </div>

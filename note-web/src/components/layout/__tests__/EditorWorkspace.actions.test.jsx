@@ -1,10 +1,12 @@
 ﻿import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { message } from 'antd'
 import EditorWorkspace from '@/components/layout/EditorWorkspace'
 
 const {
+  editorFactorySpy,
   loadNoteByIdMock,
   toggleStarMock,
   updateNameMock,
@@ -16,6 +18,7 @@ const {
   navigateMock,
   locationMock,
 } = vi.hoisted(() => ({
+  editorFactorySpy: vi.fn(),
   loadNoteByIdMock: vi.fn(),
   toggleStarMock: vi.fn(),
   updateNameMock: vi.fn(),
@@ -68,6 +71,7 @@ vi.mock('@/hooks/useNote', () => ({
 
 vi.mock('@/components/editors/EditorFactory', () => ({
   default: function MockEditorFactory(props) {
+    editorFactorySpy(props)
     return <div data-testid="editor-factory" data-type={props.type} />
   },
 }))
@@ -99,6 +103,10 @@ vi.mock('react-i18next', () => ({
 describe('EditorWorkspace actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    editorFactorySpy.mockClear()
+    vi.spyOn(message, 'success').mockImplementation(vi.fn())
+    vi.spyOn(message, 'error').mockImplementation(vi.fn())
+    vi.spyOn(message, 'warning').mockImplementation(vi.fn())
     listMySharesMock.mockResolvedValue([])
     noteState.currentNote = {
       id: 'note-1',
@@ -176,7 +184,8 @@ describe('EditorWorkspace actions', () => {
     await user.click(screen.getByRole('button', { name: '分享' }))
 
     await waitFor(() => {
-      expect(screen.getByText('分享笔记')).toBeInTheDocument()
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).getByText('分享笔记')).toBeInTheDocument()
     })
   })
 
@@ -187,7 +196,7 @@ describe('EditorWorkspace actions', () => {
     await user.click(screen.getByRole('button', { name: '编辑笔记标题' }))
 
     expect(screen.getByTestId('note-title-editor')).toHaveStyle({
-      border: '2px solid #5b8def',
+      border: '1px solid rgba(10,89,247,0.32)',
     })
 
     const input = screen.getByRole('textbox', { name: '笔记标题' })
@@ -204,16 +213,55 @@ describe('EditorWorkspace actions', () => {
     })
   })
 
-  it('deletes the current note after confirmation and navigates to recycle bin', async () => {
+  it('deletes the current note after confirmation and opens the next note', async () => {
     const user = userEvent.setup()
+    let resolveDelete
+    deleteNoteMock.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveDelete = resolve
+      noteState.currentNote = {
+        ...noteState.currentNote,
+        status: 'deleted',
+      }
+      noteState.notes = [
+        noteState.currentNote,
+        {
+          id: 'note-2',
+          title: '下一篇笔记',
+          type: 'text',
+          isStarred: false,
+          content: '后续正文',
+        },
+      ]
+    }))
+    noteState.notes = [
+      noteState.currentNote,
+      {
+        id: 'note-2',
+        title: '下一篇笔记',
+        type: 'text',
+        isStarred: false,
+        content: '后续正文',
+      },
+    ]
     render(<EditorWorkspace />)
 
     await user.click(screen.getByRole('button', { name: '删除' }))
     await user.click(screen.getByRole('button', { name: /确\s*认/ }))
 
     await waitFor(() => {
+      expect(editorFactorySpy).toHaveBeenLastCalledWith(expect.objectContaining({
+        readOnly: false,
+      }))
+    })
+
+    resolveDelete({})
+
+    await waitFor(() => {
       expect(deleteNoteMock).toHaveBeenCalledWith('note-1')
-      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recyclebin')
+      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recent/note-2', {
+        replace: true,
+        state: { note: expect.objectContaining({ id: 'note-2' }) },
+      })
     })
   })
 
@@ -258,7 +306,9 @@ describe('EditorWorkspace actions', () => {
 
     await waitFor(() => {
       expect(permanentDeleteNoteMock).toHaveBeenCalledWith('note-1')
-      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recyclebin')
+      expect(navigateMock).toHaveBeenCalledWith('/cloudnote/recyclebin', {
+        replace: true,
+      })
     })
   })
 })

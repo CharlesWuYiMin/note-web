@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import {
   Button,
-  Empty,
+  Modal,
   Pagination,
   Spin,
   Tag,
@@ -11,17 +11,14 @@ import {
 } from 'antd'
 import {
   CloseOutlined,
-  DeleteOutlined,
-  FolderOutlined,
   HistoryOutlined,
-  SearchOutlined,
-  ShareAltOutlined,
-  StarOutlined,
-  FileTextOutlined,
 } from '@ant-design/icons'
+import EmptyState from '@/components/common/EmptyState'
 import searchService from '@/services/searchService'
+import SearchResultIcon from '@/components/search/SearchResultIcon'
 import SearchHighlightText from '@/components/search/SearchHighlightText'
 import { getSearchContext, getSearchResultPath } from '@/utils/searchContext'
+import { reportTiming, trackEvent } from '@/utils/observability'
 
 const { Text, Paragraph } = Typography
 const DEFAULT_PAGE_SIZE = 8
@@ -33,47 +30,6 @@ function formatUpdatedAt(value) {
 
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString()
-}
-
-function resolveCardIcon(item) {
-  if (item.status === 'deleted') {
-    return <DeleteOutlined />
-  }
-
-  if (item.status === 'share') {
-    return <ShareAltOutlined />
-  }
-
-  if (item.isStarred) {
-    return <StarOutlined />
-  }
-
-  if (item.notebookId) {
-    return <FolderOutlined />
-  }
-
-  return <FileTextOutlined />
-}
-
-function resolveCardColors(item) {
-  if (item.status === 'deleted') {
-    return {
-      background: 'rgba(255,77,79,0.08)',
-      color: '#ff4d4f',
-    }
-  }
-
-  if (item.isStarred) {
-    return {
-      background: 'rgba(250,173,20,0.12)',
-      color: '#d97706',
-    }
-  }
-
-  return {
-    background: 'rgba(2,86,210,0.08)',
-    color: '#0256d2',
-  }
 }
 
 function getKeywordSnippet(text, keyword, radius = 18) {
@@ -120,6 +76,7 @@ function NoteSearchPanelWorkspace({
   const abortRef = useRef(null)
   const requestSeqRef = useRef(0)
   const lastCommittedKeywordRef = useRef('')
+  const panelOpenTrackedRef = useRef(false)
 
   const [debouncedKeyword, setDebouncedKeyword] = useState(keyword.trim())
   const [page, setPage] = useState(1)
@@ -129,13 +86,24 @@ function NoteSearchPanelWorkspace({
   const [total, setTotal] = useState(0)
   const [recentSearches, setRecentSearches] = useState([])
   const [hoveredItemId, setHoveredItemId] = useState(null)
+  const [clearHistoryConfirmOpen, setClearHistoryConfirmOpen] = useState(false)
 
   const trimmedKeyword = keyword.trim()
   const hasKeyword = debouncedKeyword.length > 0
 
   useEffect(() => {
     if (!open) {
+      panelOpenTrackedRef.current = false
       return undefined
+    }
+
+    if (!panelOpenTrackedRef.current) {
+      trackEvent('search_panel_open', {
+        currentPath,
+        hasKeyword: Boolean(trimmedKeyword),
+        context: context.status,
+      })
+      panelOpenTrackedRef.current = true
     }
 
     setPage(1)
@@ -216,6 +184,7 @@ function NoteSearchPanelWorkspace({
     const requestId = ++requestSeqRef.current
     const currentPage = debouncedKeyword === lastCommittedKeywordRef.current ? page : 1
     lastCommittedKeywordRef.current = debouncedKeyword
+    const requestStartedAt = Date.now()
 
     const search = async () => {
       try {
@@ -234,6 +203,14 @@ function NoteSearchPanelWorkspace({
         const nextItems = Array.isArray(response.items) ? response.items : []
         setItems(nextItems)
         setTotal(Number(response.total || nextItems.length || 0))
+        reportTiming('search_request', Date.now() - requestStartedAt, {
+          status: 'success',
+          keywordLength: debouncedKeyword.length,
+          page: currentPage,
+          pageSize,
+          resultCount: nextItems.length,
+          context: context.status,
+        })
       } catch (error) {
         if (controller.signal.aborted) {
           return
@@ -242,6 +219,14 @@ function NoteSearchPanelWorkspace({
         console.error('Search panel request failed', error)
         setItems([])
         setTotal(0)
+        reportTiming('search_request', Date.now() - requestStartedAt, {
+          status: 'error',
+          keywordLength: debouncedKeyword.length,
+          page: currentPage,
+          pageSize,
+          context: context.status,
+          errorName: error?.name || 'Error',
+        })
       } finally {
         if (!controller.signal.aborted && requestId === requestSeqRef.current) {
           setLoading(false)
@@ -262,6 +247,14 @@ function NoteSearchPanelWorkspace({
       return
     }
 
+    trackEvent('search_result_click', {
+      noteId: item?.id || '',
+      notebookId: item?.notebookId || '',
+      path,
+      keywordLength: debouncedKeyword.length,
+      context: context.status,
+    })
+
     const nextRecentSearches = searchService.rememberRecentSearch?.(trimmedKeyword || debouncedKeyword)
     setRecentSearches(Array.isArray(nextRecentSearches) ? nextRecentSearches.slice(0, 8) : [])
     onClose?.()
@@ -273,8 +266,15 @@ function NoteSearchPanelWorkspace({
       const nextRecentSearches = await searchService.clearRecentSearches()
       setRecentSearches(Array.isArray(nextRecentSearches) ? nextRecentSearches : [])
       message.success('已清空搜索历史')
+      trackEvent('search_history_cleared', {
+        historyCount: recentSearches.length,
+      })
+      setClearHistoryConfirmOpen(false)
     } catch (error) {
       message.error(error?.message || '清空失败')
+      trackEvent('search_history_clear_failed', {
+        errorName: error?.name || 'Error',
+      })
     }
   }
 
@@ -286,7 +286,22 @@ function NoteSearchPanelWorkspace({
   }
 
   return (
+    <>
+    <style>{`
+      .cloudnote-search-panel .ant-pagination-item,
+      .cloudnote-search-panel .ant-pagination-prev,
+      .cloudnote-search-panel .ant-pagination-next {
+        border-radius: 10px;
+        border-color: rgba(15, 23, 42, 0.08);
+      }
+
+      .cloudnote-search-panel .ant-pagination-item-active {
+        background: var(--primary-soft);
+        border-color: rgba(10, 89, 247, 0.18);
+      }
+    `}</style>
     <div
+      className="cloudnote-search-panel"
       ref={panelRef}
       onMouseDown={(event) => event.stopPropagation()}
       style={{
@@ -299,11 +314,11 @@ function NoteSearchPanelWorkspace({
     >
       <div
         style={{
-          borderRadius: 28,
+          borderRadius: 24,
           overflow: 'hidden',
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,253,0.98))',
-          boxShadow: '0 28px 80px rgba(16,34,58,0.18)',
-          border: '1px solid rgba(16,34,58,0.08)',
+          background: '#fff',
+          boxShadow: 'var(--shadow-md)',
+          border: '1px solid rgba(15,23,42,0.08)',
         }}
       >
         <div
@@ -320,14 +335,14 @@ function NoteSearchPanelWorkspace({
         >
           <Button
             type="text"
-            aria-label="鍏抽棴鎼滅储"
+            aria-label="关闭搜索"
             onClick={() => onClose?.()}
             icon={<CloseOutlined />}
             style={{ position: 'absolute', top: 8, right: 8, borderRadius: 999, zIndex: 1 }}
           />
           {showRecent ? (
             <div style={{ display: 'grid', gap: 14, paddingTop: 28 }}>
-              <section style={{ padding: 18, borderRadius: 22, background: '#fff', border: '1px solid rgba(16,34,58,0.06)' }}>
+              <section style={{ padding: 18, borderRadius: 20, background: '#fff', border: '1px solid rgba(15,23,42,0.08)', boxShadow: 'var(--shadow-sm)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#10223a' }}>
                     <HistoryOutlined />
@@ -339,7 +354,7 @@ function NoteSearchPanelWorkspace({
                       danger
                       size="small"
                       style={{ padding: 0 }}
-                      onClick={handleClearRecentSearches}
+                      onClick={() => setClearHistoryConfirmOpen(true)}
                     >
                       清空历史
                     </Button>
@@ -356,9 +371,9 @@ function NoteSearchPanelWorkspace({
                         padding: '7px 12px',
                         borderRadius: 999,
                         cursor: 'pointer',
-                        border: '1px solid rgba(2,86,210,0.12)',
-                        background: 'rgba(2,86,210,0.06)',
-                        color: '#0256d2',
+                        border: '1px solid rgba(10,89,247,0.14)',
+                        background: 'var(--primary-soft)',
+                        color: 'var(--primary)',
                       }}
                     >
                       {item}
@@ -372,13 +387,11 @@ function NoteSearchPanelWorkspace({
           ) : (
             <Spin spinning={loading}>
               {showEmptyState ? (
-                <Empty
-                  description={`未找到与“${debouncedKeyword}”相关的笔记`}
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                <EmptyState
+                  title="未找到相关笔记"
+                  description={`未找到与“${debouncedKeyword}”相关的笔记，试试更短的标题词或更明确的关键词。`}
                   style={{ padding: '72px 0' }}
-                >
-                  <div style={{ color: 'rgba(16,34,58,0.45)', fontSize: 13 }}>试试更短的标题词或更明确的关键词</div>
-                </Empty>
+                />
               ) : (
                 <div
                   style={{
@@ -386,11 +399,11 @@ function NoteSearchPanelWorkspace({
                     gap: 0,
                     background: '#fff',
                     borderRadius: 18,
+                    border: '1px solid rgba(15,23,42,0.08)',
                     overflow: 'hidden',
                   }}
                 >
                   {items.map((item) => {
-                    const cardColors = resolveCardColors(item)
                     const isHovered = hoveredItemId === item.id
 
                     return (
@@ -403,8 +416,8 @@ function NoteSearchPanelWorkspace({
                         style={{
                           width: '100%',
                           border: 'none',
-                          borderBottom: '1px solid rgba(16,34,58,0.06)',
-                          background: isHovered ? 'rgba(16,34,58,0.05)' : '#fff',
+                          borderBottom: '1px solid rgba(15,23,42,0.08)',
+                          background: isHovered ? 'rgba(248,250,252,1)' : '#fff',
                           padding: '14px 16px',
                           textAlign: 'left',
                           cursor: 'pointer',
@@ -412,22 +425,7 @@ function NoteSearchPanelWorkspace({
                         }}
                       >
                         <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                          <div
-                            style={{
-                              width: 36,
-                              height: 36,
-                              borderRadius: 12,
-                              background: cardColors.background,
-                              color: cardColors.color,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                              fontSize: 18,
-                            }}
-                          >
-                            {resolveCardIcon(item)}
-                          </div>
+                          <SearchResultIcon note={item} size={36} fontSize={18} />
 
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -488,7 +486,52 @@ function NoteSearchPanelWorkspace({
           )}
         </div>
       </div>
+      <Modal
+        open={clearHistoryConfirmOpen}
+        centered
+        title="清空搜索历史"
+        okText="清空"
+        cancelText="取消"
+        okButtonProps={{
+          danger: true,
+          style: {
+            height: 40,
+            borderRadius: 12,
+            fontWeight: 700,
+            boxShadow: 'none',
+          },
+        }}
+        cancelButtonProps={{
+          style: {
+            height: 40,
+            borderRadius: 12,
+            borderColor: 'rgba(15,23,42,0.08)',
+            color: '#10223a',
+            fontWeight: 600,
+            boxShadow: 'none',
+          },
+        }}
+        onOk={handleClearRecentSearches}
+        onCancel={() => setClearHistoryConfirmOpen(false)}
+        destroyOnHidden
+        styles={{
+          content: {
+            borderRadius: 22,
+            border: '1px solid rgba(15,23,42,0.08)',
+            boxShadow: 'var(--shadow-md)',
+            overflow: 'hidden',
+          },
+          mask: {
+            background: 'rgba(15, 23, 42, 0.32)',
+          },
+        }}
+      >
+        <div style={{ color: '#475569', lineHeight: 1.7 }}>
+          清空后将移除最近搜索记录，但不会删除任何笔记内容。
+        </div>
+      </Modal>
     </div>
+    </>
   )
 }
 

@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import { Button, Empty, List, Spin, Tag, Tooltip, Typography } from 'antd'
 import {
   StarOutlined,
@@ -18,9 +19,20 @@ const { Text, Paragraph } = Typography
 function StarredNotesPage() {
   const navigate = useNavigate()
   const { starredNotes, isLoading, fetchStarredNotes, toggleStar } = useNote()
+  const [isBootstrapping, setIsBootstrapping] = useState(true)
 
   useEffect(() => {
-    fetchStarredNotes()
+    let active = true
+    setIsBootstrapping(true)
+    Promise.resolve(fetchStarredNotes()).finally(() => {
+      if (active) {
+        setIsBootstrapping(false)
+      }
+    })
+
+    return () => {
+      active = false
+    }
   }, [fetchStarredNotes])
 
   const stats = useMemo(() => [
@@ -33,7 +45,7 @@ function StarredNotesPage() {
   const tabs = [
     { key: 'recent', label: '近期笔记', icon: <HistoryOutlined />, active: false, onClick: () => navigate('/cloudnote/recent') },
     { key: 'starred', label: '星标笔记', icon: <StarOutlined />, active: true, onClick: () => navigate('/cloudnote/starred') },
-    { key: 'shares', label: '我的分享', icon: <ShareAltOutlined />, active: false, onClick: () => navigate('/cloudnote/shares') },
+    { key: 'myshares', label: '我的分享', icon: <ShareAltOutlined />, active: false, onClick: () => navigate('/cloudnote/myshares') },
     { key: 'notebooks', label: '笔记本', icon: <FolderOutlined />, active: false, onClick: () => navigate('/cloudnote/notebooks') },
     { key: 'recyclebin', label: '回收站', icon: <DeleteOutlined />, active: false, onClick: () => navigate('/cloudnote/recyclebin') },
   ]
@@ -49,8 +61,8 @@ function StarredNotesPage() {
         <div style={{ fontSize: 13, color: 'rgba(16,34,58,0.54)', marginTop: 4 }}>重点内容与近期笔记采用同一套主页面框架，只是视图内容不同。</div>
       </div>
 
-      <Spin spinning={isLoading}>
-        {starredNotes.length === 0 && !isLoading ? (
+      <Spin spinning={isLoading || isBootstrapping}>
+        {starredNotes.length === 0 && !isLoading && !isBootstrapping ? (
           <Empty style={{ padding: '48px 0' }} description="暂无星标笔记" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <List
@@ -63,8 +75,8 @@ function StarredNotesPage() {
                   borderRadius: 16,
                   marginBottom: 10,
                   cursor: 'pointer',
-                  background: 'rgba(0,97,164,0.05)',
-                  border: '1px solid rgba(0,97,164,0.12)',
+                  background: note.isShared ? 'rgba(37,99,235,0.05)' : 'rgba(0,97,164,0.05)',
+                  border: note.isShared ? '1px solid rgba(37,99,235,0.14)' : '1px solid rgba(0,97,164,0.12)',
                   boxShadow: '0 8px 22px rgba(16,34,58,0.03)',
                 }}
                 actions={[
@@ -79,6 +91,11 @@ function StarredNotesPage() {
                       }}
                     />
                   </Tooltip>,
+                  note.isShared ? (
+                    <Tag key="shared" style={{ borderRadius: 999, marginRight: 0 }}>
+                      <ShareAltOutlined /> 已分享
+                    </Tag>
+                  ) : null,
                   <Tooltip title="打开" key="open">
                     <Button type="text" size="small" onClick={() => navigate(`/cloudnote/recent/${note.id}`)}>
                       打开
@@ -93,7 +110,16 @@ function StarredNotesPage() {
                       <StarOutlined />
                     </div>
                   }
-                  title={<div style={{ fontWeight: 700, fontSize: 15, color: 'var(--primary)' }}>{note.title || '未命名笔记'}</div>}
+                  title={(
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--primary)' }}>{note.title || '未命名笔记'}</div>
+                      {note.isShared ? (
+                        <Tag style={{ borderRadius: 999, marginInlineEnd: 0 }}>
+                          <ShareAltOutlined /> 已分享
+                        </Tag>
+                      ) : null}
+                    </div>
+                  )}
                   description={
                     <div>
                       <Paragraph ellipsis={{ rows: 2 }} style={{ margin: '6px 0 8px', color: 'rgba(16,34,58,0.56)' }}>

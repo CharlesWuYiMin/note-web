@@ -30,6 +30,7 @@ import useNotebookStore from '@/store/useNotebookStore'
 import { getLocalizedNotebookName } from '@/utils/notebookLocalization'
 
 const COLLAPSED_TILE_SIZE = 56
+const SIDEBAR_NAV_FONT_SIZE = 16
 
 function getNoteCreateOptions(t) {
   return [
@@ -49,15 +50,16 @@ function navItemStyle({ collapsed, isActive }) {
     padding: collapsed ? '0' : '12px 14px',
     width: collapsed ? COLLAPSED_TILE_SIZE : '100%',
     minHeight: collapsed ? COLLAPSED_TILE_SIZE : 46,
-    borderRadius: collapsed ? 18 : 14,
+    borderRadius: collapsed ? 16 : 14,
     cursor: 'pointer',
     justifyContent: collapsed ? 'center' : 'flex-start',
     alignSelf: collapsed ? 'center' : 'stretch',
-    background: isActive ? '#ffffff' : 'transparent',
-    color: isActive ? 'var(--primary)' : 'rgba(16,34,58,0.74)',
-    fontWeight: isActive ? 700 : 500,
-    fontSize: collapsed ? 16 : 17,
-    boxShadow: isActive ? '0 10px 22px rgba(16,34,58,0.08)' : 'none',
+    background: isActive ? 'var(--primary-soft)' : 'transparent',
+    color: isActive ? 'var(--primary)' : 'rgba(16,34,58,0.72)',
+    fontWeight: isActive ? 700 : 600,
+    fontSize: collapsed ? 16 : SIDEBAR_NAV_FONT_SIZE,
+    border: isActive ? '1px solid rgba(10,89,247,0.10)' : '1px solid transparent',
+    boxShadow: isActive ? '0 4px 12px rgba(15,23,42,0.04)' : 'none',
     transition: 'all 0.15s ease',
   }
 }
@@ -66,87 +68,98 @@ function NewCreatePanel({ onCreate, options, collapsed }) {
   return (
     <div
       style={{
-        width: collapsed ? 244 : '100%',
-        minWidth: collapsed ? 244 : 'auto',
-        maxWidth: collapsed ? 244 : '100%',
+        width: collapsed ? 320 : 340,
+        minWidth: collapsed ? 320 : 340,
+        maxWidth: collapsed ? 320 : 340,
         boxSizing: 'border-box',
-        padding: collapsed ? 10 : '12px 14px 10px',
-        borderRadius: 20,
-        background: 'rgba(255,255,255,0.98)',
-        border: '1px solid rgba(226,232,240,0.9)',
-        boxShadow: '0 14px 32px rgba(16,34,58,0.10)',
+        padding: '14px 14px 12px',
+        borderRadius: 18,
+        background: '#ffffff',
+        border: '1px solid rgba(15,23,42,0.08)',
+        boxShadow: '0 10px 28px rgba(15,23,42,0.08)',
       }}
     >
       <div
         style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: 'rgba(16,34,58,0.42)',
+          lineHeight: 1.2,
+          marginBottom: 8,
+          paddingLeft: 2,
+        }}
+      >
+        新建
+      </div>
+
+      <div
+        style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-          columnGap: collapsed ? 8 : 8,
-          rowGap: collapsed ? 8 : 6,
+          columnGap: 6,
+          rowGap: 6,
         }}
       >
         {options.map((option) => (
-          <button
-            key={option.key}
-            type="button"
-            onClick={() => onCreate(option)}
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              border: 'none',
-              outline: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              borderRadius: 16,
-              padding: collapsed ? '12px 10px 10px' : '10px 6px 8px',
-              minHeight: collapsed ? 'auto' : 96,
-              width: '100%',
-              textAlign: 'center',
-              transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease',
-            }}
-            onMouseEnter={(event) => {
-              event.currentTarget.style.background = 'rgba(248,250,252,0.96)'
-              event.currentTarget.style.boxShadow = '0 12px 24px rgba(16,34,58,0.08)'
-              event.currentTarget.style.transform = 'translateY(-1px)'
-            }}
-            onMouseLeave={(event) => {
-              event.currentTarget.style.background = 'transparent'
-              event.currentTarget.style.boxShadow = 'none'
-              event.currentTarget.style.transform = 'translateY(0)'
-            }}
-          >
-            <div
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => onCreate(option)}
               style={{
-                width: collapsed ? 52 : 42,
-                height: collapsed ? 52 : 42,
-                margin: collapsed ? '0 auto 10px' : '0 auto 8px',
-                borderRadius: collapsed ? 16 : 14,
                 display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'center',
-                color: option.color,
-                fontSize: collapsed ? 22 : 18,
-                background: option.bg,
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.75)',
+                justifyContent: 'flex-start',
+                outline: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                borderRadius: 14,
+                padding: '8px 6px 8px',
+                minHeight: 88,
+                width: '100%',
+                textAlign: 'center',
+                transition: 'background 0.15s ease, border-color 0.15s ease',
+                border: '1px solid transparent',
+              }}
+              onMouseEnter={(event) => {
+                event.currentTarget.style.background = 'rgba(15,23,42,0.03)'
+                event.currentTarget.style.borderColor = 'rgba(15,23,42,0.06)'
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.style.background = 'transparent'
+                event.currentTarget.style.borderColor = 'transparent'
               }}
             >
-              {option.icon}
-            </div>
-            <div
-              style={{
-                fontSize: collapsed ? 14 : 14,
-                fontWeight: 600,
-                color: '#111827',
-                lineHeight: 1.15,
-                letterSpacing: '-0.01em',
-              }}
-            >
-              {option.label}
-            </div>
-          </button>
-        ))}
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  margin: '0 auto 8px',
+                  borderRadius: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: option.color,
+                  fontSize: 18,
+                  background: option.bg,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.72)',
+                }}
+              >
+                {option.icon}
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#111827',
+                  lineHeight: 1.15,
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                {option.label}
+              </div>
+            </button>
+          ))}
       </div>
     </div>
   )
@@ -305,16 +318,28 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
   const navItems = [
     { key: 'recent', icon: <HistoryOutlined />, label: t('sidebar.recentNotes', { defaultValue: '近期笔记' }), path: '/cloudnote/recent' },
     { key: 'starred', icon: <StarOutlined />, label: t('sidebar.starredNotes', { defaultValue: '星标笔记' }), path: '/cloudnote/starred' },
-    { key: 'shares', icon: <ShareAltOutlined />, label: t('sidebar.myShares', { defaultValue: '我的分享' }), path: '/cloudnote/shares' },
+    { key: 'myshares', icon: <ShareAltOutlined />, label: t('sidebar.myShares', { defaultValue: '我的分享' }), path: '/cloudnote/myshares' },
     { key: 'recyclebin', icon: <DeleteOutlined />, label: t('sidebar.recycleBin', { defaultValue: '回收站' }), path: '/cloudnote/recyclebin' },
   ]
 
   useEffect(() => {
     if (currentPath?.startsWith('/cloudnote/notebooks')) {
       setNotebooksExpanded(true)
-      fetchNotebooks()
+      if (notebooks.length === 0) {
+        fetchNotebooks()
+      }
     }
-  }, [currentPath, fetchNotebooks])
+  }, [currentPath, fetchNotebooks, notebooks.length])
+
+  useEffect(() => {
+    if (currentPath?.startsWith('/cloudnote/notebooks')) {
+      return
+    }
+
+    if (currentNotebook) {
+      setCurrentNotebook(null)
+    }
+  }, [currentNotebook, currentPath, setCurrentNotebook])
 
   useEffect(() => () => {
     if (createCloseTimerRef.current) {
@@ -398,10 +423,15 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
     setNotebooksExpanded(nextExpanded)
     if (nextExpanded) {
       await ensureNotebooksLoaded()
-      if (!currentPath?.startsWith('/cloudnote/notebooks')) {
-        onNavigate?.('/cloudnote/notebooks')
-      }
     }
+  }
+
+  const handleNavigate = (path) => {
+    if (!path?.startsWith('/cloudnote/notebooks')) {
+      setCurrentNotebook(null)
+    }
+
+    onNavigate?.(path)
   }
 
   const handleNotebookCreate = async (event) => {
@@ -437,12 +467,35 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
     })
 
     if (note?.id) {
-      onNavigate?.(`/cloudnote/recent/${note.id}`, option.key === 'voice' ? {
-        state: {
-          openVoicePrompt: true,
-          source: 'voice-create',
-        },
-      } : undefined)
+      if (preferredNotebookId) {
+        const targetNotebook = notebooks.find((item) => String(item?.id || '') === String(notebookId))
+        if (targetNotebook) {
+          setCurrentNotebook(targetNotebook)
+        }
+      }
+
+      const nextPath = preferredNotebookId
+        ? `/cloudnote/notebooks/${note?.notebookId || notebookId}/${note.id}`
+        : `/cloudnote/recent/${note.id}`
+
+      const nextState = preferredNotebookId
+        ? {
+          note,
+          ...(option.key === 'voice'
+            ? {
+              openVoicePrompt: true,
+              source: 'voice-create',
+            }
+            : {}),
+        }
+        : option.key === 'voice'
+          ? {
+            openVoicePrompt: true,
+            source: 'voice-create',
+          }
+          : undefined
+
+      onNavigate?.(nextPath, nextState ? { state: nextState } : undefined)
     }
   }
 
@@ -489,7 +542,9 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
 
   const handleNotebookClick = (notebook) => {
     setCurrentNotebook(notebook)
-    onNavigate?.('/cloudnote/notebooks')
+    onNavigate?.('/cloudnote/notebooks', {
+      state: null,
+    })
   }
 
   const startRenameNotebook = (notebook) => {
@@ -565,8 +620,10 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
 
   return (
     <aside
+      className="sidebar-workspace-nav"
       style={{
-        width: collapsed ? 92 : expandedWidth,
+        width: `var(--cloudnote-nav-width, ${collapsed ? 92 : expandedWidth}px)`,
+        minWidth: `var(--cloudnote-nav-width, ${collapsed ? 92 : expandedWidth}px)`,
         background: 'transparent',
         borderRadius: 0,
         padding: '0 0 12px',
@@ -593,7 +650,7 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
       >
         {!collapsed ? (
           <div style={{ minWidth: 0, textAlign: 'left' }}>
-            <h2 style={{ fontSize: 24, fontWeight: 700, color: '#1677ff', margin: 0, lineHeight: 1, letterSpacing: '-0.01em' }}>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--primary)', margin: 0, lineHeight: 1, letterSpacing: '-0.01em' }}>
               {t('common.brandName', { defaultValue: 'WeLink 云笔记' })}
             </h2>
           </div>
@@ -602,9 +659,10 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
             style={{
               width: COLLAPSED_TILE_SIZE,
               height: COLLAPSED_TILE_SIZE,
-              borderRadius: 18,
-              background: 'rgba(255,255,255,0.82)',
-              boxShadow: '0 10px 24px rgba(16,34,58,0.08)',
+              borderRadius: 16,
+              background: 'rgba(255,255,255,0.98)',
+              border: '1px solid rgba(15,23,42,0.06)',
+              boxShadow: '0 6px 18px rgba(15,23,42,0.06)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -620,7 +678,7 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
       </div>
 
       <div
-        style={{ margin: '0 12px 14px', position: 'relative' }}
+        style={{ margin: collapsed ? '0 18px 14px' : '0 12px 14px', position: 'relative' }}
         onMouseEnter={() => {
           if (!collapsed) {
             openCreatePanel()
@@ -634,8 +692,8 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
       >
         <Button
           type="primary"
-          icon={<PlusOutlined />}
-          block
+          icon={collapsed ? <PlusOutlined style={{ fontSize: 18 }} /> : null}
+          block={!collapsed}
           size="large"
           onClick={() => {
             if (collapsed) {
@@ -646,48 +704,42 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
             openCreatePanel()
           }}
           style={{
+            width: collapsed ? COLLAPSED_TILE_SIZE : '100%',
+            minWidth: collapsed ? COLLAPSED_TILE_SIZE : '100%',
             height: collapsed ? COLLAPSED_TILE_SIZE : 54,
-            borderRadius: collapsed ? 18 : 14,
+            borderRadius: collapsed ? 16 : 14,
             background: 'linear-gradient(135deg, var(--primary), var(--primary-container))',
             border: 'none',
-            boxShadow: '0 10px 24px rgba(0,97,164,0.24)',
+            boxShadow: '0 8px 18px rgba(10,89,247,0.22)',
+            fontSize: SIDEBAR_NAV_FONT_SIZE,
+            fontWeight: 600,
+            paddingLeft: collapsed ? 0 : undefined,
+            paddingRight: collapsed ? 0 : undefined,
+            margin: collapsed ? '0 auto' : undefined,
           }}
         >
           {!collapsed ? (
-            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingLeft: 4 }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                width: '100%',
+              }}
+            >
+              <PlusOutlined style={{ fontSize: 20, color: 'rgba(255,255,255,0.96)' }} />
               <span>{t('sidebar.new', { defaultValue: '新建' })}</span>
-              <span
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 8,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'rgba(255,255,255,0.16)',
-                  color: 'rgba(255,255,255,0.92)',
-                  fontSize: 12,
-                  flexShrink: 0,
-                }}
-              >
-                <DownOutlined rotate={createOpen ? 180 : 0} />
-              </span>
             </span>
           ) : null}
         </Button>
 
         {createOpen ? (
           <div
-            style={collapsed ? {
+            style={{
               position: 'absolute',
-              top: 0,
-              left: 'calc(100% + 10px)',
-              zIndex: 40,
-            } : {
-              position: 'absolute',
-              top: 'calc(100% + 4px)',
-              left: 0,
-              right: 0,
+              top: collapsed ? 0 : 'calc(100% + 2px)',
+              left: collapsed ? 'calc(100% + 18px)' : 92,
               zIndex: 40,
             }}
           >
@@ -714,9 +766,9 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
           const isActive = currentPath?.startsWith(item.path)
           return (
             <Tooltip key={item.key} title={collapsed ? item.label : ''} placement="right">
-              <div onClick={() => onNavigate?.(item.path)} style={navItemStyle({ collapsed, isActive })}>
+              <div onClick={() => handleNavigate(item.path)} style={navItemStyle({ collapsed, isActive })}>
                 <span style={{ fontSize: 20, display: 'flex', alignItems: 'center' }}>{item.icon}</span>
-                {!collapsed && <span style={{ fontSize: 17, lineHeight: 1.35 }}>{item.label}</span>}
+                {!collapsed && <span style={{ fontSize: SIDEBAR_NAV_FONT_SIZE, lineHeight: 1.35 }}>{item.label}</span>}
               </div>
             </Tooltip>
           )
@@ -724,32 +776,74 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <Tooltip title={collapsed ? t('nav.notebooks', { defaultValue: '笔记本' }) : ''} placement="right">
-            <div
-              onClick={handleNotebookToggle}
-              style={navItemStyle({ collapsed, isActive: notebookSectionActive })}
-            >
-              <span style={{ fontSize: 20, display: 'flex', alignItems: 'center' }}>
-                <FolderOutlined />
-              </span>
+            <div style={navItemStyle({ collapsed, isActive: notebookSectionActive })}>
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={t('nav.notebooks', { defaultValue: '笔记本' })}
+                onClick={handleNotebookToggle}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    handleNotebookToggle()
+                  }
+                }}
+                style={{
+                  minWidth: 0,
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: collapsed ? 0 : 12,
+                  justifyContent: collapsed ? 'center' : 'flex-start',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  outline: 'none',
+                }}
+              >
+                {collapsed ? (
+                  <span
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 20,
+                      lineHeight: 1,
+                    }}
+                  >
+                    <FolderOutlined />
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 20, display: 'flex', alignItems: 'center' }}>
+                    <FolderOutlined />
+                  </span>
+                )}
+                {!collapsed && (
+                  <span style={{ flex: 1, fontSize: SIDEBAR_NAV_FONT_SIZE, lineHeight: 1.35 }}>
+                    {t('nav.notebooks', { defaultValue: '笔记本' })}
+                  </span>
+                )}
+              </div>
               {!collapsed && (
-                <>
-                  <span style={{ flex: 1, fontSize: 18, lineHeight: 1.3 }}>{t('nav.notebooks', { defaultValue: '笔记本' })}</span>
-                <Button
-                  aria-label={t('notebook.createNotebook', { defaultValue: '新建笔记本' })}
-                  type="text"
-                  size="small"
-                  icon={<PlusOutlined />}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    handleNotebookCreate(event)
-                  }}
-                  style={{
-                    color: 'rgba(16,34,58,0.64)',
-                    width: 24,
-                    height: 24,
-                    borderRadius: 8,
-                  }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  <Button
+                    aria-label={t('notebook.createNotebook', { defaultValue: '新建笔记本' })}
+                    type="text"
+                    size="small"
+                    icon={<PlusOutlined />}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      handleNotebookCreate(event)
+                    }}
+                    style={{
+                      color: 'rgba(16,34,58,0.64)',
+                      width: 24,
+                      height: 24,
+                      minWidth: 24,
+                      borderRadius: 8,
+                      padding: 0,
+                    }}
+                  />
                   <Button
                     aria-label={notebooksExpanded
                       ? t('notebook.collapse', { defaultValue: '收起笔记本' })
@@ -765,11 +859,12 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
                       color: 'rgba(16,34,58,0.48)',
                       width: 24,
                       height: 24,
+                      minWidth: 24,
                       borderRadius: 8,
                       padding: 0,
                     }}
                   />
-                </>
+                </div>
               )}
             </div>
           </Tooltip>
@@ -819,8 +914,8 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
                 ]
 
                 return (
-                  <div
-                    key={notebook.id}
+                <div
+                  key={notebook.id}
                     onClick={() => handleNotebookClick(notebook)}
                     onDoubleClick={() => startRenameNotebook(notebook)}
                     onMouseEnter={() => setHoveredNotebookId(notebook.id)}
@@ -835,9 +930,10 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
                       gap: 7,
                       cursor: 'pointer',
                       background: isSelected
-                        ? 'rgba(0,97,164,0.08)'
-                        : (isHovered ? 'rgba(255,255,255,0.95)' : 'transparent'),
-                      boxShadow: isSelected || isHovered ? '0 8px 18px rgba(16,34,58,0.05)' : 'none',
+                        ? 'var(--primary-soft)'
+                        : (isHovered ? 'rgba(255,255,255,0.98)' : 'transparent'),
+                      border: isSelected || isHovered ? '1px solid rgba(15,23,42,0.06)' : '1px solid transparent',
+                      boxShadow: isSelected ? '0 4px 12px rgba(15,23,42,0.04)' : 'none',
                       color: isSelected ? 'var(--primary)' : '#334155',
                       transition: 'all 0.15s ease',
                     }}
@@ -945,9 +1041,9 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
           const isActive = currentPath?.startsWith(item.path)
           return (
             <Tooltip key={item.key} title={collapsed ? item.label : ''} placement="right">
-              <div onClick={() => onNavigate?.(item.path)} style={navItemStyle({ collapsed, isActive })}>
+              <div onClick={() => handleNavigate(item.path)} style={navItemStyle({ collapsed, isActive })}>
                 <span style={{ fontSize: 20, display: 'flex', alignItems: 'center' }}>{item.icon}</span>
-                {!collapsed && <span style={{ fontSize: 17, lineHeight: 1.35 }}>{item.label}</span>}
+                {!collapsed && <span style={{ fontSize: SIDEBAR_NAV_FONT_SIZE, lineHeight: 1.35 }}>{item.label}</span>}
               </div>
             </Tooltip>
           )
@@ -978,10 +1074,11 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
               color: 'rgba(16,34,58,0.56)',
               width: 56,
               height: 56,
-              borderRadius: 18,
+              borderRadius: 16,
               fontSize: 20,
-              background: 'rgba(255,255,255,0.72)',
-              boxShadow: '0 10px 24px rgba(16,34,58,0.08)',
+              background: 'rgba(255,255,255,0.98)',
+              border: '1px solid rgba(15,23,42,0.06)',
+              boxShadow: '0 6px 18px rgba(15,23,42,0.06)',
               pointerEvents: 'auto',
             }}
           />
@@ -995,15 +1092,17 @@ function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavig
               color: 'rgba(16,34,58,0.56)',
               width: 56,
               height: 56,
-              borderRadius: 18,
+              borderRadius: 16,
               fontSize: 20,
-              background: 'rgba(255,255,255,0.72)',
-              boxShadow: '0 10px 24px rgba(16,34,58,0.08)',
+              background: 'rgba(255,255,255,0.98)',
+              border: '1px solid rgba(15,23,42,0.06)',
+              boxShadow: '0 6px 18px rgba(15,23,42,0.06)',
               pointerEvents: 'auto',
             }}
           />
         )}
       </div>
+
     </aside>
   )
 }

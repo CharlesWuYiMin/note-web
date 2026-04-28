@@ -7,12 +7,10 @@ const NOTE_LIST_ORDER_BY_MAP = {
 }
 const DEFAULT_VOICE_FILE_CHUNK_THRESHOLD_BYTES = 5 * 1024 * 1024
 const DEFAULT_VOICE_FILE_CHUNK_SIZE_BYTES = 5 * 1024 * 1024
-const DEFAULT_IMPORT_ARCHIVE_MAX_BYTES = 100 * 1024 * 1024
 const DEFAULT_IMPORT_FILE_CHUNK_THRESHOLD_BYTES = 5 * 1024 * 1024
 const DEFAULT_IMPORT_FILE_CHUNK_SIZE_BYTES = 5 * 1024 * 1024
 const DEFAULT_IMPORT_TASK_POLL_INTERVAL_MS = 2000
 const DEFAULT_IMPORT_TASK_TIMEOUT_MS = 30 * 60 * 1000
-const BYTE_SIZE_PATTERN = /^(\d+(?:\.\d+)?)\s*([kmgt]?i?b?|[kmgt])?$/i
 const MIME_EXTENSION_MAP = {
   'audio/webm': '.webm',
   'audio/mpeg': '.mp3',
@@ -27,6 +25,38 @@ function extractPayload(response) {
   return response && Object.prototype.hasOwnProperty.call(response, 'data')
     ? response.data
     : response
+}
+
+function extractPagedCollectionPayload(response) {
+  if (!response || typeof response !== 'object') {
+    return response
+  }
+
+  const payload = Object.prototype.hasOwnProperty.call(response, 'data')
+    ? response.data
+    : response
+
+  const hasPaginationMeta = response.total != null || response.page != null || response.size != null
+
+  if (Array.isArray(payload) && hasPaginationMeta) {
+    return {
+      items: payload,
+      total: response.total,
+      page: response.page,
+      size: response.size,
+    }
+  }
+
+  if (payload && typeof payload === 'object' && hasPaginationMeta) {
+    return {
+      ...payload,
+      total: response.total ?? payload.total,
+      page: response.page ?? payload.page,
+      size: response.size ?? payload.size,
+    }
+  }
+
+  return payload
 }
 
 function normalizeListParams(params = {}) {
@@ -51,69 +81,20 @@ function parsePositiveInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
-function parseByteSize(value, fallback) {
-  if (typeof value !== 'string' || !value.trim()) {
-    return fallback
-  }
-  const match = value.trim().match(BYTE_SIZE_PATTERN)
-  if (!match) {
-    return fallback
-  }
-  const amount = Number.parseFloat(match[1])
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return fallback
-  }
-  const unit = (match[2] || '').toUpperCase()
-  const multiplier = {
-    '': 1,
-    B: 1,
-    K: 1024,
-    KB: 1024,
-    KIB: 1024,
-    M: 1024 ** 2,
-    MB: 1024 ** 2,
-    MIB: 1024 ** 2,
-    G: 1024 ** 3,
-    GB: 1024 ** 3,
-    GIB: 1024 ** 3,
-    T: 1024 ** 4,
-    TB: 1024 ** 4,
-    TIB: 1024 ** 4,
-  }[unit]
-
-  if (!multiplier) {
-    return fallback
-  }
-
-  const parsed = Math.floor(amount * multiplier)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
-}
-
-function formatByteSize(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return '0B'
-  }
-  if (bytes >= 1024 ** 3) {
-    const value = (bytes / (1024 ** 3)).toFixed(1).replace(/\.0$/, '')
-    return `${value}GB`
-  }
-  if (bytes >= 1024 ** 2) {
-    const value = (bytes / (1024 ** 2)).toFixed(1).replace(/\.0$/, '')
-    return `${value}MB`
-  }
-  if (bytes >= 1024) {
-    const value = (bytes / 1024).toFixed(1).replace(/\.0$/, '')
-    return `${value}KB`
-  }
-  return `${bytes}B`
-}
-
 function resolveVoiceFilename(file) {
   if (typeof file?.name === 'string' && file.name.trim()) {
     return file.name.trim()
   }
   const extension = MIME_EXTENSION_MAP[file?.type] || '.webm'
   return `voice-note${extension}`
+}
+
+function resolveVoiceDisplayName(file, options = {}) {
+  if (typeof options?.fileName === 'string' && options.fileName.trim()) {
+    return options.fileName.trim()
+  }
+
+  return ''
 }
 
 function resolveImportFilename(file) {
@@ -159,7 +140,7 @@ class NoteService {
       params: normalizeListParams(params),
     })
 
-    return extractPayload(response)
+    return extractPagedCollectionPayload(response)
   }
 
   getNoteById(id, params = {}) {
@@ -189,8 +170,12 @@ class NoteService {
     }
 
     const { sessionId, duration } = options
+    const fileName = resolveVoiceDisplayName(file, options)
     const formData = new FormData()
     formData.append('file', file, resolveVoiceFilename(file))
+    if (fileName) {
+      formData.append('fileName', fileName)
+    }
 
     const response = await request.post('/voice-notes/upload', formData, {
       params: {
@@ -202,12 +187,19 @@ class NoteService {
     return extractPayload(response)
   }
 
-  async importDocumentArchive(file) {
-    const maxArchiveBytes = await this.getImportArchiveMaxBytes()
-    if (Number(file?.size) > maxArchiveBytes) {
-      throw new Error(`import archive size cannot exceed ${formatByteSize(maxArchiveBytes)}`)
-    }
+  deleteVoiceNoteCard(noteId, fileId) {
+    return request.delete(`/voice-notes/files/${fileId}`, {
+      params: {
+        noteId,
+      },
+    })
+  }
 
+  deleteVoiceNoteFile(noteId, fileId) {
+    return this.deleteVoiceNoteCard(noteId, fileId)
+  }
+
+  async importDocumentArchive(file) {
     const uploadPayload = await this.uploadImportFile(file)
     const fileId = extractResourceId(pickValue(uploadPayload, 'fileResource', 'file_resource'))
       || pickValue(uploadPayload, 'fileId', 'file_id')
@@ -220,13 +212,6 @@ class NoteService {
       file_id: fileId,
     })
     return extractPayload(response)
-  }
-
-  async getImportArchiveMaxBytes() {
-    return parseByteSize(
-      await getSysConfigValue('upload_max_size').catch(() => null),
-      DEFAULT_IMPORT_ARCHIVE_MAX_BYTES,
-    )
   }
 
   async uploadImportFile(file) {
@@ -252,9 +237,6 @@ class NoteService {
   async getImportTask(taskId) {
     const response = await request.get('/tasks')
     const tasks = extractPayload(response)
-    if (tasks && typeof tasks === 'object' && !Array.isArray(tasks)) {
-      return tasks
-    }
     if (!Array.isArray(tasks)) {
       return null
     }
@@ -330,6 +312,7 @@ class NoteService {
   async uploadVoiceFileInChunks(noteId, file, options = {}) {
     const { sessionId, duration } = options
     const filename = resolveVoiceFilename(file)
+    const fileName = resolveVoiceDisplayName(file, options)
     const chunkSizeBytes = parsePositiveInteger(
       await getSysConfigValue('voice.file.chunk_size_bytes').catch(() => null),
       DEFAULT_VOICE_FILE_CHUNK_SIZE_BYTES,
@@ -382,6 +365,7 @@ class NoteService {
       noteId,
       ...(sessionId ? { sessionId } : {}),
       duration: Number.isFinite(duration) && duration >= 0 ? duration : 0,
+      ...(fileName ? { fileName } : {}),
       fileId,
       fileResource,
       size: file.size,
@@ -420,17 +404,21 @@ class NoteService {
 
   async getStarredNotes(params = {}) {
     const response = await request.post('/notes/star', normalizeListParams(params))
-    return extractPayload(response)
+    return extractPagedCollectionPayload(response)
   }
 
-  async getMyShares() {
-    const response = await request.get('/myshare/notes')
-    return extractPayload(response)
+  async getMyShares(params = {}) {
+    const response = await request.get('/myshare/notes', {
+      params,
+    })
+    return extractPagedCollectionPayload(response)
   }
 
-  async getDeletedNotes() {
-    const response = await request.get('/recycle-bin')
-    return extractPayload(response)
+  async getDeletedNotes(params = {}) {
+    const response = await request.get('/recycle-bin', {
+      params,
+    })
+    return extractPagedCollectionPayload(response)
   }
 
   restoreDeletedNote(ids) {

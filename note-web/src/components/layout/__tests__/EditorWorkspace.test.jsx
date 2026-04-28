@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import EditorWorkspace from '@/components/layout/EditorWorkspace'
 
+const editorFactorySpy = vi.hoisted(() => vi.fn())
 const loadNoteByIdMock = vi.fn()
 const toggleStarMock = vi.fn()
 const updateNameMock = vi.fn()
@@ -13,7 +14,7 @@ const restoreNoteMock = vi.fn()
 const permanentDeleteNoteMock = vi.fn()
 const navigateMock = vi.fn()
 const locationMock = { pathname: '/cloudnote/recent/note-1' }
-const paramsMock = { id: 'note-1' }
+const paramsMock = { id: 'note-1', noteId: undefined, notebookId: undefined }
 
 const noteState = {
   notes: [{
@@ -30,18 +31,29 @@ const noteState = {
     isStarred: false,
     content: '正文',
   },
+  starredNotes: [],
+  myShares: [],
+  deletedNotes: [],
   isLoading: false,
+  hasLoadedNotes: true,
+  hasLoadedStarredNotes: true,
+  hasLoadedMyShares: true,
+  hasLoadedDeletedNotes: true,
 }
 
 vi.mock('@/hooks/useNote', () => ({
   default: () => ({
     notes: noteState.notes,
     currentNote: noteState.currentNote,
-    starredNotes: [],
+    starredNotes: noteState.starredNotes,
     isLoading: noteState.isLoading,
+    hasLoadedNotes: noteState.hasLoadedNotes,
+    hasLoadedStarredNotes: noteState.hasLoadedStarredNotes,
+    hasLoadedMyShares: noteState.hasLoadedMyShares,
+    hasLoadedDeletedNotes: noteState.hasLoadedDeletedNotes,
     loadNoteById: loadNoteByIdMock,
-    myShares: [],
-    deletedNotes: [],
+    myShares: noteState.myShares,
+    deletedNotes: noteState.deletedNotes,
     toggleStar: toggleStarMock,
     updateName: updateNameMock,
     updateContent: updateContentMock,
@@ -54,6 +66,7 @@ vi.mock('@/hooks/useNote', () => ({
 
 vi.mock('@/components/editors/EditorFactory', () => ({
   default: function MockEditorFactory(props) {
+    editorFactorySpy(props)
     return <div data-testid="editor-factory" data-type={props.type} />
   },
 }))
@@ -77,6 +90,7 @@ vi.mock('react-i18next', () => ({
 describe('EditorWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    editorFactorySpy.mockClear()
     loadNoteByIdMock.mockResolvedValue(noteState.currentNote)
     updateNameMock.mockResolvedValue({})
     updateContentMock.mockResolvedValue({})
@@ -88,7 +102,12 @@ describe('EditorWorkspace', () => {
       content: '正文',
     }
     noteState.notes = [noteState.currentNote]
+    noteState.starredNotes = []
+    noteState.myShares = []
+    noteState.deletedNotes = []
     paramsMock.id = 'note-1'
+    paramsMock.noteId = undefined
+    paramsMock.notebookId = undefined
     locationMock.pathname = '/cloudnote/recent/note-1'
     locationMock.state = undefined
     noteState.isLoading = false
@@ -120,6 +139,11 @@ describe('EditorWorkspace', () => {
     render(<EditorWorkspace />)
 
     expect(screen.getByTestId('editor-factory')).toHaveAttribute('data-type', 'text')
+    expect(editorFactorySpy).toHaveBeenCalledWith(expect.not.objectContaining({
+      value: expect.anything(),
+      onChange: expect.any(Function),
+      onSave: expect.any(Function),
+    }))
   })
 
   it('shows the voice capsule for text notes without recordings and opens the prompt', async () => {
@@ -167,10 +191,16 @@ describe('EditorWorkspace', () => {
 
   it('renders the section empty state without loading the editor when no note exists on a root route', () => {
     paramsMock.id = undefined
+    paramsMock.noteId = undefined
+    paramsMock.notebookId = undefined
     locationMock.pathname = '/cloudnote/recent'
     noteState.currentNote = null
     noteState.notes = []
     noteState.isLoading = false
+    noteState.hasLoadedNotes = true
+    noteState.hasLoadedStarredNotes = true
+    noteState.hasLoadedMyShares = true
+    noteState.hasLoadedDeletedNotes = true
 
     render(<EditorWorkspace />)
 
@@ -181,8 +211,10 @@ describe('EditorWorkspace', () => {
   })
 
   it('shows the notebook empty hint instead of the editor when the notebook list is empty', () => {
-    paramsMock.id = 'note-1'
-    locationMock.pathname = '/cloudnote/notebooks/note-1'
+    paramsMock.id = undefined
+    paramsMock.notebookId = 'nb-1'
+    paramsMock.noteId = 'note-1'
+    locationMock.pathname = '/cloudnote/notebooks/nb-1/note-1'
     noteState.currentNote = {
       id: 'note-1',
       title: '测试笔记',
@@ -192,6 +224,10 @@ describe('EditorWorkspace', () => {
     }
     noteState.notes = []
     noteState.isLoading = false
+    noteState.hasLoadedNotes = true
+    noteState.hasLoadedStarredNotes = true
+    noteState.hasLoadedMyShares = true
+    noteState.hasLoadedDeletedNotes = true
 
     render(<EditorWorkspace />)
 

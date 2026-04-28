@@ -21,11 +21,11 @@ const SEARCH_CONTEXTS = [
     resultRoute: '/cloudnote/starred',
   },
   {
-    match: (pathname) => pathname?.startsWith('/cloudnote/shares'),
+    match: (pathname) => pathname?.startsWith('/cloudnote/myshares'),
     status: SEARCH_STATUS.SHARE,
     label: '我的分享',
     hint: '仅搜索已分享的标题',
-    resultRoute: '/cloudnote/shares',
+    resultRoute: '/cloudnote/myshares',
   },
   {
     match: (pathname) => pathname?.startsWith('/cloudnote/recyclebin'),
@@ -58,7 +58,7 @@ export function getSearchResultPath(item, context) {
   }
 
   if (status === SEARCH_STATUS.SHARE) {
-    return `/cloudnote/shares/${item.id}`
+    return `/cloudnote/myshares/${item.id}`
   }
 
   if (status === SEARCH_STATUS.DELETED) {

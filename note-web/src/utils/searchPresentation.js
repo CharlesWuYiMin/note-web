@@ -24,6 +24,64 @@ function pickFirstRawText(...values) {
   return ''
 }
 
+export function hasVoiceRecords(note = {}) {
+  if (!note) {
+    return false
+  }
+
+  if (Array.isArray(note.voiceNote) && note.voiceNote.length > 0) {
+    return true
+  }
+
+  if (Array.isArray(note.voiceRealtimeSessions) && note.voiceRealtimeSessions.length > 0) {
+    return true
+  }
+
+  if (Number(note.voiceNumber) > 0) {
+    return true
+  }
+
+  if (Number(note.voiceCount) > 0) {
+    return true
+  }
+
+  return false
+}
+
+export function resolveSearchResultKind(note = {}) {
+  if (!note) {
+    return 'text'
+  }
+
+  if (note.status === 'deleted') {
+    return 'deleted'
+  }
+
+  if (note.status === 'share') {
+    return 'shared'
+  }
+
+  if (hasVoiceRecords(note)) {
+    return 'voice'
+  }
+
+  const noteType = String(note.type || note.noteType || note.documentType || note.kind || '').trim().toLowerCase()
+
+  if (noteType === 'handwritten' || noteType === 'handwrite' || noteType === 'sketch') {
+    return 'handwritten'
+  }
+
+  if (noteType === 'outline' || noteType === 'mind') {
+    return 'outline'
+  }
+
+  if (noteType === 'folder' || noteType === 'notebook') {
+    return 'folder'
+  }
+
+  return noteType || 'text'
+}
+
 export function normalizeSearchItem(item = {}, fallbackStatus = 'active') {
   const itemId = item?.noteId || item?.id || item?.documentId || item?.document_id || ''
   const title = stripHighlightMarkup(item?.title) || DEFAULT_EMPTY_TITLE
@@ -41,6 +99,7 @@ export function normalizeSearchItem(item = {}, fallbackStatus = 'active') {
     previewText: stripHighlightMarkup(context),
     updatedAt: item?.updatedAt || item?.updateDate || item?.update_date || item?.deletedAt || item?.createdAt || null,
     status: item?.status || fallbackStatus || 'active',
+    type: item?.type || item?.noteType || item?.documentType || item?.kind || '',
     voiceNumber: Number(item?.voiceNumber || item?.voiceCount || 0),
   }
 }
