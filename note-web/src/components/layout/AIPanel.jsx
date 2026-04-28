@@ -88,7 +88,7 @@ function parseConversationMeta(extra) {
   }
 }
 
-function AIPanel({ onClose, requestedScene = null, requestNonce = 0, autoSendRequested = false }) {
+function AIPanel({ onClose, requestedScene = null, requestNonce = 0, autoSendRequested = false, width = 340 }) {
   const { t, i18n } = useTranslation()
   const currentNote = useNoteStore((state) => state.currentNote)
   const currentNoteId = currentNote?.id || currentNote?.noteId || ''
@@ -379,7 +379,7 @@ function AIPanel({ onClose, requestedScene = null, requestNonce = 0, autoSendReq
     <section
       id="ai-panel"
       style={{
-        width: 340,
+        width,
         display: 'flex',
         flexDirection: 'column',
         background: 'transparent',

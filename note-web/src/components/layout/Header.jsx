@@ -4,6 +4,7 @@ import { Avatar, Button, Dropdown, Input, Space } from 'antd'
 import {
   DownOutlined,
   GlobalOutlined,
+  ImportOutlined,
   LogoutOutlined,
   RobotOutlined,
   SearchOutlined,
@@ -11,6 +12,7 @@ import {
 } from '@ant-design/icons'
 import useAuth from '@/hooks/useAuth'
 import useLanguage from '@/hooks/useLanguage'
+import ImportTaskDialog from '@/components/layout/ImportTaskDialog'
 
 function Header({
   onToggleAIPanel,
@@ -27,6 +29,7 @@ function Header({
   const [profileOpen, setProfileOpen] = useState(false)
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false)
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false)
+  const [importTaskOpen, setImportTaskOpen] = useState(false)
 
   const normalizedUser = useMemo(() => {
     const userInfo = user?.userInfo || {}
@@ -337,6 +340,30 @@ function Header({
                   <Button
                     block
                     type="text"
+                    icon={<ImportOutlined style={{ fontSize: 18, color: '#0f172a' }} />}
+                    onClick={() => {
+                      setProfileOpen(false)
+                      setLanguageMenuOpen(false)
+                      setImportTaskOpen(true)
+                    }}
+                    style={{
+                      height: 42,
+                      paddingInline: 2,
+                      justifyContent: 'flex-start',
+                      borderRadius: 12,
+                      color: '#0f172a',
+                      fontSize: 14,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span style={{ marginLeft: 2 }}>
+                      {t('importTask.entry', { defaultValue: '导入任务' })}
+                    </span>
+                  </Button>
+
+                  <Button
+                    block
+                    type="text"
                     icon={<GlobalOutlined style={{ fontSize: 18, color: '#0f172a' }} />}
                     onClick={() => setLanguageMenuOpen((open) => !open)}
                     style={{
@@ -405,6 +432,10 @@ function Header({
           />
         </Dropdown>
       </Space>
+      <ImportTaskDialog
+        open={importTaskOpen}
+        onClose={() => setImportTaskOpen(false)}
+      />
     </header>
   )
 }

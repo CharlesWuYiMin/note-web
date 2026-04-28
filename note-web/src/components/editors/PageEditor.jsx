@@ -28,6 +28,16 @@ function serializeContent(editor) {
   }
 }
 
+function formatEditorInitError(error, runtimeConfig) {
+  const message = error?.message || '页面编辑器初始化失败'
+  const details = [
+    runtimeConfig?.editorUrl ? `editorUrl=${runtimeConfig.editorUrl}` : '',
+    runtimeConfig?.apiUrl ? `apiUrl=${runtimeConfig.apiUrl}` : '',
+  ].filter(Boolean)
+
+  return details.length > 0 ? `${message} (${details.join(', ')})` : message
+}
+
 function PageEditorV2({
   onChange,
   onSave,
@@ -94,6 +104,7 @@ function PageEditorV2({
         user,
         userId: userId || authService.getUserId(),
         appId,
+        readOnly,
       })
     },
     [
@@ -108,6 +119,7 @@ function PageEditorV2({
       user?.picture,
       user?.realName,
       userId,
+      readOnly,
     ]
   )
   const runtimeConfig = useMemo(
@@ -298,6 +310,7 @@ function PageEditorV2({
           console.debug('[PageEditor] ready', {
             noteId: note?.id,
             hasEditor: Boolean(editor),
+            runtimeConfig,
           })
         }
       }).catch((error) => {
@@ -306,9 +319,13 @@ function PageEditorV2({
         }
 
         setEditorStatus('error')
-        setErrorMessage(error?.message || '页面编辑器初始化失败')
+        setErrorMessage(formatEditorInitError(error, runtimeConfig))
         if (isDev) {
-          console.error('[PageEditor] failed', error)
+          console.error('[PageEditor] failed', {
+            error,
+            runtimeConfig,
+            documentConfig,
+          })
         }
       })
     })

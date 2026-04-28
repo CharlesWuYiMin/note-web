@@ -29,6 +29,14 @@ const {
 }))
 
 const noteState = {
+  notes: [{
+    id: 'note-1',
+    title: '测试笔记',
+    type: 'text',
+    isStarred: false,
+    content: '正文',
+  }],
+  deletedNotes: [],
   currentNote: {
     id: 'note-1',
     title: '测试笔记',
@@ -41,13 +49,13 @@ const noteState = {
 
 vi.mock('@/hooks/useNote', () => ({
   default: () => ({
-    notes: [],
+    notes: noteState.notes,
     currentNote: noteState.currentNote,
     starredNotes: [],
     isLoading: noteState.isLoading,
     loadNoteById: loadNoteByIdMock,
     myShares: [],
-    deletedNotes: [],
+    deletedNotes: noteState.deletedNotes,
     toggleStar: toggleStarMock,
     updateName: updateNameMock,
     updateContent: updateContentMock,
@@ -99,6 +107,8 @@ describe('EditorWorkspace actions', () => {
       isStarred: false,
       content: '正文',
     }
+    noteState.notes = [noteState.currentNote]
+    noteState.deletedNotes = []
     noteState.isLoading = false
     loadNoteByIdMock.mockResolvedValue(noteState.currentNote)
     updateNameMock.mockResolvedValue({})
@@ -170,6 +180,30 @@ describe('EditorWorkspace actions', () => {
     })
   })
 
+  it('shows a blue title frame while editing and saves when clicking outside', async () => {
+    const user = userEvent.setup()
+    render(<EditorWorkspace />)
+
+    await user.click(screen.getByRole('button', { name: '编辑笔记标题' }))
+
+    expect(screen.getByTestId('note-title-editor')).toHaveStyle({
+      border: '2px solid #5b8def',
+    })
+
+    const input = screen.getByRole('textbox', { name: '笔记标题' })
+    await user.clear(input)
+    await user.type(input, '修改后的标题')
+    await user.click(screen.getByTestId('editor-factory'))
+
+    await waitFor(() => {
+      expect(updateNameMock).toHaveBeenCalledWith('note-1', '修改后的标题')
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('textbox', { name: '笔记标题' })).not.toBeInTheDocument()
+    })
+  })
+
   it('deletes the current note after confirmation and navigates to recycle bin', async () => {
     const user = userEvent.setup()
     render(<EditorWorkspace />)
@@ -193,6 +227,7 @@ describe('EditorWorkspace actions', () => {
       status: 'deleted',
       content: '正文',
     }
+    noteState.deletedNotes = [noteState.currentNote]
 
     render(<EditorWorkspace />)
 
@@ -214,6 +249,7 @@ describe('EditorWorkspace actions', () => {
       status: 'deleted',
       content: '正文',
     }
+    noteState.deletedNotes = [noteState.currentNote]
 
     render(<EditorWorkspace />)
 

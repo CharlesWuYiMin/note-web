@@ -50,6 +50,7 @@ vi.mock('@/store/useNotebookStore', () => ({
 describe('SidebarWorkspaceNav', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useRealTimers()
     localStorage.clear()
     notebookState.notebooks = [
       { id: 'default-nb', name: '默认笔记本', isDefault: true },

@@ -205,6 +205,28 @@ const useNoteStore = create((set, get) => ({
 
   setCurrentNote: (note) => set({ currentNote: note }),
 
+  importDocumentArchive: async (file) => {
+    set({ isLoading: true, error: null })
+    try {
+      const imported = await noteService.importDocumentArchive(file)
+      set({ isLoading: false })
+      return imported
+    } catch (error) {
+      set({ error: error.message, isLoading: false })
+      throw error
+    }
+  },
+
+  getImportTask: async (taskId) => noteService.getImportTask(taskId),
+
+  getImportTasks: async () => noteService.getImportTasks(),
+
+  getImportArchiveMaxBytes: async () => noteService.getImportArchiveMaxBytes(),
+
+  getImportTaskPollIntervalMs: async () => noteService.getImportTaskPollIntervalMs(),
+
+  getImportTaskTimeoutMs: async () => noteService.getImportTaskTimeoutMs(),
+
   createNote: async (data) => {
     set({ isLoading: true, error: null })
     try {

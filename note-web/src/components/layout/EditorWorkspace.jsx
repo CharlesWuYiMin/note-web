@@ -219,8 +219,11 @@ function EditorWorkspace() {
   const [forcedVoiceEditorNoteId, setForcedVoiceEditorNoteId] = useState(null)
   const [voiceAutoStartToken, setVoiceAutoStartToken] = useState(null)
   const [voicePanelVisible, setVoicePanelVisible] = useState(true)
+  const titleEditorRef = useRef(null)
+  const titleMeasureRef = useRef(null)
   const titleInputRef = useRef(null)
   const editorBaselineRef = useRef('')
+  const [titleEditorWidth, setTitleEditorWidth] = useState(null)
   const routeNotePreview = location.state?.note || null
   const currentRouteNote = currentNote?.id === id ? currentNote : null
   const notePreview = useMemo(() => {
@@ -373,6 +376,34 @@ function EditorWorkspace() {
     titleInputRef.current.focus({
       cursor: 'all',
     })
+  }, [isTitleEditing])
+
+  useEffect(() => {
+    if (!isTitleEditing) {
+      setTitleEditorWidth(null)
+      return
+    }
+
+    const measuredWidth = titleMeasureRef.current?.offsetWidth ?? 0
+    const nextWidth = Math.min(Math.max(measuredWidth + 32, 88), 360)
+    setTitleEditorWidth(nextWidth)
+  }, [isTitleEditing, title])
+
+  useEffect(() => {
+    if (!isTitleEditing) {
+      return
+    }
+
+    const handlePointerDownOutside = (event) => {
+      if (titleEditorRef.current?.contains(event.target)) {
+        return
+      }
+
+      titleInputRef.current?.blur()
+    }
+
+    document.addEventListener('pointerdown', handlePointerDownOutside)
+    return () => document.removeEventListener('pointerdown', handlePointerDownOutside)
   }, [isTitleEditing])
 
   useEffect(() => {
@@ -638,26 +669,61 @@ function EditorWorkspace() {
       >
         <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1 }}>
           {isTitleEditing ? (
-            <Input
-              ref={titleInputRef}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={handleTitleBlur}
-              onKeyDown={handleTitleKeyDown}
-              variant="borderless"
-              disabled={isTitleSaving || isDeletedNote}
-              aria-label="笔记标题"
+            <div
+              ref={titleEditorRef}
+              data-testid="note-title-editor"
               style={{
-                height: 40,
-                lineHeight: '40px',
-                fontSize: 18,
-                color: '#6b7280',
-                paddingInline: 0,
-                fontWeight: 700,
-                minWidth: 0,
-                maxWidth: 300,
+                display: 'inline-flex',
+                alignItems: 'center',
+                position: 'relative',
+                minWidth: 88,
+                maxWidth: 'min(360px, 100%)',
+                width: titleEditorWidth ? `${titleEditorWidth}px` : 'auto',
+                height: 46,
+                padding: '0 8px',
+                border: '2px solid #5b8def',
+                borderRadius: 2,
+                background: '#fff',
+                boxSizing: 'border-box',
               }}
-            />
+            >
+              <span
+                ref={titleMeasureRef}
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  visibility: 'hidden',
+                  whiteSpace: 'pre',
+                  pointerEvents: 'none',
+                  fontSize: 18,
+                  lineHeight: '40px',
+                  fontWeight: 700,
+                }}
+              >
+                {title || ' '}
+              </span>
+              <Input
+                ref={titleInputRef}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={handleTitleBlur}
+                onKeyDown={handleTitleKeyDown}
+                variant="borderless"
+                disabled={isTitleSaving || isDeletedNote}
+                aria-label="笔记标题"
+                style={{
+                  width: '100%',
+                  height: 40,
+                  lineHeight: '40px',
+                  fontSize: 18,
+                  color: '#6b7280',
+                  paddingInline: 0,
+                  fontWeight: 700,
+                  minWidth: 0,
+                  maxWidth: '100%',
+                }}
+              />
+            </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, minWidth: 0 }}>
               <button

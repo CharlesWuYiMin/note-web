@@ -121,7 +121,7 @@ function hasVoiceRecords(note) {
   return false
 }
 
-function NotesSidebar({ visible = true }) {
+function NotesSidebar({ visible = true, width = 320 }) {
   const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
@@ -798,15 +798,15 @@ function NotesSidebar({ visible = true }) {
       value: item.id,
     }))
 
-  const width = visible ? 320 : 0
+  const sidebarWidth = visible ? width : 0
 
   return (
     <aside
       aria-label={t('notesSidebar.ariaLabel', { defaultValue: '笔记列表侧栏' })}
       className="notes-sidebar"
       style={{
-        width,
-        minWidth: width,
+        width: sidebarWidth,
+        minWidth: sidebarWidth,
         height: '100%',
         minHeight: 0,
         opacity: visible ? 1 : 0,

@@ -18,6 +18,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      uuid: path.resolve(__dirname, './src/shims/uuid.js'),
     },
   },
   build: {

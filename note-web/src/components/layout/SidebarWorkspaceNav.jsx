@@ -85,19 +85,25 @@ function NewCreatePanel({ onCreate, options, collapsed }) {
           rowGap: collapsed ? 8 : 6,
         }}
       >
-        {options.map((option, index) => (
+        {options.map((option) => (
           <button
             key={option.key}
             type="button"
             onClick={() => onCreate(option)}
             style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
               border: 'none',
+              outline: 'none',
               background: 'transparent',
               cursor: 'pointer',
               borderRadius: 16,
               padding: collapsed ? '12px 10px 10px' : '10px 6px 8px',
               minHeight: collapsed ? 'auto' : 96,
-              gridColumn: !collapsed && index === options.length - 1 ? '1 / 2' : 'auto',
+              width: '100%',
+              textAlign: 'center',
               transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease',
             }}
             onMouseEnter={(event) => {
@@ -273,7 +279,7 @@ function NotebookActionMenuPanel({ items, onAction }) {
   )
 }
 
-function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
+function SidebarWorkspaceNav({ collapsed, expandedWidth = 280, onToggle, onNavigate, currentPath }) {
   const { t } = useTranslation()
   const { createNote } = useNote()
   const {
@@ -560,7 +566,7 @@ function SidebarWorkspaceNav({ collapsed, onToggle, onNavigate, currentPath }) {
   return (
     <aside
       style={{
-        width: collapsed ? 92 : 280,
+        width: collapsed ? 92 : expandedWidth,
         background: 'transparent',
         borderRadius: 0,
         padding: '0 0 12px',

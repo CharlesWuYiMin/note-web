@@ -133,6 +133,33 @@
     "restoreSuccess": "Restored successfully",
     "clearSuccess": "Recycle bin emptied"
   },
+  "importTask": {
+    "entry": "Import Tasks",
+    "createTab": "Create Task",
+    "listTab": "Import List",
+    "dropOrClick": "Drag a file here or click to import",
+    "noticeTitle": "Notes:",
+    "noticeZip": "Import a .zip archive only, with a maximum size of 1024 MB.",
+    "noticeProcess": "After the import task is created, you can check its current status in the Import List.",
+    "zipRequired": "Please import a .zip archive",
+    "fileTooLarge": "The archive size cannot exceed 1024 MB",
+    "created": "Import task created",
+    "createFailed": "Failed to create import task",
+    "loadFailed": "Failed to load import tasks",
+    "empty": "No data available",
+    "table": {
+      "taskName": "Task Name",
+      "createTime": "Created At",
+      "status": "Status"
+    },
+    "status": {
+      "init": "Initialized",
+      "running": "Running",
+      "success": "Succeeded",
+      "failed": "Failed",
+      "unknown": "Unknown"
+    }
+  },
   "search": {
     "placeholder": "Search notes...",
     "resultCount": "Found {count} results",

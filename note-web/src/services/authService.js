@@ -24,8 +24,8 @@ class AuthService {
   async generateEditorToken({
     documentId,
     userId,
-    userName,
-    authType = '1',
+    appId,
+    authType = 'EDIT',
     expiresInMs,
     signKey,
   }) {
@@ -34,16 +34,19 @@ class AuthService {
       typ: 'JWT',
     }
 
+    const expirationSeconds = Math.floor(
+      (Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 5 * 60 * 1000)) / 1000
+    )
     const payload = {
-      doc: JSON.stringify({
-        documentId: String(documentId || ''),
-      }),
-      sub: JSON.stringify({
-        userName: String(userName || userId || 'unknown'),
+      sub: {
+        appId: String(appId || this.getAppId() || ''),
         userId: String(userId || 'unknown'),
-        authType: String(authType || '1'),
-      }),
-      exp: Date.now() + (Number.isFinite(expiresInMs) ? expiresInMs : 5 * 60 * 1000),
+      },
+      doc: {
+        documentId: String(documentId || ''),
+        authType: String(authType || 'EDIT'),
+      },
+      exp: expirationSeconds,
     }
 
     const encodedHeader = this.base64UrlEncodeJson(header)
@@ -54,18 +57,40 @@ class AuthService {
     return `${unsignedToken}.${signature}`
   }
 
-  createEditorAuth({ documentId, user, userId, appId }) {
+  async requestEditorAccessToken({ documentId }) {
+    const response = await request.post('/api/accesstoken/jwt', {
+      documentId: documentId || '',
+    })
+
+    const token = response?.data?.token || response?.token || ''
+    if (!token) {
+      throw new Error('empty editor jwt token')
+    }
+
+    return token
+  }
+
+  createEditorAuth({ documentId, user, userId, appId, readOnly = false }) {
     const editorAuthConfig = this.getEditorAuthConfig()
     const resolvedUserId = user?.id || user?.userId || userId || this.getUserId() || 'unknown'
     const resolvedUserName = user?.name || user?.realName || user?.nickName || resolvedUserId
     const resolvedAppId = editorAuthConfig.appId || appId || this.getAppId() || 'stub-editor-app-id'
-    const tokenPromise = this.generateEditorToken({
+    const resolvedAuthType = readOnly ? 'READ' : 'EDIT'
+    const tokenPromise = this.requestEditorAccessToken({
       documentId,
-      userId: resolvedUserId,
-      userName: resolvedUserName,
-      authType: user?.authType || user?.authTypeId || '1',
-      expiresInMs: editorAuthConfig.expiresInMs,
-      signKey: editorAuthConfig.signKey,
+    }).catch((error) => {
+      if (import.meta.env.DEV) {
+        console.debug('[EditorAuth] backend jwt failed, fallback to local token', error)
+      }
+
+      return this.generateEditorToken({
+        documentId,
+        userId: resolvedUserId,
+        appId: resolvedAppId,
+        authType: resolvedAuthType,
+        expiresInMs: editorAuthConfig.expiresInMs,
+        signKey: editorAuthConfig.signKey,
+      })
     })
 
     if (import.meta.env.DEV) {
@@ -77,6 +102,7 @@ class AuthService {
             userId: resolvedUserId,
             userName: resolvedUserName,
             documentId: documentId || '',
+            authType: resolvedAuthType,
             expiresInMs: editorAuthConfig.expiresInMs,
             header: decoded.header,
             payload: decoded.payload,

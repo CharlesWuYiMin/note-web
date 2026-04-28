@@ -89,7 +89,9 @@ describe('NoteService', () => {
   describe('uploadVoiceFile', () => {
     it('posts noteId and file as multipart form data', async () => {
       const file = new File(['voice-bytes'], 'voice.webm', { type: 'audio/webm' })
-      mockGet.mockResolvedValue({ data: '5242880' })
+      mockGet
+        .mockResolvedValueOnce({ data: '100M' })
+        .mockResolvedValueOnce({ data: '5242880' })
       mockPost.mockResolvedValue({ data: { fileId: 'file-1', url: '/v1/note/files/file-1' } })
 
       const result = await noteService.uploadVoiceFile('note-123', file)
@@ -205,6 +207,113 @@ describe('NoteService', () => {
         size: file.size,
         storageType: 'content',
       })
+    })
+  })
+
+  describe('importDocumentArchive', () => {
+    it('uploads a small archive directly and then starts an async import task with fileResource id', async () => {
+      const file = new File(['zip-bytes'], 'notes.zip', { type: 'application/zip' })
+      mockGet.mockResolvedValue({ data: '5242880' })
+      mockPost
+        .mockResolvedValueOnce({ data: { file_resource: '/v1/file/internal/resources/file-zip-1' } })
+        .mockResolvedValueOnce({ data: { taskId: 'task-import-1', status: 1, statusText: '初始化' } })
+
+      const result = await noteService.importDocumentArchive(file)
+
+      expect(mockGet.mock.calls).toEqual([
+        ['/sysConfig/upload_max_size'],
+        ['/sysConfig/import.file.chunk_threshold_bytes'],
+      ])
+      expect(mockPost.mock.calls[0][0]).toBe('/file/upload')
+      expect(mockPost.mock.calls[0][1]).toBeInstanceOf(FormData)
+      expect(mockPost.mock.calls[0][2]).toEqual({
+        params: {
+          is_doc_res: false,
+        },
+      })
+      expect(mockPost.mock.calls[1]).toEqual([
+        '/convert/file/import-raw-zip',
+        { file_id: 'file-zip-1' },
+      ])
+      expect(result).toEqual({ taskId: 'task-import-1', status: 1, statusText: '初始化' })
+    })
+
+    it('uploads a large archive in chunks before triggering import', async () => {
+      const file = new File([new Uint8Array(5 * 1024 * 1024 + 4)], 'notes.zip', { type: 'application/zip' })
+      mockGet
+        .mockResolvedValueOnce({ data: '100M' })
+        .mockResolvedValueOnce({ data: '5242880' })
+        .mockResolvedValueOnce({ data: '5242880' })
+      mockPost
+        .mockResolvedValueOnce({ data: { upload_id: 'upload-zip-1' } })
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce({ data: { file_id: 'file-zip-9', file_resource: '/v1/file/internal/resources/file-zip-9' } })
+        .mockResolvedValueOnce({ data: { taskId: 'task-import-9', status: 1, statusText: '初始化' } })
+
+      const result = await noteService.importDocumentArchive(file)
+
+      expect(mockGet.mock.calls).toEqual([
+        ['/sysConfig/upload_max_size'],
+        ['/sysConfig/import.file.chunk_threshold_bytes'],
+        ['/sysConfig/import.file.chunk_size_bytes'],
+      ])
+      expect(mockPost.mock.calls[0]).toEqual([
+        '/file/chunk/init',
+        null,
+        { params: { file_name: 'notes.zip' } },
+      ])
+      expect(mockPost.mock.calls[3]).toEqual([
+        '/file/chunk/merge',
+        null,
+        {
+          params: {
+            upload_id: 'upload-zip-1',
+            is_doc_res: false,
+            is_template: false,
+            is_gen_new_file: false,
+            response_type: 1,
+            is_public: false,
+          },
+        },
+      ])
+      expect(mockPost.mock.calls[4]).toEqual([
+        '/convert/file/import-raw-zip',
+        { file_id: 'file-zip-9' },
+      ])
+      expect(result).toEqual({ taskId: 'task-import-9', status: 1, statusText: '初始化' })
+    })
+
+    it('queries import task status through the task endpoint', async () => {
+      mockGet.mockResolvedValue({ data: { taskId: 'task-import-1', status: 2, statusText: '运行中' } })
+
+      const result = await noteService.getImportTask('task-import-1')
+
+      expect(mockGet).toHaveBeenCalledWith('/tasks')
+      expect(result).toEqual({ taskId: 'task-import-1', status: 2, statusText: '运行中' })
+    })
+
+    it('rejects archives that exceed upload_max_size before upload starts', async () => {
+      const file = new File([new Uint8Array(100 * 1024 * 1024 + 1)], 'notes.zip', { type: 'application/zip' })
+      mockGet.mockResolvedValueOnce({ data: '100M' })
+
+      await expect(noteService.importDocumentArchive(file))
+        .rejects
+        .toThrow('import archive size cannot exceed 100MB')
+
+      expect(mockGet.mock.calls).toEqual([
+        ['/sysConfig/upload_max_size'],
+      ])
+      expect(mockPost).not.toHaveBeenCalled()
+    })
+
+    it('reads import task polling interval from sys config with a default fallback', async () => {
+      mockGet.mockResolvedValue({ data: '3000' })
+
+      const result = await noteService.getImportTaskPollIntervalMs()
+
+      expect(mockGet).toHaveBeenCalledWith('/sysConfig/import.task.poll_interval_ms')
+      expect(result).toBe(3000)
     })
   })
 
